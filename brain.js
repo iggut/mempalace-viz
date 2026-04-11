@@ -135,7 +135,6 @@ async function loadGraph(query) {
     renderFilterChips();
     if (sceneData.last_scene) applyScene(sceneData.last_scene, { preserveSelection: true });
     else clearScene();
-    clearFocus();
   } catch (error) {
     addMessage('system', 'Could not load graph: ' + error.message);
   }
@@ -409,13 +408,23 @@ function onClick(event) {
 function selectNode(node, options = {}) {
   selectedNode = node;
   if (options.pin) pinnedIds.add(node.id);
+
   if (node.kind === 'wing') {
-    selectedScopeWings.clear(); selectedScopeWings.add(node.wing);
-    loadGraph(); updateSceneBanner('Wing focus', node.wing); setOrbitDistance(120, node.mesh.position.clone());
+    selectedScopeWings.clear(); 
+    selectedScopeWings.add(node.wing);
+    loadGraph().then(() => {
+      updateSceneBanner('Wing focus', node.wing); 
+      setOrbitDistance(120, node.mesh.position.clone());
+    });
   } else if (node.kind === 'room') {
-    selectedScopeWings.clear(); selectedScopeWings.add(node.wing);
-    selectedScopeRooms.clear(); selectedScopeRooms.add(node.room);
-    loadGraph(); updateSceneBanner('Room focus', node.wing + ' • ' + node.room); setOrbitDistance(60, node.mesh.position.clone());
+    selectedScopeWings.clear(); 
+    selectedScopeWings.add(node.wing);
+    selectedScopeRooms.clear(); 
+    selectedScopeRooms.add(node.room);
+    loadGraph().then(() => {
+      updateSceneBanner('Room focus', node.wing + ' • ' + node.room); 
+      setOrbitDistance(60, node.mesh.position.clone());
+    });
   } else {
     focusedIds = computeNeighborhood(node.id, expansionDepth);
     pinnedIds.forEach(id => focusedIds.add(id));
