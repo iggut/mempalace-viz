@@ -402,12 +402,12 @@
       `;
       
       // Update legend
-      updateLegend();
+      updateLegend(status);
     }
     
-    function updateLegend() {
+    function updateLegend(status) {
       const legendEl = document.getElementById('legend');
-      const wings = status.wings || wingsData;
+      const wings = status?.wings || wingsData?.wings || wingsData || {};
       
       let html = '';
       Object.entries(wings).forEach(([wing, count]) => {

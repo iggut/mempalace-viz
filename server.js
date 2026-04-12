@@ -557,11 +557,6 @@ const wingsCache = new LRUCache(100);
 
 async function callMcp(toolName, params = {}, timeout = 10000) {
   return new Promise((resolve, reject) => {
-    const timeoutId = setTimeout(() => {
-      proc.kill();
-      reject(new Error(`MCP server timeout: ${toolName} (${timeout/1000}s)`));
-    }, timeout);
-
     const reqBody = JSON.stringify({
       jsonrpc: '2.0',
       id: Date.now(),
@@ -579,6 +574,15 @@ async function callMcp(toolName, params = {}, timeout = 10000) {
         PYTHONPATH: MEMPALACE_ROOT,
       },
     });
+
+    const timeoutId = setTimeout(() => {
+      try {
+        proc.kill();
+      } catch (_) {
+        /* ignore */
+      }
+      reject(new Error(`MCP server timeout: ${toolName} (${timeout / 1000}s)`));
+    }, timeout);
 
     let stdout = '';
     let stderr = '';
@@ -875,7 +879,7 @@ Synthesize a coherent "Resume/Briefing" for the user based on these memory cryst
 
 Current User Intent: "${query}"
 
-CRYSAL DATA:
+CRYSTAL DATA:
 ${crystals.map(c => `[${c.wing}/${c.room}] ${c.summary}`).join('\n')}
 
 Structure your response into four clear pillars:
@@ -904,7 +908,9 @@ Keep the tone professional, insightful, and "ghost-in-the-machine" wise. Be conc
           narrative: narrative,
           achievements: crystals.filter(c => c.importance_score > 0.7 && (c.room === 'decisions' || c.room === 'learnings')).map(c => c.summary),
           focus: crystals.find(c => c.room === 'events')?.summary || "Ongoing tasks",
-          blockers: blockerResults.map(b => b.summary),
+          blockers: blockerResults
+            .map(b => cleanMemoryText(b.summary || b.text || ''))
+            .filter(Boolean),
           raw_crystals: crystals.slice(0, 5)
         };
         break;
