@@ -13,7 +13,15 @@ const STATIC_FILES = {
   '/': 'constellation.html',
   '/constellation': 'constellation.html',
   '/dynamic': 'dynamic.html',
-  '/index.html': 'constellation.html',
+  /** MemPalace 3D wings/rooms/graph visualization (Three.js) */
+  '/index.html': 'index.html',
+  '/viz': 'index.html',
+  '/3d': 'index.html',
+  '/palace3d': 'index.html',
+  '/styles.css': 'styles.css',
+  '/ui.js': 'ui.js',
+  '/scene.js': 'scene.js',
+  '/api.js': 'api.js',
   '/brain.js': 'brain.js',
 };
 

@@ -1,791 +1,97 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>🏰 MemPalace 3D Visualization</title>
-  <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-    
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-      overflow: hidden;
-      background: #0a0a0f;
-    }
-    
-    #canvas-container {
-      width: 100vw;
-      height: 100vh;
-    }
-    
-    .overlay {
-      position: absolute;
-      pointer-events: none;
-      padding: 20px;
-      color: white;
-      text-shadow: 0 2px 4px rgba(0,0,0,0.8);
-    }
-    
-    .title {
-      top: 0;
-      left: 0;
-      font-size: 28px;
-      font-weight: 300;
-      letter-spacing: 1px;
-    }
-    
-    .title span {
-      font-weight: 600;
-    }
-    
-    .stats {
-      bottom: 0;
-      left: 0;
-      font-size: 14px;
-      opacity: 0.8;
-      line-height: 1.6;
-    }
-    
-    .controls {
-      top: 0;
-      right: 0;
-      pointer-events: auto;
-      background: rgba(0, 0, 0, 0.7);
-      padding: 15px;
-      border-radius: 8px;
-      backdrop-filter: blur(10px);
-    }
-    
-    .controls button {
-      display: block;
-      width: 100%;
-      padding: 10px 15px;
-      margin-bottom: 8px;
-      background: rgba(255, 255, 255, 0.1);
-      border: 1px solid rgba(255, 255, 255, 0.2);
-      color: white;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 13px;
-      transition: all 0.2s;
-      text-align: left;
-    }
-    
-    .controls button:hover {
-      background: rgba(255, 255, 255, 0.2);
-      border-color: rgba(255, 255, 255, 0.4);
-    }
-    
-    .controls button.active {
-      background: rgba(100, 150, 255, 0.3);
-      border-color: rgba(100, 150, 255, 0.6);
-    }
-    
-    .tooltip {
-      position: absolute;
-      background: rgba(0, 0, 0, 0.9);
-      color: white;
-      padding: 12px 16px;
-      border-radius: 8px;
-      font-size: 13px;
-      pointer-events: none;
-      opacity: 0;
-      transition: opacity 0.2s;
-      max-width: 300px;
-      z-index: 100;
-      border: 1px solid rgba(255, 255, 255, 0.2);
-    }
-    
-    .tooltip.visible {
-      opacity: 1;
-    }
-    
-    .tooltip-title {
-      font-weight: 600;
-      margin-bottom: 8px;
-      color: #a5b4fc;
-    }
-    
-    .tooltip-value {
-      color: #e2e8f0;
-    }
-    
-    .legend {
-      position: absolute;
-      bottom: 0;
-      right: 0;
-      pointer-events: auto;
-      background: rgba(0, 0, 0, 0.7);
-      padding: 15px;
-      border-radius: 8px;
-      backdrop-filter: blur(10px);
-    }
-    
-    .legend-item {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-size: 12px;
-      margin-bottom: 6px;
-      color: white;
-    }
-    
-    .legend-color {
-      width: 16px;
-      height: 16px;
-      border-radius: 50%;
-    }
-    
-    .loading {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      font-size: 18px;
-      color: white;
-      text-align: center;
-    }
-    
-    .loading-spinner {
-      width: 40px;
-      height: 40px;
-      border: 3px solid rgba(255, 255, 255, 0.1);
-      border-top-color: #a5b4fc;
-      border-radius: 50%;
-      animation: spin 1s linear infinite;
-      margin: 0 auto 16px;
-    }
-    
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
-  </style>
-</head>
-<body>
-  <div id="canvas-container"></div>
-  
-  <div class="overlay title">🏰 <span>MemPalace</span> Visualization</div>
-  
-  <div class="overlay stats" id="stats">
-    Loading...
-  </div>
-  
-  <div class="overlay controls" id="controls">
-    <button onclick="setView('wings')" class="active">📚 Wings View</button>
-    <button onclick="setView('rooms')">🚪 Rooms View</button>
-    <button onclick="setView('graph')">🕸️ Graph View</button>
-    <button onclick="resetView()">🔄 Reset View</button>
-  </div>
-  
-  <div class="overlay legend" id="legend"></div>
-  
-  <div class="tooltip" id="tooltip"></div>
-  
-  <div class="loading" id="loading">
-    <div class="loading-spinner"></div>
-    Loading MemPalace data...
-  </div>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MemPalace 3D Visualization</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="app-header">
+        <div class="brand">
+          <h1>MemPalace 3D Visualization</h1>
+          <p class="tagline">Spatial view of wings, rooms, tunnels, and knowledge structure</p>
+        </div>
+        <div class="header-actions">
+          <div id="conn-status" class="status-pill" data-state="loading">Connecting…</div>
+          <button type="button" id="btn-refresh" class="btn btn--ghost" title="Reload data from API">Refresh</button>
+        </div>
+      </header>
 
-  <script type="module">
-    import * as THREE from 'https://cdn.skypack.dev/three@0.160.0';
-    import { OrbitControls } from 'https://cdn.skypack.dev/three@0.160.0/examples/jsm/controls/OrbitControls.js';
-    
-    // Configuration
-    const CONFIG = {
-      wingColors: {
-        projects: '#a5b4fc',
-        shared_grocery_list: '#86efac',
-        default: '#fbbf24'
-      },
-      nodeSizes: {
-        wingMin: 3,
-        wingMax: 8,
-        roomMin: 0.8,
-        roomMax: 2.5
-      },
-      spacing: {
-        wingSeparation: 40,
-        roomRadius: 15
-      }
-    };
-    
-    // State
-    let scene, camera, renderer, controls;
-    let wingsData = {};
-    let roomsData = {};
-    let taxonomyData = {};
-    let graphEdges = [];
-    let nodes = [];
-    let links = [];
-    let currentView = 'wings';
-    let hoveredNode = null;
-    
-    // Initialize Three.js
-    function init() {
-      console.log('🎨 Initializing Three.js...');
-      
-      try {
-        const container = document.getElementById('canvas-container');
+      <div class="app-main">
+        <aside class="panel panel--left" id="panel-left">
+          <div class="panel-header">Explore</div>
+          <div class="panel-body">
+            <p id="onboard-hint" class="hint-row" hidden style="margin-bottom: 10px">
+              Tip: use <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> to switch views, <kbd>R</kbd> to reset the camera.
+            </p>
+            <input
+              type="search"
+              id="search-wings"
+              class="search-input"
+              placeholder="Filter wings in legend…"
+              autocomplete="off"
+            />
+            <div id="view-buttons" class="view-seg"></div>
+            <p id="view-helper-text" class="hint-row" style="margin-top: 10px"></p>
 
-        // Scene
-        scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x0a0a0f);
-        scene.fog = new THREE.FogExp2(0x0a0a0f, 0.003);
-
-        console.log('✅ Scene created');
-
-        // Camera
-        camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.set(0, 30, 80);
-
-        // Renderer
-        renderer = new THREE.WebGLRenderer({ antialias: true });
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-        container.appendChild(renderer.domElement);
-
-        // Controls
-        controls = new OrbitControls(camera, renderer.domElement);
-        controls.enableDamping = true;
-        controls.dampingFactor = 0.05;
-        controls.autoRotate = true;
-        controls.autoRotateSpeed = 0.5;
-
-        // Lights
-        const ambientLight = new THREE.AmbientLight(0x404040, 2);
-        scene.add(ambientLight);
-
-        const pointLight1 = new THREE.PointLight(0xa5b4fc, 2, 100);
-        pointLight1.position.set(20, 30, 20);
-        scene.add(pointLight1);
-
-        const pointLight2 = new THREE.PointLight(0x86efac, 1.5, 100);
-        pointLight2.position.set(-20, 20, -20);
-        scene.add(pointLight2);
-
-        // Stars background
-        createStars();
-
-        // Event listeners
-        window.addEventListener('resize', onWindowResize);
-        renderer.domElement.addEventListener('mousemove', onMouseMove);
-        renderer.domElement.addEventListener('click', onMouseClick);
-
-        // Load data and render
-        loadData();
-
-        // Animation loop
-        animate();
-      } catch (error) {
-        console.error('❌ Initialization error:', error);
-        const loading = document.getElementById('loading');
-        if (loading) {
-          loading.innerHTML = `
-            <div style="color: #f87171;">
-              ❌ Failed to initialize visualization<br>
-              <small>${error.message}</small>
+            <div class="control-row" style="margin-top: 14px">
+              <label><input type="checkbox" id="toggle-rotate" checked /> Auto-rotate</label>
             </div>
-          `;
-        }
-      }
-    }
-    
-    function createStars() {
-      const starsGeometry = new THREE.BufferGeometry();
-      const starsVertices = [];
-      
-      for (let i = 0; i < 2000; i++) {
-        const x = THREE.MathUtils.randFloatSpread(400);
-        const y = THREE.MathUtils.randFloatSpread(200);
-        const z = THREE.MathUtils.randFloatSpread(400);
-        starsVertices.push(x, y, z);
-      }
-      
-      starsGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starsVertices, 3));
-      
-      const starsMaterial = new THREE.PointsMaterial({
-        color: 0xffffff,
-        size: 0.5,
-        transparent: true,
-        opacity: 0.8
-      });
-      
-      const stars = new THREE.Points(starsGeometry, starsMaterial);
-      scene.add(stars);
-    }
-    
-    async function loadData() {
-      try {
-        console.log('🏰 Loading MemPalace data...');
-        
-        // Fetch all data in parallel
-        const promises = [
-          fetch('http://localhost:8767/api/status').then(r => r.json()).then(d => { console.log('✅ Status:', d); return d; }),
-          fetch('http://localhost:8767/api/wings').then(r => r.json()).then(d => { console.log('✅ Wings:', d); return d; }),
-          fetch('http://localhost:8767/api/taxonomy').then(r => r.json()).then(d => { console.log('✅ Taxonomy:', d); return d; }),
-          fetch('http://localhost:8767/api/graph-stats').then(r => r.json()).then(d => { console.log('✅ Graph stats:', d); return d; })
-        ];
-        
-        const [status, wings, taxonomy, graphStats] = await Promise.all(promises);
-        
-        wingsData = wings;
-        taxonomyData = taxonomy;
-        
-        // Update stats display
-        updateStats(status, graphStats);
-        
-        // Build rooms data from taxonomy
-        buildRoomsData();
-        
-        // Build graph edges from tunnels
-        if (graphStats.tunnels) {
-          graphEdges = Object.entries(graphStats.tunnels).flatMap(([room, connections]) => {
-            return Object.entries(connections).map(([connectedRoom, wing]) => ({
-              from: room,
-              to: connectedRoom,
-              wing
-            }));
-          });
-        }
-        
-        // Hide loading, show visualization
-        document.getElementById('loading').style.display = 'none';
-        
-        // Render based on current view
-        setView(currentView);
-        
-      } catch (error) {
-        console.error('❌ Failed to load data:', error);
-        document.getElementById('loading').innerHTML = `
-          <div style="color: #f87171;">
-            ❌ Error loading data<br>
-            <small>${error.message}</small><br><br>
-            <small>Make sure the server is running:<br>
-            <code>node server.js</code></small>
+            <div class="control-row">
+              <label><input type="checkbox" id="toggle-labels" checked /> Labels</label>
+            </div>
+            <div class="control-row" style="flex-wrap: wrap">
+              <span>Motion</span>
+              <input type="range" id="motion-range" min="0" max="2" step="0.1" value="1" style="max-width: 140px" />
+            </div>
+
+            <div class="legend-block">
+              <div class="legend-title">Wings &amp; scale</div>
+              <p class="hint-row" style="margin-bottom: 6px">Sphere size reflects drawer count within a view.</p>
+              <div id="legend-host"></div>
+            </div>
+
+            <div class="btn-row" style="margin-top: 14px">
+              <button type="button" id="btn-reset-cam" class="btn btn--ghost">Reset camera</button>
+              <button type="button" id="btn-center" class="btn btn--ghost" title="Frame the hovered node">Center on hover</button>
+            </div>
           </div>
-        `;
-      }
-    }
-    
-    function buildRoomsData() {
-      if (typeof taxonomyData === 'string') {
-        try {
-          taxonomyData = JSON.parse(taxonomyData);
-        } catch {}
-      }
-      
-      Object.entries(taxonomyData || {}).forEach(([wing, rooms]) => {
-        if (!roomsData[wing]) roomsData[wing] = [];
-        
-        if (typeof rooms === 'object') {
-          Object.entries(rooms).forEach(([room, count]) => {
-            roomsData[wing].push({ name: room, drawers: typeof count === 'number' ? count : 1 });
-          });
-        }
-      });
-    }
-    
-    function updateStats(status, graphStats) {
-      const statsEl = document.getElementById('stats');
-      const totalDrawers = status.total_drawers || 0;
-      const wingCount = Object.keys(status.wings || {}).length;
-      const roomCount = Object.keys(status.rooms || {}).length;
-      
-      statsEl.innerHTML = `
-        <div>📦 ${totalDrawers.toLocaleString()} drawers</div>
-        <div>📚 ${wingCount} wings • 🚪 ${roomCount} rooms</div>
-        ${graphStats?.tunnels ? `<div>🕸️ ${Object.keys(graphStats.tunnels).length} tunnel connections</div>` : ''}
-      `;
-      
-      // Update legend
-      updateLegend(status);
-    }
-    
-    function updateLegend(status) {
-      const legendEl = document.getElementById('legend');
-      const wings = status?.wings || wingsData?.wings || wingsData || {};
-      
-      let html = '';
-      Object.entries(wings).forEach(([wing, count]) => {
-        const color = CONFIG.wingColors[wing] || CONFIG.wingColors.default;
-        html += `
-          <div class="legend-item">
-            <div class="legend-color" style="background: ${color}"></div>
-            <span>${wing}: ${count} drawers</span>
+        </aside>
+
+        <section class="canvas-column">
+          <div id="loading-overlay" class="overlay-state">
+            <div class="spinner"></div>
+            <p style="color: #94a3b8; font-size: 0.85rem">Loading palace data…</p>
           </div>
-        `;
-      });
-      
-      legendEl.innerHTML = html;
-    }
-    
-    window.setView = function(view) {
-      currentView = view;
-      
-      // Update button states
-      document.querySelectorAll('#controls button').forEach(btn => {
-        btn.classList.remove('active');
-      });
-      event?.target?.classList.add('active');
-      
-      // Clear existing nodes and links
-      nodes.forEach(n => scene.remove(n.mesh));
-      links.forEach(l => scene.remove(l));
-      nodes = [];
-      links = [];
-      
-      controls.autoRotate = view !== 'graph';
-      
-      if (view === 'wings') {
-        renderWingsView();
-      } else if (view === 'rooms') {
-        renderRoomsView();
-      } else if (view === 'graph') {
-        renderGraphView();
-      }
-    };
-    
-    function renderWingsView() {
-      const wingNames = Object.keys(wingsData);
-      const angleStep = (Math.PI * 2) / wingNames.length;
-      const radius = CONFIG.spacing.wingSeparation / 2;
-      
-      wingNames.forEach((wing, i) => {
-        const angle = i * angleStep;
-        const x = Math.cos(angle) * radius;
-        const z = Math.sin(angle) * radius;
-        const drawerCount = wingsData[wing];
-        const size = THREE.MathUtils.mapLinear(drawerCount, 10, 100, CONFIG.nodeSizes.wingMin, CONFIG.nodeSizes.wingMax);
-        
-        createWingNode(wing, x, 0, z, size);
-      });
-      
-      // Connect wings to center
-      const centerGeometry = new THREE.SphereGeometry(1, 16, 16);
-      const centerMaterial = new THREE.MeshPhongMaterial({ 
-        color: 0xffffff, 
-        emissive: 0x333333,
-        transparent: true,
-        opacity: 0.5
-      });
-      const centerNode = new THREE.Mesh(centerGeometry, centerMaterial);
-      scene.add(centerNode);
-      nodes.push({ mesh: centerNode, data: { name: 'Center', type: 'center' } });
-      
-      wingNames.forEach((wing, i) => {
-        const angle = i * angleStep;
-        const x = Math.cos(angle) * radius;
-        const z = Math.sin(angle) * radius;
-        
-        createLink([0, 0, 0], [x, 0, z], 0x404040);
-      });
-    }
-    
-    function renderRoomsView() {
-      const wingNames = Object.keys(roomsData);
-      const wingAngleStep = (Math.PI * 2) / wingNames.length;
-      const wingRadius = CONFIG.spacing.wingSeparation / 2;
-      
-      wingNames.forEach((wing, wingIdx) => {
-        // Create wing center
-        const wingAngle = wingIdx * wingAngleStep;
-        const wingX = Math.cos(wingAngle) * wingRadius;
-        const wingZ = Math.sin(wingAngle) * wingRadius;
-        
-        createWingNode(wing, wingX, 0, wingZ, CONFIG.nodeSizes.wingMin);
-        
-        // Create rooms around wing
-        const rooms = roomsData[wing] || [];
-        const roomAngleStep = (Math.PI * 2) / Math.max(rooms.length, 1);
-        const roomRadius = CONFIG.spacing.roomRadius;
-        
-        rooms.forEach((room, roomIdx) => {
-          const roomAngle = wingAngle + roomIdx * roomAngleStep;
-          const roomX = wingX + Math.cos(roomAngle) * roomRadius;
-          const roomZ = wingZ + Math.sin(roomAngle) * roomRadius;
-          
-          const size = THREE.MathUtils.mapLinear(room.drawers, 1, 50, CONFIG.nodeSizes.roomMin, CONFIG.nodeSizes.roomMax);
-          
-          createRoomNode(room.name, wing, roomX, 0, roomZ, size);
-          createLink([wingX, 0, wingZ], [roomX, 0, roomZ], 0x404040);
-        });
-      });
-      
-      // Center node
-      const centerGeometry = new THREE.SphereGeometry(1, 16, 16);
-      const centerMaterial = new THREE.MeshPhongMaterial({ 
-        color: 0xffffff, 
-        emissive: 0x333333,
-        transparent: true,
-        opacity: 0.5
-      });
-      const centerNode = new THREE.Mesh(centerGeometry, centerMaterial);
-      scene.add(centerNode);
-      nodes.push({ mesh: centerNode, data: { name: 'Center', type: 'center' } });
-      
-      wingNames.forEach((wing, i) => {
-        const angle = i * wingAngleStep;
-        createLink([0, 0, 0], [Math.cos(angle) * wingRadius, 0, Math.sin(angle) * wingRadius], 0x404040);
-      });
-    }
-    
-    function renderGraphView() {
-      // Force-directed layout using D3-style physics
-      const allNodes = new Map();
-      
-      // Add wing nodes
-      Object.keys(wingsData).forEach(wing => {
-        allNodes.set(wing, { name: wing, type: 'wing', x: 0, y: 0, z: 0 });
-      });
-      
-      // Add room nodes
-      Object.entries(roomsData).forEach(([wing, rooms]) => {
-        rooms.forEach(room => {
-          allNodes.set(`${wing}/${room.name}`, { name: room.name, type: 'room', wing, x: 0, y: 0, z: 0 });
-        });
-      });
-      
-      // Simple force simulation
-      simulateForceLayout(Array.from(allNodes.values()), graphEdges);
-      
-      // Render nodes
-      allNodes.forEach((nodeData, nodeId) => {
-        const isWing = nodeData.type === 'wing';
-        const size = isWing 
-          ? CONFIG.nodeSizes.wingMin 
-          : CONFIG.nodeSizes.roomMin;
-        
-        if (isWing) {
-          createWingNode(nodeId, nodeData.x, nodeData.y, nodeData.z, size);
-        } else {
-          createRoomNode(nodeData.name, nodeData.wing, nodeData.x, nodeData.y, nodeData.z, size);
-        }
-      });
-      
-      // Render edges
-      graphEdges.forEach(edge => {
-        const fromNode = allNodes.get(edge.from);
-        const toNode = allNodes.get(edge.to);
-        if (fromNode && toNode) {
-          createLink([fromNode.x, fromNode.y, fromNode.z], [toNode.x, toNode.y, toNode.z], 0x505050);
-        }
-      });
-    }
-    
-    function simulateForceLayout(nodes, edges, iterations = 50) {
-      const repelStrength = 100;
-      const attractStrength = 0.01;
-      const centerStrength = 0.005;
-      
-      for (let iter = 0; iter < iterations; iter++) {
-        // Repel nodes
-        for (let i = 0; i < nodes.length; i++) {
-          for (let j = i + 1; j < nodes.length; j++) {
-            const dx = nodes[i].x - nodes[j].x;
-            const dy = nodes[i].y - nodes[j].y;
-            const dz = nodes[i].z - nodes[j].z;
-            const dist = Math.sqrt(dx * dx + dy * dy + dz * dz) + 0.1;
-            const force = repelStrength / (dist * dist);
-            
-            nodes[i].x += dx * force;
-            nodes[i].y += dy * force;
-            nodes[i].z += dz * force;
-            nodes[j].x -= dx * force;
-            nodes[j].y -= dy * force;
-            nodes[j].z -= dz * force;
-          }
-        }
-        
-        // Attract connected nodes
-        edges.forEach(edge => {
-          const from = nodes.find(n => n.name === edge.from || `${n.wing}/${n.name}` === edge.from);
-          const to = nodes.find(n => n.name === edge.to || `${n.wing}/${n.name}` === edge.to);
-          if (from && to) {
-            const dx = to.x - from.x;
-            const dy = to.y - from.y;
-            const dz = to.z - from.z;
-            
-            from.x += dx * attractStrength;
-            from.y += dy * attractStrength;
-            from.z += dz * attractStrength;
-            to.x -= dx * attractStrength;
-            to.y -= dy * attractStrength;
-            to.z -= dz * attractStrength;
-          }
-        });
-        
-        // Center nodes
-        nodes.forEach(node => {
-          node.x *= (1 - centerStrength);
-          node.y *= (1 - centerStrength);
-          node.z *= (1 - centerStrength);
-        });
-      }
-    }
-    
-    function createWingNode(wingName, x, y, z, size) {
-      const color = CONFIG.wingColors[wingName] || CONFIG.wingColors.default;
-      
-      // Main sphere
-      const geometry = new THREE.SphereGeometry(size, 32, 32);
-      const material = new THREE.MeshPhongMaterial({
-        color: color,
-        emissive: color,
-        emissiveIntensity: 0.3,
-        transparent: true,
-        opacity: 0.9
-      });
-      
-      const mesh = new THREE.Mesh(geometry, material);
-      mesh.position.set(x, y, z);
-      mesh.userData = { name: wingName, type: 'wing', drawers: wingsData[wingName] };
-      
-      // Glow effect (larger transparent sphere)
-      const glowGeometry = new THREE.SphereGeometry(size * 1.3, 32, 32);
-      const glowMaterial = new THREE.MeshBasicMaterial({
-        color: color,
-        transparent: true,
-        opacity: 0.1,
-        side: THREE.BackSide
-      });
-      const glow = new THREE.Mesh(glowGeometry, glowMaterial);
-      mesh.add(glow);
-      
-      scene.add(mesh);
-      nodes.push({ mesh, data: { name: wingName, type: 'wing', drawers: wingsData[wingName] } });
-      
-      return mesh;
-    }
-    
-    function createRoomNode(roomName, wing, x, y, z, size) {
-      const color = CONFIG.wingColors[wing] || CONFIG.wingColors.default;
-      
-      const geometry = new THREE.SphereGeometry(size, 16, 16);
-      const material = new THREE.MeshPhongMaterial({
-        color: color,
-        emissive: color,
-        emissiveIntensity: 0.2,
-        transparent: true,
-        opacity: 0.8
-      });
-      
-      const mesh = new THREE.Mesh(geometry, material);
-      mesh.position.set(x, y, z);
-      mesh.userData = { name: roomName, type: 'room', wing };
-      
-      scene.add(mesh);
-      nodes.push({ mesh, data: { name: roomName, type: 'room', wing } });
-      
-      return mesh;
-    }
-    
-    function createLink(from, to, color) {
-      const points = [new THREE.Vector3(...from), new THREE.Vector3(...to)];
-      const geometry = new THREE.BufferGeometry().setFromPoints(points);
-      const material = new THREE.LineBasicMaterial({ 
-        color: color,
-        transparent: true,
-        opacity: 0.3
-      });
-      
-      const line = new THREE.Line(geometry, material);
-      scene.add(line);
-      links.push(line);
-      
-      return line;
-    }
-    
-    function onWindowResize() {
-      camera.aspect = window.innerWidth / window.innerHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
-    }
-    
-    function onMouseMove(event) {
-      const rect = renderer.domElement.getBoundingClientRect();
-      const mouse = new THREE.Vector2(
-        ((event.clientX - rect.left) / rect.width) * 2 - 1,
-        -((event.clientY - rect.top) / rect.height) * 2 + 1
-      );
-      
-      const raycaster = new THREE.Raycaster();
-      raycaster.setFromCamera(mouse, camera);
-      
-      const intersects = raycaster.intersectObjects(nodes.map(n => n.mesh));
-      
-      if (intersects.length > 0) {
-        const object = intersects[0].object;
-        hoveredNode = object;
-        document.body.style.cursor = 'pointer';
-        
-        // Show tooltip
-        showTooltip(event.clientX, event.clientY, object.userData);
-      } else {
-        hoveredNode = null;
-        document.body.style.cursor = 'default';
-        hideTooltip();
-      }
-    }
-    
-    function onMouseClick(event) {
-      if (hoveredNode) {
-        console.log('Clicked:', hoveredNode.userData);
-        // Could add drill-down functionality here
-      }
-    }
-    
-    function showTooltip(x, y, data) {
-      const tooltip = document.getElementById('tooltip');
-      let html = `<div class="tooltip-title">${data.name}</div>`;
-      
-      if (data.type === 'wing') {
-        html += `<div class="tooltip-value">📚 Wing</div>`;
-        html += `<div class="tooltip-value">📦 ${data.drawers} drawers</div>`;
-      } else if (data.type === 'room') {
-        html += `<div class="tooltip-value">🚪 Room</div>`;
-        html += `<div class="tooltip-value">📚 Wing: ${data.wing}</div>`;
-      }
-      
-      tooltip.innerHTML = html;
-      tooltip.style.left = `${x + 15}px`;
-      tooltip.style.top = `${y + 15}px`;
-      tooltip.classList.add('visible');
-    }
-    
-    function hideTooltip() {
-      document.getElementById('tooltip').classList.remove('visible');
-    }
-    
-    window.resetView = function() {
-      camera.position.set(0, 30, 80);
-      controls.target.set(0, 0, 0);
-      controls.update();
-    };
-    
-    function animate() {
-      requestAnimationFrame(animate);
-      
-      controls.update();
-      
-      // Animate nodes
-      nodes.forEach((node, i) => {
-        if (node.data.type !== 'center') {
-          const time = Date.now() * 0.001;
-          const offset = i * 0.5;
-          node.mesh.position.y = Math.sin(time + offset) * 0.5;
-          node.mesh.rotation.y += 0.01;
-        }
-      });
-      
-      renderer.render(scene, camera);
-    }
-    
-    // Start
-    init();
-  </script>
-</body>
+          <div id="canvas-container" class="canvas-container" role="application" aria-label="MemPalace three-dimensional view"></div>
+          <div id="hover-card" class="hover-card" aria-hidden="true"></div>
+        </section>
+
+        <aside class="panel panel--right" id="panel-right">
+          <div class="panel-header">Inspector</div>
+          <div class="panel-body">
+            <div id="breadcrumb" class="breadcrumb">All wings</div>
+            <div id="inspect-body"></div>
+          </div>
+        </aside>
+      </div>
+
+      <footer class="app-footer">
+        <div class="metrics" aria-live="polite">
+          <span class="metric"><span class="metric__k">Drawers</span> <span id="metric-drawers" class="metric__v">—</span></span>
+          <span class="metric"><span class="metric__k">Wings</span> <span id="metric-wings" class="metric__v">—</span></span>
+          <span class="metric"><span class="metric__k">Rooms</span> <span id="metric-rooms" class="metric__v">—</span></span>
+          <span class="metric"><span class="metric__k">Tunnel nodes</span> <span id="metric-tunnels" class="metric__v">—</span></span>
+          <span class="metric"><span class="metric__k">Knowledge graph</span> <span id="metric-kg" class="metric__v">—</span></span>
+        </div>
+        <div class="hint-row">
+          <kbd>1</kbd>–<kbd>3</kbd> views · <kbd>R</kbd> camera · <kbd>L</kbd> labels · <kbd>Space</kbd> rotate
+        </div>
+      </footer>
+    </div>
+
+    <script type="module" src="/ui.js"></script>
+  </body>
 </html>
