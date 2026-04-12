@@ -158,7 +158,7 @@ function buildGraph(data) {
   const centerMesh = new THREE.Mesh(new THREE.IcosahedronGeometry(15, 2), new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.5, wireframe: true }));
   centerMesh.userData = { id: 'palace:center', kind: 'palace', label: 'MemPalace Core' };
   graphGroup.add(centerMesh);
-  nodeMap[centerMesh.userData.id] = { id: centerMesh.userData.id, kind: 'palace', label: 'MemPalace Core', mesh: centerMesh, radius: 15, data: { importance_score: 0, salience: 0 } };
+  nodeMap[centerMesh.userData.id] = { id: centerMesh.userData.id, kind: 'palace', label: 'MemPalace Core', mesh: centerMesh, radius: 15 };
   nodes.push(nodeMap[centerMesh.userData.id]);
   const wings = Array.from(new Set(crystals.map(c => c.wing || 'general')));
   const wingNodes = {};
@@ -172,12 +172,10 @@ function buildGraph(data) {
     mesh.position.set(x, y, z);
     mesh.userData = { id: 'wing:' + wingName, kind: 'wing', label: 'Wing: ' + wingName, wing: wingName };
     graphGroup.add(mesh);
-    wingNodes[wingName] = { id: mesh.userData.id, kind: 'wing', label: mesh.userData.label, mesh, baseX: x, baseY: y, baseZ: z, wing: wingName, radius: 14, data: { importance_score: 0, salience: 0 } };
+    wingNodes[wingName] = { id: mesh.userData.id, kind: 'wing', label: mesh.userData.label, mesh, baseX: x, baseY: y, baseZ: z, wing: wingName, radius: 14 };
     nodes.push(wingNodes[wingName]);
     nodeMap[mesh.userData.id] = wingNodes[wingName];
-    const centerToWingLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0), mesh.position]), new THREE.LineBasicMaterial({ color: 0x444444, transparent: true, opacity: 0.2 }));
-    graphGroup.add(centerToWingLine);
-    links.push({ id: 'palace:center->' + mesh.userData.id, sourceId: 'palace:center', targetId: mesh.userData.id, source: 'palace:center', target: mesh.userData.id, line: centerToWingLine, relation: 'structure', weight: 0.5, phase: 0 });
+    graphGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0), mesh.position]), new THREE.LineBasicMaterial({ color: 0x444444, transparent: true, opacity: 0.2 })));
   });
   const roomsByWing = {};
   crystals.forEach(c => {
@@ -197,12 +195,10 @@ function buildGraph(data) {
       mesh.position.set(x, y, z);
       mesh.userData = { id: `room:${wingName}:${roomName}`, kind: 'room', label: 'Room: ' + roomName, wing: wingName, room: roomName };
       graphGroup.add(mesh);
-      roomNodes[`${wingName}:${roomName}`] = { id: mesh.userData.id, kind: 'room', label: mesh.userData.label, mesh, baseX: x, baseY: y, baseZ: z, wing: wingName, room: roomName, radius: 8, data: { importance_score: 0, salience: 0 } };
+      roomNodes[`${wingName}:${roomName}`] = { id: mesh.userData.id, kind: 'room', label: mesh.userData.label, mesh, baseX: x, baseY: y, baseZ: z, wing: wingName, room: roomName, radius: 8 };
       nodes.push(roomNodes[`${wingName}:${roomName}`]);
       nodeMap[mesh.userData.id] = roomNodes[`${wingName}:${roomName}`];
-      const wingToRoomLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints([wingNode.mesh.position, mesh.position]), new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.2 }));
-      graphGroup.add(wingToRoomLine);
-      links.push({ id: wingNode.id + '->' + mesh.userData.id, sourceId: wingNode.id, targetId: mesh.userData.id, source: wingNode.id, target: mesh.userData.id, line: wingToRoomLine, relation: 'structure', weight: 0.5, phase: 0 });
+      graphGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([wingNode.mesh.position, mesh.position]), new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.2 })));
     });
   });
   crystals.forEach((crystal, ci) => {
@@ -220,9 +216,7 @@ function buildGraph(data) {
     graphGroup.add(mesh);
     nodeMap[mesh.userData.id] = { id: mesh.userData.id, rawId: crystal.id, kind: 'crystal', data: crystal, label: mesh.userData.label, mesh, baseX: x, baseY: y, baseZ: z, timelineY: computeTimelineY(crystal, crystals), wing: crystal.wing, room: crystal.room, actor: crystal.actor || 'user', radius: nodeRadius, visualType: mesh.geometry.type };
     nodes.push(nodeMap[mesh.userData.id]);
-    const roomToCrystalLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints([roomNode.mesh.position, mesh.position]), new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.15 }));
-    graphGroup.add(roomToCrystalLine);
-    links.push({ id: roomNode.id + '->' + mesh.userData.id, sourceId: roomNode.id, targetId: mesh.userData.id, source: roomNode.id, target: mesh.userData.id, line: roomToCrystalLine, relation: 'structure', weight: 0.5, phase: 0 });
+    graphGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([roomNode.mesh.position, mesh.position]), new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.15 })));
   });
   entities.forEach((entity, index) => {
     const angle = (index / Math.max(entities.length, 1)) * Math.PI * 2, radiusOrbit = graphSpread * 0.35 + (index % 7) * 10;
@@ -410,19 +404,19 @@ function selectNode(node, options = {}) {
   if (options.pin) pinnedIds.add(node.id);
 
   if (node.kind === 'wing') {
-    selectedScopeWings.clear(); 
+    selectedScopeWings.clear();
     selectedScopeWings.add(node.wing);
     loadGraph().then(() => {
-      updateSceneBanner('Wing focus', node.wing); 
+      updateSceneBanner('Wing focus', node.wing);
       setOrbitDistance(120, node.mesh.position.clone());
     });
   } else if (node.kind === 'room') {
-    selectedScopeWings.clear(); 
+    selectedScopeWings.clear();
     selectedScopeWings.add(node.wing);
-    selectedScopeRooms.clear(); 
+    selectedScopeRooms.clear();
     selectedScopeRooms.add(node.room);
     loadGraph().then(() => {
-      updateSceneBanner('Room focus', node.wing + ' • ' + node.room); 
+      updateSceneBanner('Room focus', node.wing + ' • ' + node.room);
       setOrbitDistance(60, node.mesh.position.clone());
     });
   } else {
@@ -975,9 +969,6 @@ window.toggleTimelineMode = function() {
 };
 window.setCameraPreset = function(mode) {
   if (mode === 'ambient') {
-    timelineMode = false;
-    document.getElementById('timelineBtn').textContent = 'Timeline: OFF';
-    loadGraph();
     tweenCamera(new THREE.Vector3(0, 400, 800), new THREE.Vector3(0, 0, 0));
   } else if (mode === 'focus') {
     if (selectedNode) {
@@ -1153,7 +1144,7 @@ function tweenCamera(targetPos, targetLookAt, duration = 1200) {
 
 async function playTemporalGrowth() {
   const crystalNodes = nodes.filter(n => n.kind === 'crystal').sort((a, b) => (a.data.created_at || 0) - (b.data.created_at || 0));
-  crystalNodes.forEach(n => n.growthScale = 0.0001);
+  crystalNodes.forEach(n => n.mesh.scale.setScalar(0.0001));
   updateSceneBanner('Temporal Growth', 'Playing memory sequence...');
   for (let node of crystalNodes) {
     const startTime = performance.now();
@@ -1162,7 +1153,7 @@ async function playTemporalGrowth() {
         const elapsed = performance.now() - startTime;
         const progress = Math.min(elapsed / 400, 1);
         const t = 1 - Math.pow(1 - progress, 3);
-        node.growthScale = Math.max(0.0001, t);
+        node.mesh.scale.setScalar(Math.max(0.0001, t));
         if (progress < 1) requestAnimationFrame(animateGrowth);
         else resolve();
       }
