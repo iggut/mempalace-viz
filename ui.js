@@ -226,9 +226,14 @@ function renderOverviewInspector(ctx) {
       : '';
   const truncLine = ctx.graphMeta?.truncatedSources?.length
     ? ctx.graphMeta.truncatedSources
-        .map((t) => `${t.source} capped at ${formatNum(t.limit)} (${formatNum(t.totalMatching)} available)`)
+        .map((t) => {
+          const known = t.totalMatching != null && t.totalMatching !== '' ? formatNum(t.totalMatching) : 'unknown';
+          const inferred = t.inferred ? ' (heuristic)' : '';
+          return `${t.source} limit ${formatNum(t.limit)} · ${known} rows reported${inferred}`;
+        })
         .join('; ')
     : '';
+  const completenessLine = (ctx.graphMeta?.completenessNotes || []).filter(Boolean).join(' ');
   const kgLine = om.kgAvailable
     ? om.kgSummary || '—'
     : 'Knowledge graph statistics are unavailable from the current API.';
@@ -295,6 +300,7 @@ function renderOverviewInspector(ctx) {
           ${metaRow('Rooms with no graph links', om.ga.hasResolvableEdges ? formatNum(om.roomsWithNoTunnels) : '—')}
           ${metaRow('Upstream truncation', truncLine || 'none')}
         </div>
+        ${completenessLine ? `<p class="inspect-muted inspect-muted--tight">${escapeHtml(completenessLine)}</p>` : ''}
         <p class="inspect-muted inspect-muted--tight">${escapeHtml(kgLine)}</p>
         `,
       )}

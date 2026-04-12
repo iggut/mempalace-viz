@@ -211,17 +211,25 @@ export function buildTaxonomyRoomIndex(taxonomy) {
   return idx;
 }
 
+/** Upstream MemPalace `find_tunnels` slices to this many rows (palace_graph.py). Used only for heuristics when MCP returns a bare array. */
+export const LEGACY_MCP_TUNNEL_ROW_CAP = 50;
+
 /**
- * Normalize MCP `mempalace_find_tunnels` result (array legacy, or { tunnels, truncated, ... }).
+ * Normalize MCP `mempalace_find_tunnels` result (array legacy, or optional { tunnels, truncated, ... }).
+ * When the upstream tool returns a **plain array**, we cannot know total tunnel-room count. If the
+ * array length equals {@link LEGACY_MCP_TUNNEL_ROW_CAP}, we flag possible truncation (viz-side heuristic).
  * @param {unknown} raw
  */
 export function parseTunnelDiscoveryResult(raw) {
   if (Array.isArray(raw)) {
+    const n = raw.length;
+    const atCap = n === LEGACY_MCP_TUNNEL_ROW_CAP;
     return {
       tunnels: raw,
-      truncated: false,
-      limit: null,
-      totalMatching: raw.length,
+      truncated: atCap,
+      limit: atCap ? LEGACY_MCP_TUNNEL_ROW_CAP : null,
+      totalMatching: atCap ? null : n,
+      truncationHeuristic: atCap ? 'legacy_mcp_row_cap' : null,
     };
   }
   if (raw && typeof raw === 'object' && Array.isArray(raw.tunnels)) {
@@ -231,9 +239,10 @@ export function parseTunnelDiscoveryResult(raw) {
       truncated: !!o.truncated,
       limit: o.limit ?? null,
       totalMatching: o.total_matching ?? o.totalMatching ?? o.tunnels.length,
+      truncationHeuristic: null,
     };
   }
-  return { tunnels: [], truncated: false, limit: null, totalMatching: 0 };
+  return { tunnels: [], truncated: false, limit: null, totalMatching: 0, truncationHeuristic: null };
 }
 
 /**
@@ -394,14 +403,14 @@ export function summarizeCanonicalEdgeList(edgesResolved, edgesUnresolved) {
 }
 
 /**
- * @param {{ truncated?: boolean, limit?: number | null, totalMatching?: number }} tunnelDiscovery
+ * @param {{ truncated?: boolean, limit?: number | null, totalMatching?: number | null, truncationHeuristic?: string | null }} tunnelDiscovery
  * @param {boolean} includesTaxonomyAdjacency
  */
 export function buildGraphProvenanceMeta(tunnelDiscovery, includesTaxonomyAdjacency) {
   const sources = ['mempalace_find_tunnels'];
   if (includesTaxonomyAdjacency) sources.push('taxonomy_adjacency');
 
-  /** @type {Array<{ source: string, limit?: number | null, totalMatching?: number, truncated?: boolean }>} */
+  /** @type {Array<{ source: string, limit?: number | null, totalMatching?: number | null, truncated?: boolean, inferred?: boolean }>} */
   const truncatedSources = [];
   if (tunnelDiscovery?.truncated) {
     truncatedSources.push({
@@ -409,13 +418,23 @@ export function buildGraphProvenanceMeta(tunnelDiscovery, includesTaxonomyAdjace
       limit: tunnelDiscovery.limit ?? null,
       totalMatching: tunnelDiscovery.totalMatching ?? null,
       truncated: true,
+      inferred: tunnelDiscovery.truncationHeuristic === 'legacy_mcp_row_cap',
     });
+  }
+
+  /** @type {string[]} */
+  const completenessNotes = [];
+  if (tunnelDiscovery?.truncationHeuristic === 'legacy_mcp_row_cap') {
+    completenessNotes.push(
+      'Tunnel list from MCP has exactly 50 rows (upstream cap). More tunnel rooms may exist; total count is not exposed.',
+    );
   }
 
   return {
     sources,
     truncatedSources,
     estimatedAvailable: null,
+    completenessNotes,
   };
 }
 
@@ -432,7 +451,12 @@ export function buildEnrichedGraphFromTaxonomyAndTunnels(taxonomyRaw, tunnelsRaw
   const edgesResolved = mergeCanonicalGraphEdges(tunnelBuilt.edgesResolved, intra);
   const summary = summarizeCanonicalEdgeList(edgesResolved, tunnelBuilt.edgesUnresolved);
   const graphMeta = buildGraphProvenanceMeta(
-    { truncated: disc.truncated, limit: disc.limit, totalMatching: disc.totalMatching },
+    {
+      truncated: disc.truncated,
+      limit: disc.limit,
+      totalMatching: disc.totalMatching,
+      truncationHeuristic: disc.truncationHeuristic,
+    },
     intra.length > 0,
   );
   return {

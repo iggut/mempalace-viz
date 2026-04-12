@@ -109,16 +109,11 @@ Server-computed rollups:
 
 ---
 
-## MCP: `mempalace_find_tunnels`
+## MCP: `mempalace_find_tunnels` (upstream MemPalace)
 
-Returns an object:
+Stock MemPalace returns a **JSON array** of tunnel room rows. The Python implementation caps that list (typically **50** rows). The viz HTTP API does **not** control upstream; it only receives the array.
 
-- `tunnels` — list of tunnel room rows (same shape as before).
-- `truncated` — whether `limit` cut the list.
-- `limit` — applied cap, or `null` when unlimited.
-- `total_matching` — count before truncation.
-
-Omit `limit` (or use `0` / negative) for the **full** tunnel list. The HTTP bridge does not request a limit by default.
+**Viz-side heuristic:** `parseTunnelDiscoveryResult()` in `canonical.js` treats a plain array of length **50** as *possibly* truncated and sets `graphMeta.truncatedSources` / `completenessNotes` accordingly. Shorter arrays are treated as complete. Optional future forks may return an envelope `{ tunnels, truncated, … }`; the parser accepts that too.
 
 ---
 
@@ -129,11 +124,10 @@ Omit `limit` (or use `0` / negative) for the **full** tunnel list. The HTTP brid
 - Continue using `taxonomy` tree and `wings` drawer map.
 - If you ignored `graphStats.tunnels` because it was empty: use `edgesResolved` / `summary` instead.
 - String keys like `wing/room` should be replaced by `roomId` via `makeRoomId(wing, room)` for rooms whose names contain `/`.
-- Raw MCP `mempalace_find_tunnels` **no longer returns a bare JSON array** — unwrap `.tunnels` or use the viz HTTP API.
 
 ### Frontend (`mempalace-viz`)
 
-- `loadPalaceData()` loads `overviewBundle` and enriched `graph-stats`; `graph.graphMeta` and top-level `graphMeta` expose provenance.
+- `loadPalaceData()` loads `overviewBundle` and enriched `graph-stats`; `graph.graphMeta` and top-level `graphMeta` expose provenance (including completeness notes when the 50-row heuristic applies).
 - `graphEdges` are derived from `edgesResolved` when present (`toLegacyGraphEdges` includes `relationshipType` when available).
 - Analytics (`insights.js`) use `summary.byType` when present.
 
@@ -142,4 +136,4 @@ Omit `limit` (or use `0` / negative) for the **full** tunnel list. The HTTP brid
 ## Assumptions
 
 - Taxonomy from `get_taxonomy` is the authority for which `(wing, room)` pairs exist.
-- When MCP applies a `limit` on `find_tunnels`, `graphMeta.truncatedSources` records it; otherwise the graph is complete relative to Chroma’s tunnel discovery pass.
+- Tunnel row completeness relative to Chroma is only guaranteed when the MCP array has **fewer than 50** rows (or when an enriched MCP exposes explicit totals).

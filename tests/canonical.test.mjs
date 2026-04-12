@@ -6,6 +6,7 @@ import {
   buildOverviewSummary,
   buildTaxonomyAdjacencyEdges,
   collectRoomIdsFromRoomsData,
+  LEGACY_MCP_TUNNEL_ROW_CAP,
   makeRoomId,
   parseRoomId,
   parseTaxonomyCanonical,
@@ -73,6 +74,7 @@ test('parseTunnelDiscoveryResult accepts legacy array or envelope', () => {
   const a = parseTunnelDiscoveryResult([{ room: 'x', wings: ['a', 'b'] }]);
   assert.equal(a.tunnels.length, 1);
   assert.equal(a.truncated, false);
+  assert.equal(a.totalMatching, 1);
   const b = parseTunnelDiscoveryResult({
     tunnels: [{ room: 'y', wings: ['a', 'b'] }],
     truncated: true,
@@ -81,6 +83,18 @@ test('parseTunnelDiscoveryResult accepts legacy array or envelope', () => {
   });
   assert.equal(b.truncated, true);
   assert.equal(b.totalMatching, 99);
+});
+
+test('parseTunnelDiscoveryResult infers possible MCP cap when array length is 50', () => {
+  const rows = Array.from({ length: LEGACY_MCP_TUNNEL_ROW_CAP }, (_, i) => ({
+    room: `r${i}`,
+    wings: ['w1', 'w2'],
+  }));
+  const p = parseTunnelDiscoveryResult(rows);
+  assert.equal(p.truncated, true);
+  assert.equal(p.limit, LEGACY_MCP_TUNNEL_ROW_CAP);
+  assert.equal(p.totalMatching, null);
+  assert.equal(p.truncationHeuristic, 'legacy_mcp_row_cap');
 });
 
 test('buildTaxonomyAdjacencyEdges chains sorted room names within a wing', () => {

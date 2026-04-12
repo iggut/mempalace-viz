@@ -44,13 +44,22 @@ Returned on graph-stats and overview:
 {
   "sources": ["mempalace_find_tunnels", "taxonomy_adjacency"],
   "truncatedSources": [
-    { "source": "mempalace_find_tunnels", "limit": 50, "totalMatching": 120, "truncated": true }
+    {
+      "source": "mempalace_find_tunnels",
+      "limit": 50,
+      "totalMatching": null,
+      "truncated": true,
+      "inferred": true
+    }
   ],
-  "estimatedAvailable": null
+  "estimatedAvailable": null,
+  "completenessNotes": [
+    "Tunnel list from MCP has exactly 50 rows (upstream cap). More tunnel rooms may exist; total count is not exposed."
+  ]
 }
 ```
 
-When MCP returns the full tunnel list without a limit, `truncatedSources` is empty.
+With **stock MemPalace**, MCP returns only a **bare array**. The viz layer sets `truncatedSources` / `completenessNotes` when the array length equals the known upstream cap (50) — a **heuristic**, not a proven total. If the array is shorter, we assume the list is complete. Forks may return explicit envelopes; those are passed through without the heuristic.
 
 ## Overview stats (`/api/overview` → `stats`)
 
@@ -63,5 +72,5 @@ Rollups include:
 
 ## Migration from tunnel-only model
 
-- Older clients that expect `mempalace_find_tunnels` to return a **bare array** must accept `{ tunnels, truncated, limit, total_matching }` from current MCP, or use the HTTP API which normalizes via `parseTunnelDiscoveryResult`.
-- `edgeId` values gained a relationship suffix; do not parse beyond equality / display.
+- Stock MemPalace MCP returns a **bare JSON array** of tunnel rows (capped at 50). The viz HTTP API normalizes via `parseTunnelDiscoveryResult` (including the 50-row heuristic). Optional envelopes from forks are still accepted.
+- `edgeId` values include a relationship suffix; do not parse beyond equality / display.
