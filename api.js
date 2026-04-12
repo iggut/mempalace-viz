@@ -3,27 +3,24 @@
  * Uses same-origin relative URLs when served from the Node server.
  */
 
-import { mergeCanonicalGraphEdges, normalizeWingsPayload, parseTaxonomyCanonical, toLegacyGraphEdges } from './canonical.js';
+import { normalizeWingsPayload, parseTaxonomyCanonical, toLegacyGraphEdges } from './canonical.js';
 
 export { normalizeWingsPayload };
 
 /**
- * Canonical edges for graph/routing: explicit MCP tunnels, optionally merged with inferred taxonomy adjacency.
- * @param {{ edgesResolved?: unknown[], edgesInferred?: unknown[] }|null|undefined} graph
- * @param {boolean} inferredLayerEnabled
+ * Canonical edges for graph/routing: explicit MCP tunnel edges only (`edgesResolved`).
+ * @param {{ edgesResolved?: unknown[] }|null|undefined} graph
  */
-export function getPalaceCanonicalEdgesForView(graph, inferredLayerEnabled) {
+export function getPalaceCanonicalEdgesForView(graph) {
   const ex = Array.isArray(graph?.edgesResolved) ? graph.edgesResolved : [];
-  const inf = Array.isArray(graph?.edgesInferred) ? graph.edgesInferred : [];
-  if (inferredLayerEnabled && inf.length) return mergeCanonicalGraphEdges(ex, inf);
   return ex;
 }
 
 /**
- * Legacy-shaped graph edges for the scene and route helpers (same merge rule as {@link getPalaceCanonicalEdgesForView}).
+ * Legacy-shaped graph edges for the scene and route helpers.
  */
-export function getPalaceLegacyGraphEdgesForView(graph, inferredLayerEnabled) {
-  return toLegacyGraphEdges(getPalaceCanonicalEdgesForView(graph, inferredLayerEnabled));
+export function getPalaceLegacyGraphEdgesForView(graph) {
+  return toLegacyGraphEdges(getPalaceCanonicalEdgesForView(graph));
 }
 
 export function getApiBase() {

@@ -18,7 +18,7 @@ import {
 
 test('getEdgeRelationshipType defaults and canonical', () => {
   assert.equal(getEdgeRelationshipType({}), 'tunnel');
-  assert.equal(getEdgeRelationshipType({ relationshipType: 'taxonomy_adjacency' }), 'taxonomy_adjacency');
+  assert.equal(getEdgeRelationshipType({ relationshipType: 'custom_type' }), 'custom_type');
 });
 
 test('collectRelationshipTypesFromEdges sorts', () => {
@@ -81,16 +81,15 @@ test('getStyleForRelationshipType returns numeric color', () => {
 });
 
 test('formatRelationshipTypeCounts', () => {
-  const s = formatRelationshipTypeCounts({ tunnel: 2, taxonomy_adjacency: 1 });
+  const s = formatRelationshipTypeCounts({ tunnel: 2, other: 1 });
   assert.match(s, /tunnel/);
-  assert.match(s, /adjacency/);
 });
 
 test('describeRoomRelationshipMix', () => {
-  const a = describeRoomRelationshipMix({ tunnel: 0, taxonomy_adjacency: 2 }, { tunnel: 3, taxonomy_adjacency: 2 });
-  assert.ok(a && a.includes('adjacency'));
-  const b = describeRoomRelationshipMix({ tunnel: 2 }, { tunnel: 2, taxonomy_adjacency: 4 });
-  assert.ok(b && b.includes('tunnel'));
+  const hidden = describeRoomRelationshipMix({ tunnel: 0 }, { tunnel: 3 });
+  assert.ok(hidden && hidden.includes('No visible links'));
+  const tun = describeRoomRelationshipMix({ tunnel: 4 }, { tunnel: 4 });
+  assert.ok(tun && tun.includes('tunnel'));
 });
 
 test('parseSavedGraphRelFilters', () => {

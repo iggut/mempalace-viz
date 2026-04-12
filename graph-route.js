@@ -1,8 +1,7 @@
 /**
  * Room-to-room routing on canonical graph edges (3D viz): fewest-hop BFS and weighted modes.
  * Pure helpers — safe in browser and Node tests.
- * Routing uses whatever edges the caller passes; inferred taxonomy adjacency must be merged in
- * by the UI only when that optional layer is enabled.
+ * Routing uses whatever edges the caller passes (MCP tunnel edges only in normal viz loads).
  */
 import { makeRoomId, parseRoomId, sceneRoomNodeIdFromRoomId } from './canonical.js';
 import {
@@ -498,7 +497,6 @@ export function buildRouteComparisonNote(mode, chosen, shortest, opts = {}) {
  * @param {string} opts.startRoomId
  * @param {string} opts.endRoomId
  * @param {RouteMode} [opts.routeMode]
- * @param {boolean} [opts.inferredLayerEnabled] — whether the graph edge list can include merged inferred edges
  */
 export function computeGraphRoute(opts) {
   const {
@@ -509,9 +507,7 @@ export function computeGraphRoute(opts) {
     startRoomId,
     endRoomId,
     routeMode: routeModeRaw,
-    inferredLayerEnabled: inferredLayerEnabledRaw,
   } = opts || {};
-  const inferredLayerEnabled = !!inferredLayerEnabledRaw;
   const routeMode = normalizeRouteMode(routeModeRaw);
   const start = String(startRoomId || '');
   const end = String(endRoomId || '');
@@ -527,22 +523,19 @@ export function computeGraphRoute(opts) {
       ok: false,
       reason: 'no_edges',
       message: 'No graph edges match the current relationship filters — widen filters or refresh data.',
-      routingBasis: inferredLayerEnabled ? 'explicit_plus_inferred' : 'explicit_mcp_only',
-      inferredLayerEnabled,
+      routingBasis: 'explicit_mcp_only',
+      inferredLayerEnabled: false,
     };
   }
   const adjBfs = buildRoomAdjacency(routingEdges, roomsData);
   const refShortest = shortestRoomPath(adjBfs, start, end);
   if (!refShortest) {
-    const hint = inferredLayerEnabled
-      ? 'No route through visible edges — adjust filters or pick different rooms.'
-      : 'No route through explicit MCP tunnel edges — enable the optional inferred adjacency layer, widen filters, or pick different rooms.';
     return {
       ok: false,
       reason: 'no_path',
-      message: hint,
-      routingBasis: inferredLayerEnabled ? 'explicit_plus_inferred' : 'explicit_mcp_only',
-      inferredLayerEnabled,
+      message: 'No route through visible MCP tunnel edges — widen filters or pick different rooms.',
+      routingBasis: 'explicit_mcp_only',
+      inferredLayerEnabled: false,
     };
   }
 
@@ -556,15 +549,12 @@ export function computeGraphRoute(opts) {
     sp = w;
     totalCost = w ? w.totalCost : null;
     if (!sp) {
-      const hint = inferredLayerEnabled
-        ? 'No route through visible edges — adjust filters or pick different rooms.'
-        : 'No route through explicit MCP tunnel edges — enable the optional inferred adjacency layer, widen filters, or pick different rooms.';
       return {
         ok: false,
         reason: 'no_path',
-        message: hint,
-        routingBasis: inferredLayerEnabled ? 'explicit_plus_inferred' : 'explicit_mcp_only',
-        inferredLayerEnabled,
+        message: 'No route through visible MCP tunnel edges — widen filters or pick different rooms.',
+        routingBasis: 'explicit_mcp_only',
+        inferredLayerEnabled: false,
       };
     }
   }
@@ -603,9 +593,9 @@ export function computeGraphRoute(opts) {
     comparisonNote,
     mixSummary,
     tunnelOnlyPathExists: tunnelOnlyPossible,
-    inferredLayerEnabled,
+    inferredLayerEnabled: false,
     usesInferredSegments,
-    routingBasis: inferredLayerEnabled ? 'explicit_plus_inferred' : 'explicit_mcp_only',
+    routingBasis: 'explicit_mcp_only',
   };
 }
 

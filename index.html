@@ -87,12 +87,6 @@
 
             <div id="graph-view-extras" class="graph-view-extras" hidden>
               <div id="graph-status-pill" class="graph-status-pill" role="status" aria-live="polite"></div>
-              <div class="graph-inferred-row hint-row" style="margin: 6px 0">
-                <label for="toggle-inferred-graph" class="graph-inferred-label">
-                  <input type="checkbox" id="toggle-inferred-graph" />
-                  Show inferred taxonomy adjacency (heuristic, not MCP/API)
-                </label>
-              </div>
               <div class="graph-rel-toolbar">
                 <span class="graph-rel-toolbar__label">Relationship types</span>
                 <div id="graph-rel-chips" class="rel-chips" aria-label="Toggle relationship types in the 3D graph"></div>
@@ -271,7 +265,7 @@
           </li>
           <li>
             <strong>Route</strong> — Inspector (Graph, room): set start → “Route to here” or search result <strong>Route</strong>; 3D edges/nodes emphasize the path. By default routes use
-            <strong>explicit MCP tunnel edges only</strong>; enable “inferred taxonomy adjacency” to allow heuristic same-wing links — summaries label inferred-assisted paths.
+            <strong>MCP tunnel edges only</strong> (from <code>mempalace_find_tunnels</code>). There is no MemPalace MCP write API for arbitrary room-to-room links — see <code>docs/MCP_CONNECTION_CAPABILITIES.md</code>.
           </li>
           <li><strong>Click</strong> empty canvas — Clear selection (unless pinned); subtle canvas cue</li>
           <li><strong>Breadcrumb</strong> — Navigate: All wings → wing → refocus room</li>

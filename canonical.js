@@ -437,8 +437,7 @@ export function buildGraphProvenanceMeta(tunnelDiscovery) {
 }
 
 /**
- * Explicit MCP tunnel edges plus optional inferred same-wing taxonomy adjacency (separate arrays).
- * Default graph/routing should use {@link edgesResolved} only; inferred edges are opt-in in the UI.
+ * Explicit MCP tunnel edges from `mempalace_find_tunnels` + taxonomy. No inferred graph layer.
  * @param {object} taxonomyRaw — MCP taxonomy payload
  * @param {unknown} tunnelsRaw — MCP find_tunnels array or envelope
  */
@@ -446,7 +445,7 @@ export function buildEnrichedGraphFromTaxonomyAndTunnels(taxonomyRaw, tunnelsRaw
   const disc = parseTunnelDiscoveryResult(tunnelsRaw);
   const { taxonomy, roomsData, rooms } = parseTaxonomyCanonical(taxonomyRaw);
   const tunnelBuilt = buildCanonicalEdgesFromTunnels(disc.tunnels, taxonomy);
-  const edgesInferred = buildTaxonomyAdjacencyEdges(roomsData);
+  const edgesInferred = [];
   const edgesResolved = tunnelBuilt.edgesResolved;
   const summary = summarizeCanonicalEdgeList(edgesResolved, tunnelBuilt.edgesUnresolved);
   const summaryInferred = summarizeCanonicalEdgeList(edgesInferred, []);
@@ -456,14 +455,6 @@ export function buildEnrichedGraphFromTaxonomyAndTunnels(taxonomyRaw, tunnelsRaw
     totalMatching: disc.totalMatching,
     truncationHeuristic: disc.truncationHeuristic,
   });
-  graphMeta.inferredLayer = {
-    relationshipType: 'taxonomy_adjacency',
-    edgeCount: edgesInferred.length,
-    label: 'Inferred taxonomy adjacency',
-    description:
-      'Heuristic same-wing links (consecutive rooms in sorted name order). Not from MCP/API — off by default.',
-    defaultEnabled: false,
-  };
   return {
     taxonomy,
     roomsData,

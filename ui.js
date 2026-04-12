@@ -67,14 +67,9 @@ import {
 const LS_KEY = 'mempalace-viz-explorer-v1';
 const ROUTE_MODE_LS_KEY = 'mempalace-viz-route-mode-v1';
 const PANEL_STATE_KEY = 'mempalace-viz-panel-state-v1';
-/** Opt-in: merge inferred same-wing taxonomy_adjacency into graph + routes (off by default). */
-const INFERRED_LAYER_LS_KEY = 'mempalace-viz-inferred-layer-v1';
 
 /** Enabled relationship types for graph view; normalized when palace data loads. */
 let graphRelEnabledTypes = new Set();
-
-/** When true, optional inferred edges are merged into the edge list (still labeled inferred in UI). */
-let graphInferredLayerEnabled = false;
 
 const VIEWS = [
   { id: 'wings', title: 'Wings', hint: 'High-level structure by domain or project.' },
@@ -159,30 +154,6 @@ function persistRouteMode(mode) {
 
 graphRouteMode = loadRouteMode();
 
-function loadInferredLayerPref() {
-  try {
-    const raw = localStorage.getItem(INFERRED_LAYER_LS_KEY);
-    if (raw === 'true') return true;
-    if (raw === 'false') return false;
-    const j = JSON.parse(raw);
-    if (j === true) return true;
-    if (j === false) return false;
-  } catch {
-    /* ignore */
-  }
-  return false;
-}
-
-function persistInferredLayer(on) {
-  try {
-    localStorage.setItem(INFERRED_LAYER_LS_KEY, JSON.stringify(!!on));
-  } catch {
-    /* ignore */
-  }
-}
-
-graphInferredLayerEnabled = loadInferredLayerPref();
-
 const $ = (id) => document.getElementById(id);
 
 function isTypingTarget(el) {
@@ -214,7 +185,7 @@ function graphViewInspectorNotice(ctx) {
       ? gs.edgesUnresolved.length
       : null;
   if (!edges) {
-    return `<div class="inspect-card inspect-card--hint" role="status"><strong>Graph view</strong><p class="inspect-muted inspect-muted--tight">No explicit MCP tunnel edges were returned from graph-stats. Wings and rooms may still appear if taxonomy is loaded. Optional inferred adjacency is off by default.</p></div>`;
+    return `<div class="inspect-card inspect-card--hint" role="status"><strong>Graph view</strong><p class="inspect-muted inspect-muted--tight">No tunnel edges were returned from graph-stats. Wings and rooms may still appear if taxonomy is loaded. Edges come only from MemPalace tunnel discovery (<code>mempalace_find_tunnels</code>).</p></div>`;
   }
   if (!ctx.ga?.hasResolvableEdges) {
     const unresolved =
@@ -419,18 +390,15 @@ function recomputeGraphRoute() {
     graphRoute.result = { ok: false, reason: 'bad_scene', message: 'Could not resolve route endpoints.' };
     return;
   }
-  const avail = collectRelationshipTypesFromEdges(
-    getPalaceLegacyGraphEdgesForView(dataBundle.graph, graphInferredLayerEnabled),
-  );
+  const avail = collectRelationshipTypesFromEdges(getPalaceLegacyGraphEdgesForView(dataBundle.graph));
   graphRoute.result = computeGraphRoute({
-    graphEdges: getPalaceLegacyGraphEdgesForView(dataBundle.graph, graphInferredLayerEnabled),
+    graphEdges: getPalaceLegacyGraphEdgesForView(dataBundle.graph),
     roomsData: dataBundle.roomsData || {},
     enabledRelTypes: graphRelEnabledTypes,
     availableRelTypes: avail,
     startRoomId: a,
     endRoomId: b,
     routeMode: graphRouteMode,
-    inferredLayerEnabled: graphInferredLayerEnabled,
   });
   if (graphRoute.result.ok && graphRoute.result.pathSceneIds?.length) {
     graphRoute.stepIndex = normalizeRouteStepIndex(graphRoute.stepIndex, graphRoute.result.pathSceneIds.length);
@@ -546,15 +514,8 @@ function formatRouteInspectorSummary(res) {
     res.routeMode !== 'shortest' && res.totalCost != null ? ` · weighted cost ${res.totalCost}` : '';
   const mixLine = res.mixSummary ? `${res.mixSummary} ` : '';
   const compare = res.comparisonNote ? ` ${res.comparisonNote}` : '';
-  const basis =
-    res.routingBasis === 'explicit_plus_inferred'
-      ? 'Structure: explicit MCP + optional inferred layer.'
-      : 'Structure: explicit MCP tunnels only.';
-  const inferredWarn =
-    res.usesInferredSegments && res.routingBasis === 'explicit_plus_inferred'
-      ? ' Inferred-assisted: path includes taxonomy_adjacency segment(s).'
-      : '';
-  return `${basis}${inferredWarn} Mode: ${modeLabel}${costBit}. ${res.hops} hop(s) on visible edges. ${mixLine}Types: ${mix}. ${br}${compare}`;
+  const basis = 'Structure: explicit MCP tunnel edges only.';
+  return `${basis} Mode: ${modeLabel}${costBit}. ${res.hops} hop(s) on visible edges. ${mixLine}Types: ${mix}. ${br}${compare}`;
 }
 
 function formatNum(n) {
@@ -581,8 +542,8 @@ function buildPalaceContext() {
   const gs = dataBundle?.graphStats;
   const graph = dataBundle?.graph;
   const edgesExplicit = graph?.edgesResolved?.length ? graph.edgesResolved : gs?.edgesResolved || [];
-  const edgesForGraphView = getPalaceCanonicalEdgesForView(graph, graphInferredLayerEnabled);
-  const legacyEdgesForView = getPalaceLegacyGraphEdgesForView(graph, graphInferredLayerEnabled);
+  const edgesForGraphView = getPalaceCanonicalEdgesForView(graph);
+  const legacyEdgesForView = getPalaceLegacyGraphEdgesForView(graph);
   const kg = dataBundle?.kgStats;
   const overviewStats = dataBundle?.overviewStats ?? dataBundle?.overviewBundle?.stats;
   const graphMeta =
@@ -605,16 +566,9 @@ function buildPalaceContext() {
 
   const graphEdgeCount =
     typeof summary?.resolvedEdgeCount === 'number' ? summary.resolvedEdgeCount : edgesExplicit.length;
-  const inferredEdgeCount =
-    typeof graph?.summaryInferred?.resolvedEdgeCount === 'number'
-      ? graph.summaryInferred.resolvedEdgeCount
-      : Array.isArray(graph?.edgesInferred)
-        ? graph.edgesInferred.length
-        : 0;
-
   const gaPalace = buildGraphAnalytics(roomsData, {
     edgesResolved: edgesExplicit,
-    graphEdges: getPalaceLegacyGraphEdgesForView(graph, false),
+    graphEdges: getPalaceLegacyGraphEdgesForView(graph),
     graphSummary: summary ?? null,
     overviewStats: overviewStats ?? null,
   });
@@ -641,7 +595,6 @@ function buildPalaceContext() {
     graphStats: gs,
     edgesResolved: edgesForGraphView,
     edgesExplicit,
-    inferredEdgeCount,
     kgStats: kg,
     totalDrawers,
     wingCount,
@@ -682,39 +635,17 @@ function persistGraphRelFilters(enabledSet) {
 }
 
 function syncGraphRelationshipFiltersWithData() {
-  const legacy = getPalaceLegacyGraphEdgesForView(dataBundle?.graph, graphInferredLayerEnabled);
+  const legacy = getPalaceLegacyGraphEdgesForView(dataBundle?.graph);
   const available = collectRelationshipTypesFromEdges(legacy);
   const blob = loadGraphRelFiltersBlob();
   const saved = blob == null ? undefined : parseSavedGraphRelFilters(blob);
   graphRelEnabledTypes = normalizeVisibleRelationshipTypes(saved, available);
-  if (!graphInferredLayerEnabled) {
-    graphRelEnabledTypes.delete('taxonomy_adjacency');
-  }
   persistGraphRelFilters(graphRelEnabledTypes);
   sceneApi?.setRelationshipFilters(sceneRelationshipFilterArg(graphRelEnabledTypes, available));
 }
 
-function setGraphInferredLayer(enabled) {
-  graphInferredLayerEnabled = !!enabled;
-  persistInferredLayer(graphInferredLayerEnabled);
-  if (!dataBundle || dataBundle.error) return;
-  syncGraphRelationshipFiltersWithData();
-  sceneApi?.setData({
-    wingsData: dataBundle.wingsData,
-    roomsData: dataBundle.roomsData,
-    graphEdges: getPalaceLegacyGraphEdgesForView(dataBundle.graph, graphInferredLayerEnabled),
-  });
-  if (graphRoute.startSceneId && graphRoute.targetSceneId) recomputeGraphRoute();
-  updateGraphViewChrome();
-  updateMetrics();
-  renderInspector();
-  persistState();
-}
-
 function toggleRelationshipType(type) {
-  const available = collectRelationshipTypesFromEdges(
-    getPalaceLegacyGraphEdgesForView(dataBundle?.graph, graphInferredLayerEnabled),
-  );
+  const available = collectRelationshipTypesFromEdges(getPalaceLegacyGraphEdgesForView(dataBundle?.graph));
   if (!type || !available.includes(type)) return;
   if (graphRelEnabledTypes.has(type)) graphRelEnabledTypes.delete(type);
   else graphRelEnabledTypes.add(type);
@@ -743,15 +674,6 @@ function updateGraphViewChrome() {
   const ctx = buildPalaceContext();
   const avail = ctx.availableRelationshipTypes || [];
 
-  const inferredCb = $('toggle-inferred-graph');
-  if (inferredCb) {
-    inferredCb.checked = graphInferredLayerEnabled;
-    inferredCb.disabled = !ctx.inferredEdgeCount;
-    inferredCb.title = ctx.inferredEdgeCount
-      ? 'Merge heuristic same-wing adjacency (taxonomy name order). Not MCP/API data.'
-      : 'No inferred adjacency edges in this palace payload.';
-  }
-
   const chips = $('graph-rel-chips');
   if (chips) {
     if (!avail.length) {
@@ -761,7 +683,7 @@ function updateGraphViewChrome() {
         .map((t) => {
           const meta = getRelationshipTypeMeta(t);
           const on = graphRelEnabledTypes.has(t);
-          const swatch = t === 'tunnel' ? '#5b8cff' : t === 'taxonomy_adjacency' ? '#3dc9b8' : '#a78bfa';
+          const swatch = t === 'tunnel' ? '#5b8cff' : '#a78bfa';
           return `<button type="button" class="rel-chip ${on ? 'is-on' : ''}" data-rel-type="${escapeHtml(t)}" title="${escapeHtml(meta.description)}">
           <span class="rel-chip__swatch" style="background:${swatch}"></span>
           <span>${escapeHtml(meta.shortLabel)}</span>
@@ -776,16 +698,10 @@ function updateGraphViewChrome() {
     const narrowed = ctx.graphFilterNarrowed;
     const vis = ctx.visibleGraphSummary;
     const hint = buildGraphCompletenessHint(ctx.graphMeta, ctx.summary);
-    const explicitLine = `${formatNum(ctx.graphEdgeCount)} explicit MCP (tunnel)`;
-    const inferredBit =
-      graphInferredLayerEnabled && ctx.inferredEdgeCount
-        ? ` · + ${formatNum(ctx.inferredEdgeCount)} inferred`
-        : ctx.inferredEdgeCount
-          ? ` · ${formatNum(ctx.inferredEdgeCount)} inferred available (off)`
-          : '';
+    const explicitLine = `${formatNum(ctx.graphEdgeCount)} MCP tunnel edge(s)`;
     const primary = narrowed
-      ? `Visible: ${formatNum(vis.visibleEdgeCount)} (filtered) · base ${explicitLine}${inferredBit}`
-      : `${explicitLine}${inferredBit}`;
+      ? `Visible: ${formatNum(vis.visibleEdgeCount)} (filtered) · base ${explicitLine}`
+      : `${explicitLine}`;
     statusEl.innerHTML = `<span class="graph-status-pill__primary">${escapeHtml(primary)}</span>${
       hint
         ? `<span class="graph-status-pill__hint">${escapeHtml(hint.length > 240 ? `${hint.slice(0, 240)}…` : hint)}</span>`
@@ -799,7 +715,7 @@ function updateGraphViewChrome() {
       ? avail
           .map((t) => {
             const m = getRelationshipTypeMeta(t);
-            const swatch = t === 'tunnel' ? '#5b8cff' : t === 'taxonomy_adjacency' ? '#3dc9b8' : '#a78bfa';
+            const swatch = t === 'tunnel' ? '#5b8cff' : '#a78bfa';
             return `<div class="graph-legend-compact__row"><span class="legend-swatch" style="background:${swatch}"></span><span><strong>${escapeHtml(m.shortLabel)}</strong> — ${escapeHtml(m.description)}</span></div>`;
           })
           .join('')
@@ -904,7 +820,7 @@ function renderOverviewInspector(ctx) {
     appState.view === 'graph' && ctx.ga?.hasResolvableEdges
       ? ctx.graphFilterNarrowed
         ? `<div class="inspect-card inspect-card--hint" role="status"><strong>Graph filters active</strong><p class="inspect-muted inspect-muted--tight">Visible: ${formatNum(ctx.visibleGraphSummary.visibleEdgeCount)} edges (${formatRelationshipTypeCounts(ctx.visibleGraphSummary.visibleByType) || '—'}). Inspector “visible” rows match the scene. Footer and resolved totals above remain global.</p></div>`
-        : `<div class="inspect-card inspect-card--hint" role="status"><strong>Graph view</strong><p class="inspect-muted inspect-muted--tight">Brighter blue edges = cross-wing tunnels; softer teal = inferred same-wing adjacency. Narrow types in the left panel.</p></div>`
+        : `<div class="inspect-card inspect-card--hint" role="status"><strong>Graph view</strong><p class="inspect-muted inspect-muted--tight">Edges are MCP tunnel links (same room name in multiple wings). See <code>docs/MCP_CONNECTION_CAPABILITIES.md</code> — stock MemPalace has no API to save arbitrary room-to-room links.</p></div>`
       : '';
 
   return `
@@ -993,12 +909,10 @@ function renderWingInspector(ctx, wingName, _mode) {
     if (!ctx.graphFilterNarrowed || !ga.hasResolvableEdges) return '';
     const tf = wFull.byType.tunnel || 0;
     const tv = wVis.byType.tunnel || 0;
-    const af = wFull.byType.taxonomy_adjacency || 0;
-    const av = wVis.byType.taxonomy_adjacency || 0;
-    if (tv > av * 2 && tf > 0) return 'With current filters, this wing shows mostly cross-wing tunnel links.';
-    if (av > tv * 2 && af > 0) return 'With current filters, visible links here are mostly inferred same-wing adjacency.';
+    if (tv > 0 && tf > 0 && tv < tf * 0.5)
+      return 'With current filters, some cross-wing tunnel links in this wing are hidden.';
     if (wVis.crossWingTouches === 0 && tunnel.crossWingTouches > 0)
-      return 'Cross-wing tunnel links are hidden by filters; only same-wing structure may be visible.';
+      return 'Cross-wing tunnel links are hidden by filters.';
     return '';
   })();
 
@@ -2359,10 +2273,6 @@ function wirePanelCollapse() {
 function wireControls() {
   $('btn-refresh')?.addEventListener('click', () => loadData(true));
 
-  $('toggle-inferred-graph')?.addEventListener('change', (e) => {
-    setGraphInferredLayer(/** @type {HTMLInputElement} */ (e.target).checked);
-  });
-
   $('btn-reset-cam')?.addEventListener('click', () => sceneApi?.resetCamera());
   $('btn-center')?.addEventListener('click', () => {
     if (appState.selected?.id) sceneApi?.centerOnNodeId(appState.selected.id);
@@ -2675,7 +2585,7 @@ async function loadData(preserveContext) {
   sceneApi?.setData({
     wingsData: dataBundle.wingsData,
     roomsData: dataBundle.roomsData,
-    graphEdges: getPalaceLegacyGraphEdgesForView(dataBundle.graph, graphInferredLayerEnabled),
+    graphEdges: getPalaceLegacyGraphEdgesForView(dataBundle.graph),
   });
 
   updateMetrics();

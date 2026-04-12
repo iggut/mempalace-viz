@@ -733,7 +733,7 @@ export function buildOverviewModel(ctx, viewId) {
       ? `Focused on “${ctx.focusWing}”: rooms orbit the wing. Click another wing in “all rooms” layout or use search.`
       : 'Each cluster is a wing; rooms orbit their wing. Click a room to inspect and center.',
     graph:
-      'Force-directed graph. Default edges are explicit MCP tunnel links; optional inferred same-wing adjacency is off by default.',
+      'Force-directed graph. Edges are explicit MCP tunnel links from MemPalace tunnel discovery only.',
   };
 
   let graphBlurb = '';

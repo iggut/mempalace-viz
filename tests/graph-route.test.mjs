@@ -78,12 +78,11 @@ test('computeGraphRoute handles no_path', () => {
     availableRelTypes: ['taxonomy_adjacency', 'tunnel'],
     startRoomId: A,
     endRoomId: C,
-    inferredLayerEnabled: false,
   });
   assert.equal(r.ok, false);
   assert.equal(r.reason, 'no_path');
   assert.equal(r.routingBasis, 'explicit_mcp_only');
-  assert.ok(String(r.message || '').includes('explicit MCP tunnel'));
+  assert.ok(String(r.message || '').includes('MCP tunnel'));
 });
 
 test('computeGraphRoute includes routeMode and comparison for shortest', () => {
@@ -95,14 +94,13 @@ test('computeGraphRoute includes routeMode and comparison for shortest', () => {
     startRoomId: A,
     endRoomId: C,
     routeMode: 'shortest',
-    inferredLayerEnabled: true,
   });
   assert.equal(r.ok, true);
   assert.equal(r.routeMode, 'shortest');
   assert.equal(r.referenceShortestHops, r.hops);
   assert.equal(r.differsFromShortest, false);
   assert.ok(String(r.comparisonNote || '').includes('Fewest-hop'));
-  assert.equal(r.routingBasis, 'explicit_plus_inferred');
+  assert.equal(r.routingBasis, 'explicit_mcp_only');
   assert.equal(r.usesInferredSegments, true);
 });
 

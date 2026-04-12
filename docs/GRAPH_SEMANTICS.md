@@ -11,28 +11,27 @@ Each undirected edge in `edgesResolved` includes:
 
 | Field | Meaning |
 | --- | --- |
-| `edgeId` | Stable string; includes relationship suffix (e.g. `__tunnel`, `__taxonomy_adjacency`). |
+| `edgeId` | Stable string; includes relationship suffix (e.g. `__tunnel`). |
 | `sourceRoomId`, `targetRoomId` | Canonical `wingId/roomName` (room segment escaped). |
 | `sourceWingId`, `targetWingId` | Wing ids. |
 | `crossWing` | `true` if wings differ. |
-| `weight` | Layout weight; tunnels use log-scaled drawer co-occurrence when available; taxonomy adjacency uses a light fixed weight. |
+| `weight` | Layout weight; tunnels use log-scaled drawer co-occurrence when available. |
 | `relationshipType` | See below. |
 | `metadata` | Provenance and flags (`origin`, `inferred`, etc.). |
 
 ## Relationship types (real upstream / derivation)
 
-| `relationshipType` | Origin | Explicit vs inferred |
-| --- | --- | --- |
-| `tunnel` | `mempalace_find_tunnels` / Chroma cross-wing room names | **Explicit** |
-| `taxonomy_adjacency` | Per-wing consecutive pair in **sorted room name** order | **Inferred** (documented; not semantic similarity) |
+| `relationshipType` | Origin |
+| --- | --- |
+| `tunnel` | `mempalace_find_tunnels` — same room name in multiple wings (Chroma metadata) |
 
-No placeholder types are emitted.
+The viz **does not** emit `taxonomy_adjacency` or other inferred structural edges. `edgesInferred` is always empty from enriched routes (kept for schema compatibility).
 
 ## Summary block (`summary`)
 
 In addition to `resolvedEdgeCount`, `unresolvedEdgeCount`, `crossWingEdgeCount`, `intraWingEdgeCount`:
 
-- **`byType`**: counts per `relationshipType` (e.g. `{ "tunnel": 12, "taxonomy_adjacency": 40 }`).
+- **`byType`**: counts per `relationshipType` (e.g. `{ "tunnel": 12 }`).
 
 Unresolved edges refer only to **tunnel** endpoints that could not be matched to taxonomy.
 
@@ -42,7 +41,7 @@ Returned on graph-stats and overview:
 
 ```json
 {
-  "sources": ["mempalace_find_tunnels", "taxonomy_adjacency"],
+  "sources": ["mempalace_find_tunnels"],
   "truncatedSources": [
     {
       "source": "mempalace_find_tunnels",
@@ -65,10 +64,10 @@ With **stock MemPalace**, MCP returns only a **bare array**. The viz layer sets 
 
 Rollups include:
 
-- Existing totals and `topConnectedRooms` / `topCrossLinkedWings` (cross-wing uses tunnel edges only; taxonomy adjacency is same-wing).
+- Existing totals and `topConnectedRooms` / `topCrossLinkedWings` (cross-wing uses tunnel edges).
 - **`byRelationshipType`**: mirror of `summary.byType`.
 - **`bridgeRoomCount`**: rooms with ≥1 cross-wing incident edge.
-- **`strongestIntraWingByTaxonomy`**: wings ranked by count of `taxonomy_adjacency` edges.
+- **`strongestIntraWingByTaxonomy`**: empty when no inferred adjacency is loaded (viz uses tunnel edges only).
 
 ## Migration from tunnel-only model
 

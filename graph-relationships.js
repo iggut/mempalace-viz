@@ -22,13 +22,7 @@ export const RELATIONSHIP_TYPES = {
     label: 'Tunnel',
     shortLabel: 'Tunnel',
     description:
-      'Same room name appearing in multiple wings — a cross-wing structural link from tunnel discovery (not semantic similarity).',
-  },
-  taxonomy_adjacency: {
-    label: 'Taxonomy adjacency',
-    shortLabel: 'Adjacency',
-    description:
-      'Optional inferred layer: same-wing neighbor from sorted room names (heuristic; not MCP/API). Off by default — enable the graph toggle first.',
+      'Same room name appearing in multiple wings — a cross-wing structural link from MemPalace tunnel discovery (`mempalace_find_tunnels`).',
   },
   unknown: {
     label: 'Other',
@@ -75,9 +69,6 @@ export function getStyleForRelationshipType(type) {
   const t = type || 'tunnel';
   if (t === 'tunnel') {
     return { color: 0x5b8cff, opacity: 0.44 };
-  }
-  if (t === 'taxonomy_adjacency') {
-    return { color: 0x3dc9b8, opacity: 0.28 };
   }
   if (t === 'unknown') {
     return { color: 0x94a3b8, opacity: 0.32 };
@@ -240,24 +231,13 @@ export function describeRoomRelationshipMix(visibleByType, globalByType) {
   const gTot = Object.values(globalByType || {}).reduce((a, b) => a + b, 0);
   if (gTot === 0) return null;
   const tunnelV = visibleByType?.tunnel || 0;
-  const taxV = visibleByType?.taxonomy_adjacency || 0;
   const tunnelG = globalByType?.tunnel || 0;
-  const taxG = globalByType?.taxonomy_adjacency || 0;
 
   if (vTot === 0 && gTot > 0) {
     return 'No visible links with current filters; totals above are global.';
   }
-  if (taxV > tunnelV * 2 && taxG > 0) {
-    return 'Most of this room’s visible links are inferred same-wing adjacency.';
-  }
-  if (tunnelV > taxV * 2 && tunnelG > 0) {
-    return 'Most of this room’s visible links are cross-wing tunnel connections.';
-  }
-  if (tunnelV > 0 && taxV === 0 && taxG > 0) {
-    return 'Only tunnel links are visible; inferred adjacency is hidden by filters.';
-  }
-  if (taxV > 0 && tunnelV === 0 && tunnelG > 0) {
-    return 'Only inferred adjacency is visible; tunnel links are hidden by filters.';
+  if (tunnelV > 0 && tunnelG > 0 && tunnelV >= vTot * 0.85) {
+    return 'Visible links here are tunnel connections (MCP-backed).';
   }
   return null;
 }

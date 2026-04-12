@@ -15,7 +15,7 @@ This is a concise map of **where graph-related relationship data comes from** in
 | Source | Explicit / inferred | Notes |
 | --- | --- | --- |
 | **Tunnel edges** | Explicit (Chroma-backed) | `relationshipType: "tunnel"`, `metadata.origin: "mempalace_find_tunnels"`. |
-| **Taxonomy adjacency** | **Inferred** | Same wing, consecutive rooms when **sorted by room name** — structural, not topical. `relationshipType: "taxonomy_adjacency"`, `metadata.inferred: true`. |
+| **Taxonomy adjacency** | *(removed from viz)* | Was a client-side heuristic; the 3D graph now uses **tunnel edges only** from MCP. |
 
 ## Not used for room–room graph (yet)
 

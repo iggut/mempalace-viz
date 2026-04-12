@@ -70,14 +70,14 @@ Combines:
 
 | Field | Description |
 | --- | --- |
-| `edgesResolved` | Merged **tunnel** + **taxonomy adjacency** edges resolved to taxonomy. Each edge includes `relationshipType`, optional `metadata`, plus `edgeId`, `sourceRoomId`, `targetRoomId`, `sourceWingId`, `targetWingId`, `crossWing`, `weight`. |
+| `edgesResolved` | **Tunnel** edges from `mempalace_find_tunnels`, resolved to taxonomy. Each edge includes `relationshipType`, optional `metadata`, plus `edgeId`, `sourceRoomId`, `targetRoomId`, `sourceWingId`, `targetWingId`, `crossWing`, `weight`. (No client-inferred adjacency.) |
 | `edgesUnresolved` | Tunnel endpoints that could not be matched to taxonomy: `{ rawSource, rawTarget, reason, detail? }`. Typical `reason`: `missing_in_taxonomy`. |
 | `summary` | `{ resolvedEdgeCount, unresolvedEdgeCount, crossWingEdgeCount, intraWingEdgeCount, byType }` — `byType` maps `relationshipType` → count. |
 | `graphMeta` | `{ sources, truncatedSources, estimatedAvailable }` — see **`docs/GRAPH_SEMANTICS.md`**. |
 
 **Tunnel resolution:** From Chroma via `find_tunnels`: room names that appear in **multiple wings**. For each unordered wing pair `(wa, wb)` on that room, one edge with `relationshipType: "tunnel"`.
 
-**Intra-wing edges:** `relationshipType: "taxonomy_adjacency"` — consecutive rooms in **per-wing sorted-by-name** order (inferred, structural; not topical).
+`edgesInferred` may be present as an empty array for contract compatibility; the viz does not use inferred taxonomy adjacency.
 
 ### Legacy compatibility
 
