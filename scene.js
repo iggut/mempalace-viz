@@ -1,8 +1,8 @@
 /**
  * Three.js scene — wings / rooms / graph with focus, filter, and selection visuals.
  */
-import * as THREE from 'https://cdn.skypack.dev/three@0.160.0';
-import { OrbitControls } from 'https://cdn.skypack.dev/three@0.160.0/examples/jsm/controls/OrbitControls.js';
+import * as THREE from 'three';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
 const CONFIG = {
   wingColors: {

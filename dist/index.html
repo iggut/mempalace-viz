@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MemPalace 3D Visualization</title>
+    <script type="module" crossorigin src="/assets/index-C6VD8fxh.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-B_vCKeMJ.css">
+  </head>
+  <body>
+    <div class="app">
+      <header class="app-header">
+        <div class="brand">
+          <h1>MemPalace 3D Visualization</h1>
+          <p class="tagline">Spatial view of wings, rooms, tunnels, and knowledge structure</p>
+        </div>
+        <div class="header-actions">
+          <div id="conn-status" class="status-pill" data-state="loading">Connecting…</div>
+          <button type="button" id="btn-refresh" class="btn btn--ghost" title="Reload data from API">Refresh</button>
+        </div>
+      </header>
+
+      <div class="app-main">
+        <aside class="panel panel--left" id="panel-left">
+          <div class="panel-header">Explore</div>
+          <div class="panel-body">
+            <p id="onboard-hint" class="hint-row" hidden style="margin-bottom: 10px">
+              Tip: use <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> to switch views, <kbd>R</kbd> to reset the camera.
+            </p>
+            <input
+              type="search"
+              id="search-wings"
+              class="search-input"
+              placeholder="Search wings &amp; rooms (dims non-matches in scene)…"
+              autocomplete="off"
+            />
+            <div id="view-buttons" class="view-seg"></div>
+            <p id="view-helper-text" class="hint-row" style="margin-top: 10px"></p>
+
+            <div class="control-row" style="margin-top: 14px">
+              <label><input type="checkbox" id="toggle-rotate" checked /> Auto-rotate</label>
+            </div>
+            <div class="control-row">
+              <label><input type="checkbox" id="toggle-labels" checked /> Labels</label>
+            </div>
+            <div class="control-row" style="flex-wrap: wrap">
+              <span>Motion</span>
+              <input type="range" id="motion-range" min="0" max="2" step="0.1" value="1" style="max-width: 140px" />
+            </div>
+
+            <div class="legend-block">
+              <div class="legend-title">Wings &amp; scale</div>
+              <p class="hint-row" style="margin-bottom: 6px">Sphere size reflects drawer count within a view.</p>
+              <div id="legend-host"></div>
+            </div>
+
+            <div class="btn-row" style="margin-top: 14px">
+              <button type="button" id="btn-reset-cam" class="btn btn--ghost">Reset camera</button>
+              <button type="button" id="btn-center" class="btn btn--ghost" title="Frame selection, or hovered node">Center</button>
+            </div>
+          </div>
+        </aside>
+
+        <section class="canvas-column">
+          <div id="loading-overlay" class="overlay-state">
+            <div class="spinner"></div>
+            <p style="color: #94a3b8; font-size: 0.85rem">Loading palace data…</p>
+          </div>
+          <div id="canvas-container" class="canvas-container" role="application" aria-label="MemPalace three-dimensional view"></div>
+          <div id="hover-card" class="hover-card" aria-hidden="true"></div>
+        </section>
+
+        <aside class="panel panel--right" id="panel-right">
+          <div class="panel-header">Inspector</div>
+          <div class="panel-body">
+            <div class="inspector-toolbar">
+              <span id="inspect-mode-badge" class="inspect-mode-badge" data-mode="empty">Nothing selected</span>
+              <div class="inspector-toolbar__actions">
+                <button type="button" id="btn-pin" class="btn btn--ghost btn--sm" title="Pin inspector (ignore hover)">Pin</button>
+                <button type="button" id="btn-clear-sel" class="btn btn--ghost btn--sm" title="Clear selection">Clear</button>
+              </div>
+            </div>
+            <div id="breadcrumb" class="breadcrumb"></div>
+            <div id="inspect-body"></div>
+          </div>
+        </aside>
+      </div>
+
+      <footer class="app-footer">
+        <div class="footer-metrics-block">
+          <div class="metrics metrics--primary" aria-live="polite">
+            <span class="metric"><span class="metric__k">Drawers</span> <span id="metric-drawers" class="metric__v">—</span></span>
+            <span class="metric"><span class="metric__k">Wings</span> <span id="metric-wings" class="metric__v">—</span></span>
+            <span class="metric"><span class="metric__k">Rooms</span> <span id="metric-rooms" class="metric__v">—</span></span>
+            <span class="metric"><span class="metric__k">Tunnel nodes</span> <span id="metric-tunnels" class="metric__v">—</span></span>
+            <span class="metric"><span class="metric__k">Cross-wing</span> <span id="metric-cross" class="metric__v">—</span></span>
+            <span class="metric"><span class="metric__k">Knowledge graph</span> <span id="metric-kg" class="metric__v">—</span></span>
+            <span class="metric metric--context" id="metric-context-wrap" hidden
+              ><span class="metric__k">Focus</span> <span id="metric-context" class="metric__v"></span
+            ></span>
+          </div>
+          <p class="metric-footnote" id="metric-footnote"></p>
+        </div>
+        <div class="footer-actions">
+          <button type="button" id="btn-help" class="btn btn--ghost btn--sm" title="Shortcuts">Shortcuts</button>
+          <span class="hint-row" style="margin: 0">
+            <kbd>1</kbd>–<kbd>3</kbd> · <kbd>R</kbd> camera · <kbd>L</kbd> labels · <kbd>Space</kbd> rotate · <kbd>Esc</kbd> unpin/clear
+          </span>
+        </div>
+      </footer>
+    </div>
+
+    <div id="help-overlay" class="help-overlay" aria-hidden="true" role="presentation">
+      <div class="help-modal" role="dialog" aria-labelledby="help-title">
+        <h2 id="help-title" class="help-modal__title">Shortcuts &amp; interaction</h2>
+        <button type="button" id="help-close" class="help-modal__close" aria-label="Close">×</button>
+        <ul class="help-list">
+          <li><kbd>1</kbd> / <kbd>2</kbd> / <kbd>3</kbd> — Switch Wings / Rooms / Graph view</li>
+          <li><kbd>R</kbd> — Reset camera</li>
+          <li><kbd>L</kbd> — Toggle labels</li>
+          <li><kbd>Space</kbd> — Toggle auto-rotate</li>
+          <li><kbd>Esc</kbd> — Unpin inspector, or clear selection</li>
+          <li><strong>Click</strong> wing (Wings) — Enter that wing’s rooms</li>
+          <li><strong>Click</strong> room (Rooms) — Select &amp; center</li>
+          <li><strong>Click</strong> node (Graph) — Select &amp; pin</li>
+          <li><strong>Click</strong> empty canvas — Clear selection (unless pinned)</li>
+          <li><strong>Breadcrumb</strong> — Navigate: All wings → wing → refocus room</li>
+        </ul>
+      </div>
+    </div>
+
+  </body>
+</html>
