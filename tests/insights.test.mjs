@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  buildGraphAnalytics,
   countEdgesWithUnresolvedEndpoints,
   formatPct,
   ordinal,
@@ -24,6 +25,44 @@ test('countEdgesWithUnresolvedEndpoints counts bad endpoints', () => {
     { from: 'w/x', to: 'w/x' },
   ];
   assert.equal(countEdgesWithUnresolvedEndpoints(edges, rooms), 1);
+});
+
+test('countEdgesWithUnresolvedEndpoints prefers API unresolved count', () => {
+  const rooms = {};
+  const edges = [{ from: 'a', to: 'b' }];
+  assert.equal(countEdgesWithUnresolvedEndpoints(edges, rooms, 7), 7);
+});
+
+test('buildGraphAnalytics uses canonical edgesResolved without legacy resolution', () => {
+  const roomsData = {
+    w1: [{ name: 'a', drawers: 1, roomId: 'w1/a', wingId: 'w1' }],
+    w2: [{ name: 'b', drawers: 1, roomId: 'w2/b', wingId: 'w2' }],
+  };
+  const edgesResolved = [
+    {
+      sourceRoomId: 'w1/a',
+      targetRoomId: 'w2/b',
+      sourceWingId: 'w1',
+      targetWingId: 'w2',
+    },
+  ];
+  const ga = buildGraphAnalytics(roomsData, {
+    edgesResolved,
+    graphSummary: { resolvedEdgeCount: 1, crossWingEdgeCount: 1, intraWingEdgeCount: 0 },
+  });
+  assert.equal(ga.hasResolvableEdges, true);
+  assert.equal(ga.crossWingEdgeCount, 1);
+  assert.equal(ga.degreeByKey.get('w1/a'), 1);
+  assert.equal(ga.degreeByKey.get('w2/b'), 1);
+});
+
+test('buildGraphAnalytics legacy path when edgesResolved empty', () => {
+  const roomsData = {
+    w: [{ name: 'x', drawers: 1 }],
+  };
+  const graphEdges = [{ from: 'nope/a', to: 'nope/b', wing: 'w' }];
+  const ga = buildGraphAnalytics(roomsData, { graphEdges });
+  assert.equal(ga.hasResolvableEdges, false);
 });
 
 test('formatPct and ordinal', () => {

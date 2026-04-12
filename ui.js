@@ -75,8 +75,13 @@ function showToast(message, ms = 5200) {
 function graphViewInspectorNotice(ctx) {
   if (appState.view !== 'graph') return '';
   const gs = dataBundle?.graphStats;
+  const graph = dataBundle?.graph;
   const edges = dataBundle?.graphEdges?.length ?? 0;
-  const unresolvedApi = Array.isArray(gs?.edgesUnresolved) ? gs.edgesUnresolved.length : null;
+  const unresolvedApi = Array.isArray(graph?.edgesUnresolved)
+    ? graph.edgesUnresolved.length
+    : Array.isArray(gs?.edgesUnresolved)
+      ? gs.edgesUnresolved.length
+      : null;
   if (!edges) {
     return `<div class="inspect-card inspect-card--hint" role="status"><strong>Graph view</strong><p class="inspect-muted inspect-muted--tight">No tunnel edges were returned from graph-stats. Wings and rooms may still appear if taxonomy is loaded.</p></div>`;
   }
@@ -84,7 +89,11 @@ function graphViewInspectorNotice(ctx) {
     const unresolved =
       unresolvedApi != null
         ? unresolvedApi
-        : countEdgesWithUnresolvedEndpoints(dataBundle?.graphEdges, dataBundle?.roomsData);
+        : countEdgesWithUnresolvedEndpoints(
+            dataBundle?.graphEdges,
+            dataBundle?.roomsData,
+            graph?.edgesUnresolved?.length ?? null,
+          );
     return `<div class="inspect-card inspect-card--hint" role="status"><strong>Graph view</strong><p class="inspect-muted inspect-muted--tight">Loaded ${edges} tunnel edge${edges === 1 ? '' : 's'}, but endpoints could not be fully matched to taxonomy rooms${unresolved ? ` (${unresolved} edge${unresolved === 1 ? '' : 's'} unresolved).` : '.'} Layout may be sparse.</p></div>`;
   }
   return '';
@@ -123,8 +132,10 @@ function buildPalaceContext() {
   const roomsData = dataBundle?.roomsData || {};
   const graphEdges = dataBundle?.graphEdges || [];
   const gs = dataBundle?.graphStats;
+  const graph = dataBundle?.graph;
+  const edgesResolved = graph?.edgesResolved?.length ? graph.edgesResolved : gs?.edgesResolved || [];
   const kg = dataBundle?.kgStats;
-  const overviewStats = dataBundle?.overviewBundle?.stats;
+  const overviewStats = dataBundle?.overviewStats ?? dataBundle?.overviewBundle?.stats;
 
   const totalDrawers =
     typeof st?.total_drawers === 'number'
@@ -137,12 +148,18 @@ function buildPalaceContext() {
   const roomCount =
     typeof overviewStats?.totalRooms === 'number' ? overviewStats.totalRooms : countTotalRooms(roomsData);
   let tunnelNodeCount = 0;
-  if (gs?.summary?.resolvedEdgeCount != null) tunnelNodeCount = gs.summary.resolvedEdgeCount;
+  const summary = graph?.summary ?? gs?.summary;
+  if (summary?.resolvedEdgeCount != null) tunnelNodeCount = summary.resolvedEdgeCount;
   else if (gs?.tunnels && typeof gs.tunnels === 'object') tunnelNodeCount = Object.keys(gs.tunnels).length;
 
   const graphEdgeCount =
-    typeof gs?.summary?.resolvedEdgeCount === 'number' ? gs.summary.resolvedEdgeCount : graphEdges.length;
-  const ga = buildGraphAnalytics(graphEdges, roomsData);
+    typeof summary?.resolvedEdgeCount === 'number' ? summary.resolvedEdgeCount : graphEdges.length;
+  const ga = buildGraphAnalytics(roomsData, {
+    edgesResolved,
+    graphEdges,
+    graphSummary: summary ?? null,
+    overviewStats: overviewStats ?? null,
+  });
   const kgSummary = formatKgSummary(kg);
   const kgAvailable = !!(kg && typeof kg === 'object' && !kg.error);
 
@@ -152,6 +169,7 @@ function buildPalaceContext() {
     roomsData,
     graphEdges,
     graphStats: gs,
+    edgesResolved,
     kgStats: kg,
     totalDrawers,
     wingCount,
@@ -316,7 +334,7 @@ function renderWingInspector(ctx, wingName, _mode) {
     .filter(Boolean)
     .join(' ');
 
-  const tunnel = getWingTunnelSlice(wingName, graphEdges, roomsData);
+  const tunnel = getWingTunnelSlice(wingName, graphEdges, roomsData, ctx.edgesResolved);
   const externalBlock =
     tunnel.crossWingTouches > 0
       ? `
@@ -350,7 +368,7 @@ function renderWingInspector(ctx, wingName, _mode) {
 
   const byDegree = [...rooms]
     .map((r) => {
-      const key = `${wingName}/${r.name}`;
+      const key = r.roomId || makeRoomId(wingName, r.name);
       const deg = ga.degreeByKey.get(key) ?? 0;
       return { ...r, deg };
     })
@@ -598,6 +616,8 @@ function selectRoomFromInspector(wing, room) {
     type: 'room',
     name: room,
     wing,
+    wingId: wing,
+    roomId: rm?.roomId || makeRoomId(wing, room),
     drawers: rm?.drawers,
   };
   appState.pinned = false;
@@ -613,11 +633,16 @@ function selectRoomFromInspector(wing, room) {
 
 function selectionFromUserData(ud) {
   if (!ud || ud.type === 'center' || !ud.id) return null;
+  const wingId = ud.wingId ?? ud.wing;
+  const roomId =
+    ud.roomId ?? (ud.type === 'room' && wingId && ud.name != null ? makeRoomId(wingId, ud.name) : null);
   return {
     id: ud.id,
     type: ud.type,
     name: ud.name,
-    wing: ud.wing,
+    wing: wingId,
+    wingId,
+    roomId,
     drawers: ud.drawers,
   };
 }
@@ -742,16 +767,22 @@ function updateFooterContextLine(subject, ctx) {
 function updateMetrics() {
   const st = dataBundle?.status;
   const gs = dataBundle?.graphStats;
+  const graph = dataBundle?.graph;
+  const summary = graph?.summary ?? gs?.summary;
   const kg = dataBundle?.kgStats;
   const ctx = buildPalaceContext();
-  const { wingsData, roomsData, totalDrawers, ga } = ctx;
+  const { wingsData, roomsData, totalDrawers, ga, overviewStats } = ctx;
 
   $('metric-drawers').textContent = formatNum(totalDrawers ?? 0);
-  $('metric-wings').textContent = formatNum(Object.keys(wingsData).length);
-  $('metric-rooms').textContent = formatNum(countTotalRooms(roomsData));
+  $('metric-wings').textContent = formatNum(
+    typeof overviewStats?.totalWings === 'number' ? overviewStats.totalWings : Object.keys(wingsData).length,
+  );
+  $('metric-rooms').textContent = formatNum(
+    typeof overviewStats?.totalRooms === 'number' ? overviewStats.totalRooms : countTotalRooms(roomsData),
+  );
 
   let tunnels = 0;
-  if (typeof gs?.summary?.resolvedEdgeCount === 'number') tunnels = gs.summary.resolvedEdgeCount;
+  if (typeof summary?.resolvedEdgeCount === 'number') tunnels = summary.resolvedEdgeCount;
   else if (gs?.tunnels && typeof gs.tunnels === 'object') tunnels = Object.keys(gs.tunnels).length;
   $('metric-tunnels').textContent = tunnels ? formatNum(tunnels) : '—';
 
@@ -1544,7 +1575,11 @@ async function loadData(preserveContext) {
   }
 
   if (isDev() && dataBundle.graphEdges?.length) {
-    const u = countEdgesWithUnresolvedEndpoints(dataBundle.graphEdges, dataBundle.roomsData);
+    const u = countEdgesWithUnresolvedEndpoints(
+      dataBundle.graphEdges,
+      dataBundle.roomsData,
+      dataBundle.graph?.edgesUnresolved?.length ?? null,
+    );
     if (u) devWarn(`${u} tunnel edge(s) have unresolved endpoints vs taxonomy`);
   }
 

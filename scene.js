@@ -5,6 +5,19 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { makeRoomId } from './canonical.js';
 
+/** @param {Array<{ type: string, wing?: string, name?: string }>} nodeList @param {object} edge @param {'from'|'to'} end */
+function findRoomNodeForEdge(nodeList, edge, end) {
+  const ref = end === 'from' ? edge.sourceRoomId || edge.from : edge.targetRoomId || edge.to;
+  if (ref == null) return null;
+  const s = String(ref);
+  return nodeList.find((n) => {
+    if (n.type !== 'room') return false;
+    if (makeRoomId(n.wing, n.name) === s) return true;
+    if (!s.includes('/') && n.name === s) return true;
+    return `${n.wing}/${n.name}` === s;
+  });
+}
+
 const CONFIG = {
   wingColors: {
     projects: '#8b9cf8',
@@ -247,6 +260,7 @@ export function createPalaceScene(container, options = {}) {
     mesh.userData = {
       id,
       name: wingName,
+      wingId: wingName,
       type: 'wing',
       drawers: wingsData[wingName],
       label: wingName,
@@ -289,12 +303,16 @@ export function createPalaceScene(container, options = {}) {
 
     const mesh = new THREE.Mesh(geometry, material);
     mesh.position.set(x, y, z);
+    const row = (roomsData[wing] || []).find((r) => r.name === roomName);
+    const roomId = row?.roomId || makeRoomId(wing, roomName);
     mesh.userData = {
       id,
       name: roomName,
       type: 'room',
       wing,
-      drawers: (roomsData[wing] || []).find((r) => r.name === roomName)?.drawers,
+      wingId: wing,
+      roomId,
+      drawers: row?.drawers,
       label: roomName,
       _baseY: y,
     };
@@ -528,18 +546,8 @@ export function createPalaceScene(container, options = {}) {
       }
 
       edges.forEach((edge) => {
-        const fromId = edge.sourceRoomId || edge.from;
-        const toId = edge.targetRoomId || edge.to;
-        const from = nodeList.find(
-          (n) =>
-            n.type === 'room' &&
-            (makeRoomId(n.wing, n.name) === fromId || n.name === edge.from || `${n.wing}/${n.name}` === edge.from),
-        );
-        const to = nodeList.find(
-          (n) =>
-            n.type === 'room' &&
-            (makeRoomId(n.wing, n.name) === toId || n.name === edge.to || `${n.wing}/${n.name}` === edge.to),
-        );
+        const from = findRoomNodeForEdge(nodeList, edge, 'from');
+        const to = findRoomNodeForEdge(nodeList, edge, 'to');
         if (from && to) {
           const dx = to.x - from.x;
           const dy = to.y - from.y;
@@ -627,18 +635,8 @@ export function createPalaceScene(container, options = {}) {
     });
 
     graphEdges.forEach((edge) => {
-      const fromId = edge.sourceRoomId || edge.from;
-      const toId = edge.targetRoomId || edge.to;
-      const fromNode = nodeList.find(
-        (n) =>
-          n.type === 'room' &&
-          (makeRoomId(n.wing, n.name) === fromId || n.name === edge.from || `${n.wing}/${n.name}` === edge.from),
-      );
-      const toNode = nodeList.find(
-        (n) =>
-          n.type === 'room' &&
-          (makeRoomId(n.wing, n.name) === toId || n.name === edge.to || `${n.wing}/${n.name}` === edge.to),
-      );
+      const fromNode = findRoomNodeForEdge(nodeList, edge, 'from');
+      const toNode = findRoomNodeForEdge(nodeList, edge, 'to');
       if (fromNode && toNode) {
         const fid = fromNode.type === 'wing' ? `wing:${fromNode.name}` : `room:${fromNode.wing}:${fromNode.name}`;
         const tid = toNode.type === 'wing' ? `wing:${toNode.name}` : `room:${toNode.wing}:${toNode.name}`;

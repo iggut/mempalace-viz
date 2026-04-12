@@ -1,6 +1,8 @@
 /**
  * Derived analytics for MemPalace viz — rankings, graph summaries, insight strings.
  * Pure functions; deterministic given the same inputs.
+ *
+ * Hot path: canonical `edgesResolved` + `roomId` / `wingId` (see docs/frontend-heuristics.md).
  */
 
 import { makeRoomId, parseRoomId } from './canonical.js';
@@ -8,6 +10,7 @@ import { makeRoomId, parseRoomId } from './canonical.js';
 /** @typedef {{ wing: string, room: string, key: string }} ResolvedRoom */
 
 /**
+ * Legacy endpoint resolution when graph endpoints are ambiguous strings (pre-canonical payloads).
  * @param {string|null|undefined} ref
  * @param {Record<string, Array<{ name: string, drawers?: number }>>} roomsData
  * @param {string|null} [hintWing]
@@ -57,11 +60,12 @@ export function resolveTunnelEndpoint(ref, roomsData, hintWing = null) {
 }
 
 /**
- * Count graph edges where at least one endpoint does not resolve to taxonomy (for diagnostics).
  * @param {Array<{ from: string, to: string, wing?: string }>} graphEdges
  * @param {Record<string, unknown>} roomsData
+ * @param {number|null} [apiUnresolvedCount] when set, prefer API count
  */
-export function countEdgesWithUnresolvedEndpoints(graphEdges, roomsData) {
+export function countEdgesWithUnresolvedEndpoints(graphEdges, roomsData, apiUnresolvedCount = null) {
+  if (apiUnresolvedCount != null && typeof apiUnresolvedCount === 'number') return apiUnresolvedCount;
   const edges = Array.isArray(graphEdges) ? graphEdges : [];
   const roomData = roomsData && typeof roomsData === 'object' ? roomsData : {};
   let n = 0;
@@ -74,14 +78,151 @@ export function countEdgesWithUnresolvedEndpoints(graphEdges, roomsData) {
 }
 
 /**
+ * @param {Record<string, unknown>} roomsData
+ * @param {Array<{ sourceRoomId: string, targetRoomId: string, sourceWingId: string, targetWingId: string }>} edgesResolved
+ * @param {{ crossWingEdgeCount?: number, intraWingEdgeCount?: number, resolvedEdgeCount?: number }|null} graphSummary
+ * @param {object|null} overviewStats
+ */
+function buildGraphAnalyticsCanonical(roomsData, edgesResolved, graphSummary, overviewStats) {
+  const roomData = roomsData && typeof roomsData === 'object' ? roomsData : {};
+  const edges = Array.isArray(edgesResolved) ? edgesResolved : [];
+
+  const pairKeys = new Set();
+  const degreeByKey = new Map();
+  const crossByKey = new Map();
+  const intraByKey = new Map();
+  const neighborsByKey = new Map();
+
+  function addNeighbor(a, b) {
+    if (!neighborsByKey.has(a)) neighborsByKey.set(a, new Set());
+    neighborsByKey.get(a).add(b);
+  }
+
+  function bump(map, key, n = 1) {
+    map.set(key, (map.get(key) || 0) + n);
+  }
+
+  let crossWingEdgeCount = 0;
+  let intraWingEdgeCount = 0;
+
+  for (const e of edges) {
+    const a = e.sourceRoomId;
+    const b = e.targetRoomId;
+    if (!a || !b) continue;
+    if (a === b) continue;
+
+    const p = a < b ? `${a}||${b}` : `${b}||${a}`;
+    if (pairKeys.has(p)) continue;
+    pairKeys.add(p);
+
+    bump(degreeByKey, a);
+    bump(degreeByKey, b);
+
+    const cross = e.sourceWingId !== e.targetWingId;
+    if (cross) {
+      crossWingEdgeCount += 1;
+      bump(crossByKey, a);
+      bump(crossByKey, b);
+    } else {
+      intraWingEdgeCount += 1;
+      bump(intraByKey, a);
+      bump(intraByKey, b);
+    }
+
+    addNeighbor(a, b);
+    addNeighbor(b, a);
+  }
+
+  const endpointsSeen = new Set([...degreeByKey.keys()]);
+
+  const roomKeysAll = new Set();
+  for (const [w, rooms] of Object.entries(roomData)) {
+    if (!Array.isArray(rooms)) continue;
+    for (const r of rooms) {
+      roomKeysAll.add(r.roomId || makeRoomId(w, r.name));
+    }
+  }
+
+  const noTunnelRooms = [];
+  for (const key of roomKeysAll) {
+    if (!endpointsSeen.has(key)) noTunnelRooms.push(key);
+  }
+
+  let totalResolvedEdges = crossWingEdgeCount + intraWingEdgeCount;
+  if (graphSummary && typeof graphSummary.resolvedEdgeCount === 'number') {
+    totalResolvedEdges = graphSummary.resolvedEdgeCount;
+  }
+
+  const crossFraction =
+    totalResolvedEdges > 0 ? crossWingEdgeCount / totalResolvedEdges : null;
+
+  const byDegree = [...degreeByKey.entries()].sort((x, y) => y[1] - x[1]);
+
+  let topConnectedRooms = byDegree.slice(0, 8).map(([key, deg]) => {
+    const pr = parseRoomId(key);
+    return {
+      wing: pr?.wingId ?? key.split('/')[0],
+      room: pr?.roomName ?? key.slice(key.indexOf('/') + 1),
+      key,
+      degree: deg,
+    };
+  });
+
+  if (overviewStats?.topConnectedRooms?.length) {
+    topConnectedRooms = overviewStats.topConnectedRooms.slice(0, 8).map((x) => ({
+      wing: x.wingId,
+      room: x.name,
+      key: x.roomId,
+      degree: x.degree,
+    }));
+  }
+
+  const wingExternalTally = new Map();
+  for (const e of edges) {
+    if (e.sourceWingId === e.targetWingId) continue;
+    bump(wingExternalTally, e.sourceWingId);
+    bump(wingExternalTally, e.targetWingId);
+  }
+  const topCrossLinkedWings = [...wingExternalTally.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8)
+    .map(([wing, count]) => ({ wing, crossEdges: count }));
+
+  const medianDegree = medianOfMap(degreeByKey);
+
+  const crossFromSummary =
+    graphSummary && typeof graphSummary.crossWingEdgeCount === 'number' ? graphSummary.crossWingEdgeCount : null;
+  const intraFromSummary =
+    graphSummary && typeof graphSummary.intraWingEdgeCount === 'number' ? graphSummary.intraWingEdgeCount : null;
+
+  return {
+    edgeCount: edges.length,
+    resolvedEdgeCount: totalResolvedEdges,
+    crossWingEdgeCount: crossFromSummary ?? crossWingEdgeCount,
+    intraWingEdgeCount: intraFromSummary ?? intraWingEdgeCount,
+    crossFraction,
+    degreeByKey,
+    crossByKey,
+    intraByKey,
+    neighborsByKey,
+    topConnectedRooms,
+    topCrossLinkedWings,
+    roomsWithNoTunnels:
+      typeof overviewStats?.roomsWithNoLinks === 'number' ? overviewStats.roomsWithNoLinks : noTunnelRooms.length,
+    noTunnelRoomKeys: noTunnelRooms.slice(0, 50),
+    medianRoomDegree: medianDegree,
+    hasResolvableEdges: totalResolvedEdges > 0,
+  };
+}
+
+/**
  * @param {Array<{ from: string, to: string, wing?: string }>} graphEdges
  * @param {Record<string, unknown>} roomsData
  */
-export function buildGraphAnalytics(graphEdges, roomsData) {
+function buildGraphAnalyticsLegacy(graphEdges, roomsData, graphSummary, overviewStats) {
   const edges = Array.isArray(graphEdges) ? graphEdges : [];
   const roomData = roomsData && typeof roomsData === 'object' ? roomsData : {};
 
-  /** undirected unique pairs + per-endpoint stats */
   const pairKeys = new Set();
   const degreeByKey = new Map();
   const crossByKey = new Map();
@@ -126,8 +267,6 @@ export function buildGraphAnalytics(graphEdges, roomsData) {
     addNeighbor(b, a);
   }
 
-  const endpointsSeen = new Set([...degreeByKey.keys()]);
-
   const roomKeysAll = new Set();
   for (const [w, rooms] of Object.entries(roomData)) {
     if (!Array.isArray(rooms)) continue;
@@ -138,7 +277,7 @@ export function buildGraphAnalytics(graphEdges, roomsData) {
 
   const noTunnelRooms = [];
   for (const key of roomKeysAll) {
-    if (!endpointsSeen.has(key)) noTunnelRooms.push(key);
+    if (!degreeByKey.has(key)) noTunnelRooms.push(key);
   }
 
   let crossWingEdgeCount = 0;
@@ -156,7 +295,7 @@ export function buildGraphAnalytics(graphEdges, roomsData) {
     totalResolvedEdges > 0 ? crossWingEdgeCount / totalResolvedEdges : null;
 
   const byDegree = [...degreeByKey.entries()].sort((x, y) => y[1] - x[1]);
-  const topConnectedRooms = byDegree.slice(0, 8).map(([key, deg]) => {
+  let topConnectedRooms = byDegree.slice(0, 8).map(([key, deg]) => {
     const pr = parseRoomId(key);
     return {
       wing: pr?.wingId ?? key.split('/')[0],
@@ -165,6 +304,15 @@ export function buildGraphAnalytics(graphEdges, roomsData) {
       degree: deg,
     };
   });
+
+  if (overviewStats?.topConnectedRooms?.length) {
+    topConnectedRooms = overviewStats.topConnectedRooms.slice(0, 8).map((x) => ({
+      wing: x.wingId,
+      room: x.name,
+      key: x.roomId,
+      degree: x.degree,
+    }));
+  }
 
   const wingExternalTally = new Map();
   for (const e of edges) {
@@ -181,11 +329,16 @@ export function buildGraphAnalytics(graphEdges, roomsData) {
 
   const medianDegree = medianOfMap(degreeByKey);
 
+  const crossFromSummary =
+    graphSummary && typeof graphSummary.crossWingEdgeCount === 'number' ? graphSummary.crossWingEdgeCount : null;
+  const intraFromSummary =
+    graphSummary && typeof graphSummary.intraWingEdgeCount === 'number' ? graphSummary.intraWingEdgeCount : null;
+
   return {
     edgeCount: edges.length,
     resolvedEdgeCount: totalResolvedEdges,
-    crossWingEdgeCount,
-    intraWingEdgeCount,
+    crossWingEdgeCount: crossFromSummary ?? crossWingEdgeCount,
+    intraWingEdgeCount: intraFromSummary ?? intraWingEdgeCount,
     crossFraction,
     degreeByKey,
     crossByKey,
@@ -193,11 +346,28 @@ export function buildGraphAnalytics(graphEdges, roomsData) {
     neighborsByKey,
     topConnectedRooms,
     topCrossLinkedWings,
-    roomsWithNoTunnels: noTunnelRooms.length,
+    roomsWithNoTunnels:
+      typeof overviewStats?.roomsWithNoLinks === 'number' ? overviewStats.roomsWithNoLinks : noTunnelRooms.length,
     noTunnelRoomKeys: noTunnelRooms.slice(0, 50),
     medianRoomDegree: medianDegree,
     hasResolvableEdges: totalResolvedEdges > 0,
   };
+}
+
+/**
+ * @param {Record<string, unknown>} roomsData
+ * @param {object} [ctx]
+ * @param {Array} [ctx.edgesResolved]
+ * @param {Array} [ctx.graphEdges] legacy `{ from, to, wing }` shapes
+ * @param {object|null} [ctx.graphSummary] graph-stats `summary`
+ * @param {object|null} [ctx.overviewStats] `/api/overview` stats
+ */
+export function buildGraphAnalytics(roomsData, ctx = {}) {
+  const { edgesResolved, graphEdges, graphSummary = null, overviewStats = null } = ctx;
+  if (edgesResolved?.length) {
+    return buildGraphAnalyticsCanonical(roomsData, edgesResolved, graphSummary, overviewStats);
+  }
+  return buildGraphAnalyticsLegacy(graphEdges || [], roomsData, graphSummary, overviewStats);
 }
 
 function medianOfMap(map) {
@@ -208,7 +378,7 @@ function medianOfMap(map) {
 }
 
 /**
- * @param {string} roomKey `wing/room`
+ * @param {string} roomKey canonical `roomId`
  * @param {ReturnType<typeof buildGraphAnalytics>} ga
  */
 export function getRoomGraphSlice(roomKey, ga) {
@@ -253,24 +423,28 @@ export function getRoomGraphSlice(roomKey, ga) {
 }
 
 /**
- * @param {string} wing
- * @param {Array<{ from: string, to: string, wing?: string }>} graphEdges
+ * @param {string} wingId
+ * @param {Array<{ from: string, to: string, wing?: string }>} graphEdges legacy
  * @param {Record<string, unknown>} roomsData
+ * @param {Array|null} [edgesResolved] canonical edges when available
  */
-export function getWingTunnelSlice(wing, graphEdges, roomsData) {
+export function getWingTunnelSlice(wingId, graphEdges, roomsData, edgesResolved = null) {
+  if (edgesResolved?.length) {
+    return getWingTunnelSliceCanonical(wingId, edgesResolved);
+  }
   const edges = Array.isArray(graphEdges) ? graphEdges : [];
   const externalWings = new Map();
   let touchCount = 0;
 
   for (const e of edges) {
-    const fromR = resolveTunnelEndpoint(e.from, roomsData, wing);
+    const fromR = resolveTunnelEndpoint(e.from, roomsData, wingId);
     const toR = resolveTunnelEndpoint(e.to, roomsData, e.wing || null);
     if (!fromR || !toR) continue;
     if (fromR.wing === toR.wing) continue;
-    if (fromR.wing !== wing && toR.wing !== wing) continue;
+    if (fromR.wing !== wingId && toR.wing !== wingId) continue;
 
     touchCount += 1;
-    const other = fromR.wing === wing ? toR : fromR;
+    const other = fromR.wing === wingId ? toR : fromR;
     externalWings.set(other.wing, (externalWings.get(other.wing) || 0) + 1);
   }
 
@@ -281,14 +455,65 @@ export function getWingTunnelSlice(wing, graphEdges, roomsData) {
 
   const roomsInWing = new Map();
   for (const e of edges) {
-    const fromR = resolveTunnelEndpoint(e.from, roomsData, wing);
+    const fromR = resolveTunnelEndpoint(e.from, roomsData, wingId);
     const toR = resolveTunnelEndpoint(e.to, roomsData, e.wing || null);
     if (!fromR || !toR) continue;
-    if (fromR.wing === wing && toR.wing !== wing) {
+    if (fromR.wing === wingId && toR.wing !== wingId) {
       roomsInWing.set(fromR.key, (roomsInWing.get(fromR.key) || 0) + 1);
     }
-    if (toR.wing === wing && fromR.wing !== wing) {
+    if (toR.wing === wingId && fromR.wing !== wingId) {
       roomsInWing.set(toR.key, (roomsInWing.get(toR.key) || 0) + 1);
+    }
+  }
+  const topRoomsInternal = [...roomsInWing.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([key, n]) => {
+      const pr = parseRoomId(key);
+      return {
+        wing: pr?.wingId ?? key.split('/')[0],
+        room: pr?.roomName ?? key.slice(key.indexOf('/') + 1),
+        key,
+        crossEdges: n,
+      };
+    });
+
+  return {
+    crossWingTouches: touchCount,
+    topExternalWings: topExternal,
+    topRoomsByCrossWing: topRoomsInternal,
+  };
+}
+
+/**
+ * @param {string} wingId
+ * @param {Array<{ sourceRoomId: string, targetRoomId: string, sourceWingId: string, targetWingId: string }>} edgesResolved
+ */
+function getWingTunnelSliceCanonical(wingId, edgesResolved) {
+  const externalWings = new Map();
+  let touchCount = 0;
+
+  for (const e of edgesResolved) {
+    if (e.sourceWingId === e.targetWingId) continue;
+    if (e.sourceWingId !== wingId && e.targetWingId !== wingId) continue;
+    touchCount += 1;
+    const other = e.sourceWingId === wingId ? e.targetWingId : e.sourceWingId;
+    externalWings.set(other, (externalWings.get(other) || 0) + 1);
+  }
+
+  const topExternal = [...externalWings.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 6)
+    .map(([w, n]) => ({ wing: w, edges: n }));
+
+  const roomsInWing = new Map();
+  for (const e of edgesResolved) {
+    if (e.sourceWingId === e.targetWingId) continue;
+    if (e.sourceWingId === wingId && e.targetWingId !== wingId) {
+      roomsInWing.set(e.sourceRoomId, (roomsInWing.get(e.sourceRoomId) || 0) + 1);
+    }
+    if (e.targetWingId === wingId && e.sourceWingId !== wingId) {
+      roomsInWing.set(e.targetRoomId, (roomsInWing.get(e.targetRoomId) || 0) + 1);
     }
   }
   const topRoomsInternal = [...roomsInWing.entries()]

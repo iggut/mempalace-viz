@@ -52,6 +52,47 @@ export function parseRoomId(roomId) {
   };
 }
 
+/**
+ * Scene mesh registry id for a room (visual layer; uses raw wing + room name from taxonomy).
+ * @param {string} wingId
+ * @param {string} roomName
+ */
+export function sceneRoomNodeId(wingId, roomName) {
+  return `room:${canonicalWingId(wingId)}:${roomName}`;
+}
+
+/**
+ * @param {string} roomId canonical `wingId/roomName`
+ * @returns {string|null} scene node id `room:wing:roomName`
+ */
+export function sceneRoomNodeIdFromRoomId(roomId) {
+  const p = parseRoomId(roomId);
+  if (!p) return null;
+  return sceneRoomNodeId(p.wingId, p.roomName);
+}
+
+/** @param {string} wingId */
+export function sceneWingNodeId(wingId) {
+  return `wing:${canonicalWingId(wingId)}`;
+}
+
+/**
+ * All canonical roomIds from enriched taxonomy rows.
+ * @param {Record<string, Array<{ name: string, roomId?: string, wingId?: string }>>} roomsData
+ * @returns {Set<string>}
+ */
+export function collectRoomIdsFromRoomsData(roomsData) {
+  const s = new Set();
+  for (const [w, rooms] of Object.entries(roomsData || {})) {
+    if (!Array.isArray(rooms)) continue;
+    for (const r of rooms) {
+      const id = r.roomId || makeRoomId(r.wingId || w, r.name);
+      s.add(id);
+    }
+  }
+  return s;
+}
+
 /** Same rules as normalizeWingsPayload in api.js — shared for server + client */
 export function normalizeWingsPayload(raw) {
   if (!raw || typeof raw !== 'object') return {};

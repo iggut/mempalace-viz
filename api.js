@@ -55,6 +55,81 @@ export function roomExists(roomsData, wing, room) {
 }
 
 /**
+ * Look up a room row by canonical roomId across wings.
+ * @param {Record<string, Array<{ name: string, roomId?: string, wingId?: string }>>} roomsData
+ * @param {string} roomId
+ */
+export function findRoomRowByRoomId(roomsData, roomId) {
+  if (!roomId || !roomsData) return null;
+  for (const rooms of Object.values(roomsData)) {
+    if (!Array.isArray(rooms)) continue;
+    const hit = rooms.find((r) => r.roomId === roomId);
+    if (hit) return hit;
+  }
+  return null;
+}
+
+/**
+ * Normalize parallel API responses into one stable frontend bundle.
+ * Canonical fields live under `graph.*` and `overviewStats`; `graphEdges` stays as the
+ * legacy-shaped list used by older call sites (derived from `edgesResolved` when present).
+ *
+ * @param {object} parts
+ * @returns {object}
+ */
+export function normalizePalaceBundle(parts) {
+  const { status, wingsRaw, taxonomyRaw, graphStats, kgResult, overviewBundle } = parts;
+
+  const wingsData = normalizeWingsPayload(wingsRaw);
+  const { taxonomy, roomsData, rooms, wings } = parseTaxonomyCanonical(taxonomyRaw);
+
+  const edgesResolved = Array.isArray(graphStats?.edgesResolved) ? graphStats.edgesResolved : [];
+  const edgesUnresolved = Array.isArray(graphStats?.edgesUnresolved) ? graphStats.edgesUnresolved : [];
+  const summary = graphStats?.summary && typeof graphStats.summary === 'object' ? graphStats.summary : null;
+
+  /** @type {Array<{ from: string, to: string, wing?: string, sourceRoomId?: string, targetRoomId?: string }>} */
+  let graphEdges = [];
+  if (edgesResolved.length) {
+    graphEdges = toLegacyGraphEdges(edgesResolved);
+  } else if (graphStats?.legacyGraphEdges?.length) {
+    graphEdges = graphStats.legacyGraphEdges;
+  } else if (graphStats?.tunnels && typeof graphStats.tunnels === 'object') {
+    graphEdges = Object.entries(graphStats.tunnels).flatMap(([room, connections]) =>
+      Object.entries(connections || {}).map(([connectedRoom, wing]) => ({
+        from: room,
+        to: connectedRoom,
+        wing,
+      })),
+    );
+  }
+
+  const kgStats = kgResult && !kgResult.error ? kgResult : null;
+
+  const overviewStats =
+    overviewBundle?.stats && typeof overviewBundle.stats === 'object' ? overviewBundle.stats : null;
+
+  return {
+    status,
+    wingsData,
+    taxonomy,
+    roomsData,
+    rooms,
+    wings,
+    graphStats,
+    graph: {
+      edgesResolved,
+      edgesUnresolved,
+      summary,
+    },
+    graphEdges,
+    overviewBundle,
+    overviewStats,
+    kgStats,
+    error: null,
+  };
+}
+
+/**
  * Load all viz endpoints in parallel. kg-stats is optional; overview is optional.
  * @returns {Promise<object>}
  */
@@ -71,49 +146,21 @@ export async function loadPalaceData() {
       fetchJson(`${prefix}/overview`).catch(() => null),
     ]);
 
-    const wingsData = normalizeWingsPayload(wingsRaw);
-    const { taxonomy, roomsData, rooms, wings } = parseTaxonomyCanonical(taxonomyRaw);
-
-    let graphEdges = [];
-    if (graphStats?.edgesResolved?.length) {
-      graphEdges = toLegacyGraphEdges(graphStats.edgesResolved);
-    } else if (graphStats?.legacyGraphEdges?.length) {
-      graphEdges = graphStats.legacyGraphEdges;
-    } else if (graphStats?.tunnels && typeof graphStats.tunnels === 'object') {
-      graphEdges = Object.entries(graphStats.tunnels).flatMap(([room, connections]) =>
-        Object.entries(connections || {}).map(([connectedRoom, wing]) => ({
-          from: room,
-          to: connectedRoom,
-          wing,
-        })),
-      );
-    }
-
-    return {
-      status,
-      wingsData,
-      roomsData,
-      taxonomy,
-      rooms,
-      wings,
-      graphStats,
-      kgStats: kgResult && !kgResult.error ? kgResult : null,
-      graphEdges,
-      overviewBundle,
-      error: null,
-    };
+    return normalizePalaceBundle({ status, wingsRaw, taxonomyRaw, graphStats, kgResult, overviewBundle });
   } catch (error) {
     return {
       status: null,
       wingsData: {},
-      roomsData: {},
       taxonomy: {},
+      roomsData: {},
       rooms: [],
       wings: [],
       graphStats: null,
-      kgStats: null,
+      graph: { edgesResolved: [], edgesUnresolved: [], summary: null },
       graphEdges: [],
       overviewBundle: null,
+      overviewStats: null,
+      kgStats: null,
       error,
     };
   }

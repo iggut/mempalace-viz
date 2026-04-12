@@ -3,9 +3,11 @@ import test from 'node:test';
 import {
   buildCanonicalEdgesFromTunnels,
   buildOverviewSummary,
+  collectRoomIdsFromRoomsData,
   makeRoomId,
   parseRoomId,
   parseTaxonomyCanonical,
+  sceneRoomNodeIdFromRoomId,
   toLegacyGraphEdges,
 } from '../canonical.js';
 
@@ -15,6 +17,16 @@ test('makeRoomId and parseRoomId round-trip with slash in room name', () => {
   const p = parseRoomId(id);
   assert.equal(p.wingId, 'w');
   assert.equal(p.roomName, 'a/b');
+});
+
+test('sceneRoomNodeIdFromRoomId maps canonical id to scene registry id', () => {
+  assert.equal(sceneRoomNodeIdFromRoomId('wing1/roomX'), 'room:wing1:roomX');
+});
+
+test('collectRoomIdsFromRoomsData gathers roomId fields', () => {
+  const roomsData = { a: [{ name: 'r', roomId: 'a/r', wingId: 'a' }] };
+  const s = collectRoomIdsFromRoomsData(roomsData);
+  assert.equal(s.has('a/r'), true);
 });
 
 test('buildCanonicalEdgesFromTunnels emits resolved cross-wing edges', () => {
