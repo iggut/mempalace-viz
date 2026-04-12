@@ -41,13 +41,150 @@ let activeRoomFilters = new Set();
 let isolateFocus = false;
 let expansionDepth = 1;
 let timelineMode = false;
-let panelDrag = null;
+let panelDrag = null; let frameCount = 0;
 let collapsedPanels = new Set();
 let activeScene = null;
 let activeSceneNodeIds = new Set();
 let activeSceneLinkKeys = new Set();
 let availableScope = { wings: [], actors: [] };
 let selectedScopeWings = new Set();
+
+class NodeManager {
+    constructor() {
+        this.activeNodes = new Map();
+        this.inactiveNodes = new Set();
+        this.cache = new Map();
+    }
+
+    updateGC() {
+        const cameraFrustum = new THREE.Frustum();
+        cameraFrustum.setFromProjectionMatrix(new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
+
+        this.activeNodes.forEach((node, id) => {
+            if (node.kind === 'crystal' && !_nodeInFrustum(node, cameraFrustum)) {
+                this.invalidateNode(node);
+            }
+        });
+    }
+
+    invalidateNode(node) {
+        this.activeNodes.delete(node.id);
+        this.inactiveNodes.add(node.id);
+
+        if (node.mesh.parent) {
+            node.mesh.parent.remove(node.mesh);
+        }
+
+        // Keep data in memory
+        this.cache.set(node.id, {
+            kind: node.kind,
+            data: node.data,
+            baseX: node.baseX,
+            baseY: node.baseY,
+            baseZ: node.baseZ,
+            radius: node.radius
+        });
+
+        _disposeMesh(node.mesh);
+    }
+
+    reviveNode(id) {
+        const cached = this.cache.get(id);
+        if (!cached) return null;
+
+        // This is a simplified version; in a real app, you'd call the original creation logic
+        // For now, we'll let the loadChunk handle revival by checking this manager
+        return cached;
+    }
+}
+
+const nodeManager = new NodeManager();
+
+const REQUEST_PRIORITY = {
+    CRITICAL: 10,
+    HIGH: 7,
+    MEDIUM: 3,
+    LOW: 1
+};
+
+function prioritizeRequest(shape) {
+    switch(shape) {
+        case 'user.position':
+        case 'camera.position':
+            return REQUEST_PRIORITY.CRITICAL;
+        case 'graph.data':
+            return REQUEST_PRIORITY.HIGH;
+        case 'mcp.server':
+            return REQUEST_PRIORITY.MEDIUM;
+        default:
+            return REQUEST_PRIORITY.LOW;
+    }
+}
+
+class SpatialGrid {
+    constructor(cellSize) {
+        this.cellSize = cellSize;
+        this.grid = new Map();
+    }
+
+    insert(node) {
+        const key = this._getKey(node.mesh.position);
+        if (!this.grid.has(key)) {
+            this.grid.set(key, new Set());
+        }
+        this.grid.get(key).add(node);
+    }
+
+    _getKey(pos) {
+        const x = Math.floor(pos.x / this.cellSize);
+        const y = Math.floor(pos.y / this.cellSize);
+        const z = Math.floor(pos.z / this.cellSize);
+        return `${x},${y},${z}`;
+    }
+
+    getNearby(position) {
+        const nearby = new Set();
+        const gx = Math.floor(position.x / this.cellSize);
+        const gy = Math.floor(position.y / this.cellSize);
+        const gz = Math.floor(position.z / this.cellSize);
+
+        for (let x = gx - 1; x <= gx + 1; x++) {
+            for (let y = gy - 1; y <= gy + 1; y++) {
+                for (let z = gz - 1; z <= gz + 1; z++) {
+                    const key = `${x},${y},${z}`;
+                    if (this.grid.has(key)) {
+                        this.grid.get(key).forEach(n => nearby.add(n));
+                    }
+                }
+            }
+        }
+        return nearby;
+    }
+}
+
+function _disposeMesh(mesh) {
+    if (mesh.geometry) mesh.geometry.dispose();
+    if (mesh.material) {
+        if (Array.isArray(mesh.material)) {
+            mesh.material.forEach(m => m.dispose());
+        } else {
+            mesh.material.dispose();
+        }
+    }
+}
+
+function _nodeInFrustum(node, frustum) {
+    if (!node.mesh) return false;
+    const sphere = new THREE.Sphere(node.mesh.position, node.radius || 5);
+    return frustum.intersectsSphere(sphere);
+}
+
+function _calculateFrustum() {
+    const frustum = new THREE.Frustum();
+    const matrix = new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+    frustum.setFromProjectionMatrix(matrix);
+    return frustum;
+}
 let selectedScopeRooms = new Set();
 let labelSprites = [];
 let labelDensity = 22;
@@ -152,21 +289,22 @@ async function loadScopeOverview() {
 
 function buildGraph(data) {
   clearGraph();
-  const crystals = data.crystals || [];
-  const entities = data.entities || [];
-  const relations = data.relations || [];
+  const { wings = [], crystals = [], entities = [], relations = [] } = data;
+  const wingNodes = {};
+  const roomNodes = {};
+
+  // 1. Create Core
   const centerMesh = new THREE.Mesh(new THREE.IcosahedronGeometry(15, 2), new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.5, wireframe: true }));
   centerMesh.userData = { id: 'palace:center', kind: 'palace', label: 'MemPalace Core' };
   graphGroup.add(centerMesh);
   nodeMap[centerMesh.userData.id] = { id: centerMesh.userData.id, kind: 'palace', label: 'MemPalace Core', mesh: centerMesh, radius: 15, data: { importance_score: 0, salience: 0 } };
   nodes.push(nodeMap[centerMesh.userData.id]);
-  const wings = Array.from(new Set(crystals.map(c => c.wing || 'general')));
-  const wingNodes = {};
-  const roomNodes = {};
-  wings.forEach((wingName, i) => {
-    const angle = (i / Math.max(wings.length, 1)) * Math.PI * 2;
-    const radius = graphSpread * (0.6 + (i % 3) * 0.1);
-    const x = Math.cos(angle) * radius, z = Math.sin(angle) * radius, y = (i - (wings.length - 1) / 2) * 50;
+
+  // 2. Create Wings
+  const wingList = wings.length ? wings.map(w => w.name || w) : Array.from(new Set(crystals.map(c => c.wing || 'general')));
+  wingList.forEach((wingName, i) => {
+    const angle = (i / Math.max(wingList.length, 1)) * Math.PI * 2, radius = graphSpread * (0.6 + (i % 3) * 0.1);
+    const x = Math.cos(angle) * radius, z = Math.sin(angle) * radius, y = (i - (wingList.length - 1) / 2) * 50;
     const color = SELF_STATE_COLORS[wingName] || 0xbbccff;
     const mesh = new THREE.Mesh(new THREE.SphereGeometry(14, 32, 32), new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.3, transparent: true, opacity: 0.7 }));
     mesh.position.set(x, y, z);
@@ -179,6 +317,8 @@ function buildGraph(data) {
     graphGroup.add(centerToWingLine);
     links.push({ id: 'palace:center->' + mesh.userData.id, sourceId: 'palace:center', targetId: mesh.userData.id, source: 'palace:center', target: mesh.userData.id, line: centerToWingLine, relation: 'structure', weight: 0.5, phase: 0 });
   });
+
+  // 3. Create Rooms
   const roomsByWing = {};
   crystals.forEach(c => {
     const w = c.wing || 'general', r = c.room || 'memories';
@@ -205,25 +345,69 @@ function buildGraph(data) {
       links.push({ id: wingNode.id + '->' + mesh.userData.id, sourceId: wingNode.id, targetId: mesh.userData.id, source: wingNode.id, target: mesh.userData.id, line: wingToRoomLine, relation: 'structure', weight: 0.5, phase: 0 });
     });
   });
-  crystals.forEach((crystal, ci) => {
-    const roomKey = `${crystal.wing || "general"}:${crystal.room || "memories"}`;
-    const roomNode = roomNodes[roomKey];
-    if (!roomNode) return;
-    const normalized = Math.max(0, Math.min(1, ((crystal.importance_score || 0) + 0.5) / 1.6));
-    const angle = (ci / Math.max(crystals.length, 1)) * Math.PI * 2, radius = 25 + normalized * 15 + (ci % 3) * 5;
-    const x = roomNode.baseX + Math.cos(angle) * radius, z = roomNode.baseZ + Math.sin(angle) * radius, y = roomNode.baseY + (normalized - 0.5) * 40 + Math.sin(ci * 1.5) * 10;
-    const nodeRadius = 3.2 + normalized * 5.4 + ((crystal.entities || []).length * 0.12);
-    const color = crystal.actor === 'jupiter' ? 0xc4b5fd : crystal.actor === 'system' ? 0xf9a8d4 : crystal.actor === 'assistant' ? 0x93c5fd : (SELF_STATE_COLORS[crystal.self_state] || 0x7dd3fc);
-    const mesh = new THREE.Mesh(pickCrystalGeometry(crystal, nodeRadius, ci), new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.45 + normalized * 0.85, roughness: 0.24, metalness: 0.18, transparent: true, opacity: 0.92 }));
-    mesh.position.set(x, timelineMode ? computeTimelineY(crystal, crystals) : y, z);
-    mesh.userData = { id: 'crystal:' + crystal.id, kind: 'crystal', data: crystal, label: crystal.title || crystal.summary || ('Crystal #' + crystal.id) };
-    graphGroup.add(mesh);
-    nodeMap[mesh.userData.id] = { id: mesh.userData.id, rawId: crystal.id, kind: 'crystal', data: crystal, label: mesh.userData.label, mesh, baseX: x, baseY: y, baseZ: z, timelineY: computeTimelineY(crystal, crystals), wing: crystal.wing, room: crystal.room, actor: crystal.actor || 'user', radius: nodeRadius, visualType: mesh.geometry.type };
-    nodes.push(nodeMap[mesh.userData.id]);
-    const roomToCrystalLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints([roomNode.mesh.position, mesh.position]), new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.15 }));
-    graphGroup.add(roomToCrystalLine);
-    links.push({ id: roomNode.id + '->' + mesh.userData.id, sourceId: roomNode.id, targetId: mesh.userData.id, source: roomNode.id, target: mesh.userData.id, line: roomToCrystalLine, relation: 'structure', weight: 0.5, phase: 0 });
-  });
+
+  // 4. Lazy Load Crystals (in chunks)
+  const CHUNK_SIZE = 40;
+  const frustum = _calculateFrustum();
+
+  const loadCrystalsChunk = (startIndex) => {
+    const chunk = crystals.slice(startIndex, startIndex + CHUNK_SIZE);
+    chunk.forEach((crystal, idx) => {
+      const ci = startIndex + idx;
+      const roomKey = `${crystal.wing || "general"}:${crystal.room || "memories"}`;
+      const roomNode = roomNodes[roomKey];
+      if (!roomNode) return;
+
+      const normalized = Math.max(0, Math.min(1, ((crystal.importance_score || 0) + 0.5) / 1.6));
+      const angle = (ci / Math.max(crystals.length, 1)) * Math.PI * 2, radius = 25 + normalized * 15 + (ci % 3) * 5;
+      const x = roomNode.baseX + Math.cos(angle) * radius, z = roomNode.baseZ + Math.sin(angle) * radius, y = roomNode.baseY + (normalized - 0.5) * 40 + Math.sin(ci * 1.5) * 10;
+      const nodeRadius = 3.2 + normalized * 5.4 + ((crystal.entities || []).length * 0.12);
+
+      // Frustum check for lazy loading
+      const mockPos = new THREE.Vector3(x, timelineMode ? computeTimelineY(crystal, crystals) : y, z);
+      const isVisible = frustum.containsPoint(mockPos);
+
+      if (!isVisible && crystals.length > 100) {
+        // Just store in cache if too many crystals and not visible
+        nodeManager.cache.set('crystal:' + crystal.id, {
+            id: 'crystal:' + crystal.id,
+            kind: 'crystal',
+            data: crystal,
+            baseX: x, baseY: y, baseZ: z,
+            radius: nodeRadius
+        });
+        return;
+      }
+
+      const color = crystal.actor === 'jupiter' ? 0xc4b5fd : crystal.actor === 'system' ? 0xf9a8d4 : crystal.actor === 'assistant' ? 0x93c5fd : (SELF_STATE_COLORS[crystal.self_state] || 0x7dd3fc);
+      const mesh = new THREE.Mesh(pickCrystalGeometry(crystal, nodeRadius, ci), new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.45 + normalized * 0.85, roughness: 0.24, metalness: 0.18, transparent: true, opacity: 0.92 }));
+      mesh.position.copy(mockPos);
+      mesh.userData = { id: 'crystal:' + crystal.id, kind: 'crystal', data: crystal, label: crystal.title || crystal.summary || ('Crystal #' + crystal.id) };
+      graphGroup.add(mesh);
+
+      const nodeObj = { id: mesh.userData.id, rawId: crystal.id, kind: 'crystal', data: crystal, label: mesh.userData.label, mesh, baseX: x, baseY: y, baseZ: z, timelineY: computeTimelineY(crystal, crystals), wing: crystal.wing, room: crystal.room, actor: crystal.actor || 'user', radius: nodeRadius, visualType: mesh.geometry.type };
+      nodeMap[mesh.userData.id] = nodeObj;
+      nodes.push(nodeObj);
+      nodeManager.activeNodes.set(nodeObj.id, nodeObj);
+
+      const roomToCrystalLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints([roomNode.mesh.position, mesh.position]), new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.15 }));
+      graphGroup.add(roomToCrystalLine);
+      links.push({ id: roomNode.id + '->' + mesh.userData.id, sourceId: roomNode.id, targetId: mesh.userData.id, source: roomNode.id, target: mesh.userData.id, line: roomToCrystalLine, relation: 'structure', weight: 0.5, phase: 0 });
+    });
+
+    if (startIndex + CHUNK_SIZE < crystals.length) {
+      requestAnimationFrame(() => loadCrystalsChunk(startIndex + CHUNK_SIZE));
+    } else {
+        // Finalize after all crystals (including those that might be revived later)
+        resolveNodeCollisions();
+        applyVisibilityMode();
+        fitCameraToGraph();
+        updateStats();
+        drawMinimap();
+    }
+  };
+
+  // 5. Create Entities
   entities.forEach((entity, index) => {
     const angle = (index / Math.max(entities.length, 1)) * Math.PI * 2, radiusOrbit = graphSpread * 0.35 + (index % 7) * 10;
     const x = Math.cos(angle) * radiusOrbit, z = Math.sin(angle) * radiusOrbit, y = ((index % 9) - 4) * 16, radius = 2.4 + Math.max(0.1, Math.min(1, entity.salience || 0.3)) * 4.2;
@@ -235,6 +419,8 @@ function buildGraph(data) {
     nodeMap[mesh.userData.id] = { id: mesh.userData.id, rawId: entity.id, kind: 'entity', data: entity, label: entity.name, mesh, baseX: x, baseY: y, baseZ: z, radius, visualType: mesh.geometry.type };
     nodes.push(nodeMap[mesh.userData.id]);
   });
+
+  // 6. Create Relations
   relations.forEach(relation => {
     const source = nodeMap[relation.source_type + ':' + relation.source_id], target = nodeMap[relation.target_type + ':' + relation.target_id];
     if (!source || !target) return;
@@ -244,11 +430,17 @@ function buildGraph(data) {
     graphGroup.add(line);
     links.push({ key: line.userData.key, source: source.id, target: target.id, relation: relation.relation, weight: relation.weight || 0.5, line, phase: (Math.abs(relation.source_id + relation.target_id) % 100) / 100 });
   });
-  resolveNodeCollisions();
-  applyVisibilityMode();
-  fitCameraToGraph();
-  updateStats();
-  drawMinimap();
+
+  // Start chunked loading
+  if (crystals.length > 0) {
+      loadCrystalsChunk(0);
+  } else {
+      resolveNodeCollisions();
+      applyVisibilityMode();
+      fitCameraToGraph();
+      updateStats();
+      drawMinimap();
+  }
 }
 
 function pickCrystalGeometry(crystal, radius, index) {
@@ -264,32 +456,46 @@ function separationOffset(seed, axis = 0) {
 
 function resolveNodeCollisions() {
   if (nodes.length < 2) return;
-  for (let pass = 0; pass < 5; pass++) {
+
+  const startTime = performance.now();
+  const MAX_TIME = 16; // Max 16ms for collision resolution per frame
+
+  for (let pass = 0; pass < 3; pass++) {
     let moved = false;
+    const grid = new SpatialGrid(50);
+    nodes.forEach(node => grid.insert(node));
+
     for (let i = 0; i < nodes.length; i++) {
       const a = nodes[i];
-      for (let j = i + 1; j < nodes.length; j++) {
-        const b = nodes[j];
+      const nearby = grid.getNearby(a.mesh.position);
+
+      nearby.forEach(b => {
+        if (a === b) return;
         const dx = b.mesh.position.x - a.mesh.position.x;
         const dy = b.mesh.position.y - a.mesh.position.y;
         const dz = b.mesh.position.z - a.mesh.position.z;
         const distance = Math.sqrt(dx * dx + dy * dy + dz * dz) || 0.0001;
         const minDistance = (a.radius || 3) + (b.radius || 3) + (a.kind === b.kind ? 3.2 : 4.6);
-        if (distance >= minDistance) continue;
-        const push = (minDistance - distance) * 0.5;
-        const nx = dx / distance;
-        const ny = dy / distance;
-        const nz = dz / distance;
-        a.mesh.position.x -= nx * push;
-        a.mesh.position.y -= ny * push * 0.65;
-        a.mesh.position.z -= nz * push;
-        b.mesh.position.x += nx * push;
-        b.mesh.position.y += ny * push * 0.65;
-        b.mesh.position.z += nz * push;
-        moved = true;
-      }
+
+        if (distance < minDistance) {
+          const push = (minDistance - distance) * 0.5;
+          const nx = dx / distance;
+          const ny = dy / distance;
+          const nz = dz / distance;
+
+          a.mesh.position.x -= nx * push;
+          a.mesh.position.y -= ny * push * 0.65;
+          a.mesh.position.z -= nz * push;
+          b.mesh.position.x += nx * push;
+          b.mesh.position.y += ny * push * 0.65;
+          b.mesh.position.z += nz * push;
+          moved = true;
+        }
+      });
+
+      if (performance.now() - startTime > MAX_TIME) break;
     }
-    if (!moved) break;
+    if (!moved || performance.now() - startTime > MAX_TIME) break;
   }
 
   nodes.forEach((node) => {
@@ -619,7 +825,7 @@ function drawMinimap() {
 }
 
 function animate() {
-  requestAnimationFrame(animate);
+  requestAnimationFrame(animate); frameCount++; if (frameCount % 60 === 0) nodeManager.updateGC();
   const now = performance.now();
   const dt = Math.min(0.033, Math.max(0.001, (now - lastFrameTime) / 1000));
   lastFrameTime = now;

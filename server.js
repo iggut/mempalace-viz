@@ -511,8 +511,52 @@ function enrichScenePayload(payload) {
   };
 }
 
-function callMcp(toolName, params = {}) {
+class LRUCache {
+  constructor(maxSize) {
+    this.maxSize = maxSize;
+    this.cache = new Map();
+    this.accessHistory = new Map();
+  }
+
+  get(key) {
+    if (!this.cache.has(key)) return null;
+    this.accessHistory.set(key, Date.now());
+    return this.cache.get(key);
+  }
+
+  set(key, value) {
+    if (this.cache.size >= this.maxSize) {
+      let oldestKey = null;
+      let oldestTime = Infinity;
+      this.accessHistory.forEach((time, k) => {
+        if (time < oldestTime) {
+          oldestTime = time;
+          oldestKey = k;
+        }
+      });
+      if (oldestKey) {
+        this.cache.delete(oldestKey);
+        this.accessHistory.delete(oldestKey);
+      }
+    }
+    this.cache.set(key, value);
+    this.accessHistory.set(key, Date.now());
+  }
+
+  has(key) {
+    return this.cache.has(key);
+  }
+}
+
+const wingsCache = new LRUCache(100);
+
+async function callMcp(toolName, params = {}, timeout = 10000) {
   return new Promise((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      proc.kill();
+      reject(new Error(`MCP server timeout: ${toolName} (${timeout/1000}s)`));
+    }, timeout);
+
     const reqBody = JSON.stringify({
       jsonrpc: '2.0',
       id: Date.now(),
@@ -539,9 +583,18 @@ function callMcp(toolName, params = {}) {
 
     proc.stdout.on('data', d => { stdout += d.toString(); });
     proc.stderr.on('data', d => { stderr += d.toString(); });
-    proc.on('error', reject);
+    proc.on('error', (err) => {
+      clearTimeout(timeoutId);
+      reject(err);
+    });
 
-    proc.on('close', () => {
+    proc.on('close', (code) => {
+      clearTimeout(timeoutId);
+      if (code !== 0 && code !== null) {
+        const cleanStderr = filterNoisyStderr(stderr);
+        reject(new Error(`MCP process exited with code ${code}: ${cleanStderr}`));
+        return;
+      }
       try {
         const result = JSON.parse(stdout);
         if (result.error) {
@@ -722,9 +775,16 @@ const server = createServer(async (req, res) => {
       case '/api/status':
         result = await callMcp('mempalace_status');
         break;
-      case '/api/wings':
-        result = await callMcp('mempalace_list_wings');
+      case '/api/wings': {
+        const cacheKey = 'wings-static';
+        if (wingsCache.has(cacheKey)) {
+          result = wingsCache.get(cacheKey);
+        } else {
+          result = await callMcp('mempalace_list_wings');
+          wingsCache.set(cacheKey, result);
+        }
         break;
+      }
       case '/api/rooms': {
         const wingParam = requestUrl.searchParams.get('wing');
         result = await callMcp('mempalace_list_rooms', wingParam ? { wing: wingParam } : {});
