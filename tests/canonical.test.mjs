@@ -2,11 +2,14 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   buildCanonicalEdgesFromTunnels,
+  buildEnrichedGraphFromTaxonomyAndTunnels,
   buildOverviewSummary,
+  buildTaxonomyAdjacencyEdges,
   collectRoomIdsFromRoomsData,
   makeRoomId,
   parseRoomId,
   parseTaxonomyCanonical,
+  parseTunnelDiscoveryResult,
   sceneRoomNodeIdFromRoomId,
   toLegacyGraphEdges,
 } from '../canonical.js';
@@ -39,8 +42,10 @@ test('buildCanonicalEdgesFromTunnels emits resolved cross-wing edges', () => {
   assert.equal(edgesUnresolved.length, 0);
   assert.equal(edgesResolved.length, 1);
   assert.equal(edgesResolved[0].crossWing, true);
+  assert.equal(edgesResolved[0].relationshipType, 'tunnel');
   assert.equal(summary.resolvedEdgeCount, 1);
   assert.equal(summary.unresolvedEdgeCount, 0);
+  assert.equal(summary.byType.tunnel, 1);
   const legacy = toLegacyGraphEdges(edgesResolved);
   assert.equal(legacy[0].from, makeRoomId('wing_a', 'shared'));
   assert.equal(legacy[0].to, makeRoomId('wing_b', 'shared'));
@@ -62,6 +67,49 @@ test('parseTaxonomyCanonical attaches roomId and wingId', () => {
   assert.equal(roomsData.w1[0].wingId, 'w1');
   assert.equal(rooms.some((x) => x.roomId === 'w1/r1'), true);
   assert.equal(wings.find((x) => x.wingId === 'w1')?.roomCount, 1);
+});
+
+test('parseTunnelDiscoveryResult accepts legacy array or envelope', () => {
+  const a = parseTunnelDiscoveryResult([{ room: 'x', wings: ['a', 'b'] }]);
+  assert.equal(a.tunnels.length, 1);
+  assert.equal(a.truncated, false);
+  const b = parseTunnelDiscoveryResult({
+    tunnels: [{ room: 'y', wings: ['a', 'b'] }],
+    truncated: true,
+    limit: 50,
+    total_matching: 99,
+  });
+  assert.equal(b.truncated, true);
+  assert.equal(b.totalMatching, 99);
+});
+
+test('buildTaxonomyAdjacencyEdges chains sorted room names within a wing', () => {
+  const roomsData = {
+    w: [
+      { name: 'z', roomId: 'w/z', wingId: 'w' },
+      { name: 'a', roomId: 'w/a', wingId: 'w' },
+    ],
+  };
+  const edges = buildTaxonomyAdjacencyEdges(roomsData);
+  assert.equal(edges.length, 1);
+  assert.equal(edges[0].relationshipType, 'taxonomy_adjacency');
+  assert.equal(edges[0].crossWing, false);
+  assert.equal(edges[0].metadata?.inferred, true);
+});
+
+test('buildEnrichedGraphFromTaxonomyAndTunnels merges tunnels and taxonomy adjacency', () => {
+  const taxonomyRaw = {
+    taxonomy: {
+      wing_a: { shared: 1, z: 1 },
+      wing_b: { shared: 1 },
+    },
+  };
+  const tunnels = [{ room: 'shared', wings: ['wing_a', 'wing_b'], count: 2 }];
+  const g = buildEnrichedGraphFromTaxonomyAndTunnels(taxonomyRaw, tunnels);
+  assert.ok(g.summary.byType.tunnel >= 1);
+  assert.ok(g.summary.byType.taxonomy_adjacency >= 1);
+  assert.ok(g.edgesResolved.length >= 2);
+  assert.ok(g.graphMeta.sources.includes('mempalace_find_tunnels'));
 });
 
 test('buildOverviewSummary aggregates counts', () => {

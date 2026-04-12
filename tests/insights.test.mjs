@@ -33,6 +33,28 @@ test('countEdgesWithUnresolvedEndpoints prefers API unresolved count', () => {
   assert.equal(countEdgesWithUnresolvedEndpoints(edges, rooms, 7), 7);
 });
 
+test('buildGraphAnalytics exposes byRelationshipType from graph summary', () => {
+  const roomsData = { w: [{ name: 'a', drawers: 1, roomId: 'w/a', wingId: 'w' }] };
+  const ga = buildGraphAnalytics(roomsData, {
+    edgesResolved: [
+      {
+        sourceRoomId: 'w/a',
+        targetRoomId: 'w/b',
+        sourceWingId: 'w',
+        targetWingId: 'w',
+        relationshipType: 'taxonomy_adjacency',
+      },
+    ],
+    graphSummary: {
+      resolvedEdgeCount: 1,
+      crossWingEdgeCount: 0,
+      intraWingEdgeCount: 1,
+      byType: { taxonomy_adjacency: 1 },
+    },
+  });
+  assert.equal(ga.byRelationshipType.taxonomy_adjacency, 1);
+});
+
 test('buildGraphAnalytics uses canonical edgesResolved without legacy resolution', () => {
   const roomsData = {
     w1: [{ name: 'a', drawers: 1, roomId: 'w1/a', wingId: 'w1' }],

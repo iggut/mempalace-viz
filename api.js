@@ -108,6 +108,8 @@ export function normalizePalaceBundle(parts) {
   const overviewStats =
     overviewBundle?.stats && typeof overviewBundle.stats === 'object' ? overviewBundle.stats : null;
 
+  const graphMeta = graphStats?.graphMeta ?? overviewBundle?.graphMeta ?? null;
+
   return {
     status,
     wingsData,
@@ -120,10 +122,12 @@ export function normalizePalaceBundle(parts) {
       edgesResolved,
       edgesUnresolved,
       summary,
+      graphMeta,
     },
     graphEdges,
     overviewBundle,
     overviewStats,
+    graphMeta,
     kgStats,
     error: null,
   };
@@ -156,10 +160,11 @@ export async function loadPalaceData() {
       rooms: [],
       wings: [],
       graphStats: null,
-      graph: { edgesResolved: [], edgesUnresolved: [], summary: null },
+      graph: { edgesResolved: [], edgesUnresolved: [], summary: null, graphMeta: null },
       graphEdges: [],
       overviewBundle: null,
       overviewStats: null,
+      graphMeta: null,
       kgStats: null,
       error,
     };

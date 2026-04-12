@@ -5,7 +5,7 @@ import { dirname, join, extname } from 'path';
 import { promises as fs } from 'fs';
 import {
   parseTaxonomyCanonical,
-  buildCanonicalEdgesFromTunnels,
+  buildEnrichedGraphFromTaxonomyAndTunnels,
   toLegacyGraphEdges,
   normalizeWingsPayload,
   buildOverviewSummary,
@@ -844,12 +844,8 @@ const server = createServer(async (req, res) => {
           callMcp('mempalace_get_taxonomy'),
           callMcp('mempalace_find_tunnels'),
         ]);
-        const { taxonomy, rooms: taxonomyRooms } = parseTaxonomyCanonical(taxonomyRaw);
-        const tunnelList = Array.isArray(tunnelsResult) ? tunnelsResult : [];
-        const { edgesResolved, edgesUnresolved, summary } = buildCanonicalEdgesFromTunnels(
-          tunnelList,
-          taxonomy,
-        );
+        const enriched = buildEnrichedGraphFromTaxonomyAndTunnels(taxonomyRaw, tunnelsResult);
+        const { edgesResolved, edgesUnresolved, summary, graphMeta, rooms: taxonomyRooms } = enriched;
         const metrics = computeRoomGraphMetrics(edgesResolved);
         const roomsEnriched = enrichRoomsWithGraphMetrics(taxonomyRooms, metrics);
         const legacyGraphEdges = toLegacyGraphEdges(edgesResolved);
@@ -860,11 +856,12 @@ const server = createServer(async (req, res) => {
         }
         result = {
           ...rawStats,
-          graphContractVersion: 1,
+          graphContractVersion: 2,
           rooms: roomsEnriched,
           edgesResolved,
           edgesUnresolved,
           summary,
+          graphMeta,
           legacyGraphEdges,
           tunnels: tunnelsAdj,
         };
@@ -879,15 +876,20 @@ const server = createServer(async (req, res) => {
           callMcp('mempalace_graph_stats'),
         ]);
         const wingsData = normalizeWingsPayload(wingsRaw);
-        const { taxonomy, rooms, wings, roomsData } = parseTaxonomyCanonical(taxonomyRaw);
-        const tunnelList = Array.isArray(tunnelsResult) ? tunnelsResult : [];
-        const { edgesResolved, edgesUnresolved, summary } = buildCanonicalEdgesFromTunnels(
-          tunnelList,
+        const enriched = buildEnrichedGraphFromTaxonomyAndTunnels(taxonomyRaw, tunnelsResult);
+        const {
           taxonomy,
-        );
+          rooms,
+          wings,
+          roomsData,
+          edgesResolved,
+          edgesUnresolved,
+          summary,
+          graphMeta,
+        } = enriched;
         const stats = buildOverviewSummary(wingsData, rooms, edgesResolved, summary, status);
         result = {
-          graphContractVersion: 1,
+          graphContractVersion: 2,
           status,
           wingsData,
           taxonomy,
@@ -897,6 +899,7 @@ const server = createServer(async (req, res) => {
           edgesResolved,
           edgesUnresolved,
           summary,
+          graphMeta,
           stats,
           rawGraphStats,
         };

@@ -5,7 +5,19 @@
 
 /** @typedef {{ wingId: string, name: string, drawerCount: number, roomCount: number, rooms?: unknown[] }} WingRecord */
 /** @typedef {{ roomId: string, wingId: string, name: string, drawerCount: number }} RoomRecord */
-/** @typedef {{ edgeId: string, sourceRoomId: string, targetRoomId: string, sourceWingId: string, targetWingId: string, crossWing: boolean, weight: number }} CanonicalEdge */
+/**
+ * @typedef {{
+ *   edgeId: string,
+ *   sourceRoomId: string,
+ *   targetRoomId: string,
+ *   sourceWingId: string,
+ *   targetWingId: string,
+ *   crossWing: boolean,
+ *   weight: number,
+ *   relationshipType: string,
+ *   metadata?: Record<string, unknown>,
+ * }} CanonicalEdge
+ */
 
 const SLASH_PLACEHOLDER = '\u2215'; // division slash — avoids collision with wing/room separator
 
@@ -200,6 +212,31 @@ export function buildTaxonomyRoomIndex(taxonomy) {
 }
 
 /**
+ * Normalize MCP `mempalace_find_tunnels` result (array legacy, or { tunnels, truncated, ... }).
+ * @param {unknown} raw
+ */
+export function parseTunnelDiscoveryResult(raw) {
+  if (Array.isArray(raw)) {
+    return {
+      tunnels: raw,
+      truncated: false,
+      limit: null,
+      totalMatching: raw.length,
+    };
+  }
+  if (raw && typeof raw === 'object' && Array.isArray(raw.tunnels)) {
+    const o = /** @type {{ tunnels: unknown[], truncated?: boolean, limit?: number | null, total_matching?: number, totalMatching?: number }} */ (raw);
+    return {
+      tunnels: o.tunnels,
+      truncated: !!o.truncated,
+      limit: o.limit ?? null,
+      totalMatching: o.total_matching ?? o.totalMatching ?? o.tunnels.length,
+    };
+  }
+  return { tunnels: [], truncated: false, limit: null, totalMatching: 0 };
+}
+
+/**
  * Expand MemPalace `find_tunnels` entries into canonical undirected unique edges.
  * @param {Array<{ room?: string, wings?: string[] }>} tunnelRows
  * @param {Record<string, Record<string, number>>} taxonomy
@@ -247,34 +284,166 @@ export function buildCanonicalEdgesFromTunnels(tunnelRows, taxonomy) {
         const weight = typeof row.count === 'number' && row.count > 0 ? Math.min(32, 1 + Math.log1p(row.count)) : 1;
 
         edgesResolved.push({
-          edgeId: `${sId}__${tId}`,
+          edgeId: `${sId}__${tId}__tunnel`,
           sourceRoomId: sId,
           targetRoomId: tId,
           sourceWingId: sW,
           targetWingId: tW,
           crossWing: sW !== tW,
           weight,
+          relationshipType: 'tunnel',
+          metadata: { origin: 'mempalace_find_tunnels' },
         });
       }
     }
   }
 
-  let crossWingEdgeCount = 0;
-  let intraWingEdgeCount = 0;
-  for (const e of edgesResolved) {
-    if (e.crossWing) crossWingEdgeCount += 1;
-    else intraWingEdgeCount += 1;
-  }
+  const summary = summarizeCanonicalEdgeList(edgesResolved, edgesUnresolved);
 
   return {
     edgesResolved,
     edgesUnresolved,
-    summary: {
-      resolvedEdgeCount: edgesResolved.length,
-      unresolvedEdgeCount: edgesUnresolved.length,
-      crossWingEdgeCount,
-      intraWingEdgeCount,
-    },
+    summary,
+  };
+}
+
+/**
+ * Adjacency edges within a wing: consecutive rooms when sorted by name (taxonomy-derived order).
+ * Inferred structure — not semantic "same topic" links.
+ * @param {Record<string, Array<{ name: string, roomId?: string, wingId?: string }>>} roomsData
+ * @returns {CanonicalEdge[]}
+ */
+export function buildTaxonomyAdjacencyEdges(roomsData) {
+  /** @type {CanonicalEdge[]} */
+  const out = [];
+  for (const [wingKey, rooms] of Object.entries(roomsData || {})) {
+    const wingId = canonicalWingId(wingKey);
+    if (!Array.isArray(rooms) || rooms.length < 2) continue;
+    const sorted = [...rooms].sort((a, b) => String(a.name).localeCompare(String(b.name)));
+    for (let i = 0; i < sorted.length - 1; i += 1) {
+      const a = sorted[i];
+      const b = sorted[i + 1];
+      const sId = a.roomId || makeRoomId(wingId, a.name);
+      const tId = b.roomId || makeRoomId(wingId, b.name);
+      const stable = sId < tId ? [sId, tId] : [tId, sId];
+      const [lo, hi] = stable;
+      out.push({
+        edgeId: `${lo}__${hi}__taxonomy_adjacency`,
+        sourceRoomId: lo,
+        targetRoomId: hi,
+        sourceWingId: wingId,
+        targetWingId: wingId,
+        crossWing: false,
+        weight: 0.35,
+        relationshipType: 'taxonomy_adjacency',
+        metadata: {
+          origin: 'taxonomy_room_order',
+          inferred: true,
+          note: 'consecutive rooms in per-wing name sort — structural, not topical',
+        },
+      });
+    }
+  }
+  return out;
+}
+
+/**
+ * Merge tunnel-derived edges with other sources; dedupe undirected pairs per relationshipType.
+ * @param {CanonicalEdge[]} tunnelEdges
+ * @param {CanonicalEdge[]} otherEdges
+ * @returns {CanonicalEdge[]}
+ */
+export function mergeCanonicalGraphEdges(tunnelEdges, otherEdges) {
+  const seen = new Set();
+  /** @type {CanonicalEdge[]} */
+  const merged = [];
+  for (const e of [...tunnelEdges, ...otherEdges]) {
+    const a = e.sourceRoomId;
+    const b = e.targetRoomId;
+    const t = e.relationshipType || 'unknown';
+    const key = a < b ? `${a}||${b}||${t}` : `${b}||${a}||${t}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(e);
+  }
+  return merged;
+}
+
+/**
+ * @param {CanonicalEdge[]} edgesResolved
+ * @param {Array<{ rawSource: string, rawTarget: string, reason: string, detail?: string }>} edgesUnresolved
+ */
+export function summarizeCanonicalEdgeList(edgesResolved, edgesUnresolved) {
+  let crossWingEdgeCount = 0;
+  let intraWingEdgeCount = 0;
+  /** @type {Record<string, number>} */
+  const byType = {};
+  for (const e of edgesResolved) {
+    const rt = e.relationshipType || 'tunnel';
+    byType[rt] = (byType[rt] || 0) + 1;
+    if (e.crossWing) crossWingEdgeCount += 1;
+    else intraWingEdgeCount += 1;
+  }
+  return {
+    resolvedEdgeCount: edgesResolved.length,
+    unresolvedEdgeCount: edgesUnresolved.length,
+    crossWingEdgeCount,
+    intraWingEdgeCount,
+    byType,
+  };
+}
+
+/**
+ * @param {{ truncated?: boolean, limit?: number | null, totalMatching?: number }} tunnelDiscovery
+ * @param {boolean} includesTaxonomyAdjacency
+ */
+export function buildGraphProvenanceMeta(tunnelDiscovery, includesTaxonomyAdjacency) {
+  const sources = ['mempalace_find_tunnels'];
+  if (includesTaxonomyAdjacency) sources.push('taxonomy_adjacency');
+
+  /** @type {Array<{ source: string, limit?: number | null, totalMatching?: number, truncated?: boolean }>} */
+  const truncatedSources = [];
+  if (tunnelDiscovery?.truncated) {
+    truncatedSources.push({
+      source: 'mempalace_find_tunnels',
+      limit: tunnelDiscovery.limit ?? null,
+      totalMatching: tunnelDiscovery.totalMatching ?? null,
+      truncated: true,
+    });
+  }
+
+  return {
+    sources,
+    truncatedSources,
+    estimatedAvailable: null,
+  };
+}
+
+/**
+ * Tunnel edges (from Chroma cross-wing room names) + intra-wing taxonomy adjacency.
+ * @param {object} taxonomyRaw — MCP taxonomy payload
+ * @param {unknown} tunnelsRaw — MCP find_tunnels array or envelope
+ */
+export function buildEnrichedGraphFromTaxonomyAndTunnels(taxonomyRaw, tunnelsRaw) {
+  const disc = parseTunnelDiscoveryResult(tunnelsRaw);
+  const { taxonomy, roomsData, rooms } = parseTaxonomyCanonical(taxonomyRaw);
+  const tunnelBuilt = buildCanonicalEdgesFromTunnels(disc.tunnels, taxonomy);
+  const intra = buildTaxonomyAdjacencyEdges(roomsData);
+  const edgesResolved = mergeCanonicalGraphEdges(tunnelBuilt.edgesResolved, intra);
+  const summary = summarizeCanonicalEdgeList(edgesResolved, tunnelBuilt.edgesUnresolved);
+  const graphMeta = buildGraphProvenanceMeta(
+    { truncated: disc.truncated, limit: disc.limit, totalMatching: disc.totalMatching },
+    intra.length > 0,
+  );
+  return {
+    taxonomy,
+    roomsData,
+    rooms,
+    edgesResolved,
+    edgesUnresolved: tunnelBuilt.edgesUnresolved,
+    summary,
+    graphMeta,
+    tunnelDiscovery: disc,
   };
 }
 
@@ -293,6 +462,7 @@ export function toLegacyGraphEdges(edgesResolved) {
     targetWingId: e.targetWingId,
     crossWing: e.crossWing,
     edgeId: e.edgeId,
+    relationshipType: e.relationshipType,
   }));
 }
 
@@ -443,6 +613,27 @@ export function buildOverviewSummary(wingsData, rooms, edgesResolved, graphSumma
   }
   const roomsWithNoLinks = rooms.filter((r) => !roomIdsInGraph.has(r.roomId)).length;
 
+  /** Rooms with at least one cross-wing incident edge (typically tunnel). */
+  const bridgeRoomIds = [];
+  for (const r of rooms) {
+    if ((metrics.get(r.roomId)?.crossWingNeighborCount ?? 0) > 0) bridgeRoomIds.push(r.roomId);
+  }
+  bridgeRoomIds.sort();
+
+  const intraByWing = new Map();
+  for (const e of edgesResolved) {
+    if (e.relationshipType !== 'taxonomy_adjacency' || e.sourceWingId !== e.targetWingId) continue;
+    const w = e.sourceWingId;
+    intraByWing.set(w, (intraByWing.get(w) || 0) + 1);
+  }
+  const strongestIntraWingByTaxonomy = [...intraByWing.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 12)
+    .map(([wingId, intraEdges]) => ({ wingId, intraEdges }));
+
+  const byRelationshipType =
+    graphSummary.byType && typeof graphSummary.byType === 'object' ? { ...graphSummary.byType } : null;
+
   return {
     totalDrawers,
     totalWings: wingCount,
@@ -451,9 +642,12 @@ export function buildOverviewSummary(wingsData, rooms, edgesResolved, graphSumma
     unresolvedEdgeCount: graphSummary.unresolvedEdgeCount,
     crossWingEdgeCount: graphSummary.crossWingEdgeCount,
     intraWingEdgeCount: graphSummary.intraWingEdgeCount,
+    byRelationshipType,
     roomsWithNoLinks,
+    bridgeRoomCount: bridgeRoomIds.length,
     topWingsByDrawers,
     topConnectedRooms,
     topCrossLinkedWings,
+    strongestIntraWingByTaxonomy,
   };
 }

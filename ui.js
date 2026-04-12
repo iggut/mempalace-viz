@@ -83,7 +83,7 @@ function graphViewInspectorNotice(ctx) {
       ? gs.edgesUnresolved.length
       : null;
   if (!edges) {
-    return `<div class="inspect-card inspect-card--hint" role="status"><strong>Graph view</strong><p class="inspect-muted inspect-muted--tight">No tunnel edges were returned from graph-stats. Wings and rooms may still appear if taxonomy is loaded.</p></div>`;
+    return `<div class="inspect-card inspect-card--hint" role="status"><strong>Graph view</strong><p class="inspect-muted inspect-muted--tight">No graph edges were returned from graph-stats. Wings and rooms may still appear if taxonomy is loaded.</p></div>`;
   }
   if (!ctx.ga?.hasResolvableEdges) {
     const unresolved =
@@ -94,7 +94,7 @@ function graphViewInspectorNotice(ctx) {
             dataBundle?.roomsData,
             graph?.edgesUnresolved?.length ?? null,
           );
-    return `<div class="inspect-card inspect-card--hint" role="status"><strong>Graph view</strong><p class="inspect-muted inspect-muted--tight">Loaded ${edges} tunnel edge${edges === 1 ? '' : 's'}, but endpoints could not be fully matched to taxonomy rooms${unresolved ? ` (${unresolved} edge${unresolved === 1 ? '' : 's'} unresolved).` : '.'} Layout may be sparse.</p></div>`;
+    return `<div class="inspect-card inspect-card--hint" role="status"><strong>Graph view</strong><p class="inspect-muted inspect-muted--tight">Loaded ${edges} graph edge${edges === 1 ? '' : 's'}, but endpoints could not be fully matched to taxonomy rooms${unresolved ? ` (${unresolved} edge${unresolved === 1 ? '' : 's'} unresolved).` : '.'} Layout may be sparse.</p></div>`;
   }
   return '';
 }
@@ -136,6 +136,8 @@ function buildPalaceContext() {
   const edgesResolved = graph?.edgesResolved?.length ? graph.edgesResolved : gs?.edgesResolved || [];
   const kg = dataBundle?.kgStats;
   const overviewStats = dataBundle?.overviewStats ?? dataBundle?.overviewBundle?.stats;
+  const graphMeta =
+    dataBundle?.graphMeta ?? dataBundle?.graph?.graphMeta ?? gs?.graphMeta ?? dataBundle?.overviewBundle?.graphMeta;
 
   const totalDrawers =
     typeof st?.total_drawers === 'number'
@@ -181,6 +183,7 @@ function buildPalaceContext() {
     kgSummary,
     focusWing: appState.currentWing,
     overviewStats,
+    graphMeta,
   };
 }
 
@@ -215,6 +218,17 @@ function clickRow(label, sub, attrs) {
 
 function renderOverviewInspector(ctx) {
   const om = buildOverviewModel(ctx, appState.view);
+  const edgeTypeLine =
+    om.ga.byRelationshipType && Object.keys(om.ga.byRelationshipType).length
+      ? Object.entries(om.ga.byRelationshipType)
+          .map(([k, v]) => `${k}: ${formatNum(v)}`)
+          .join(' · ')
+      : '';
+  const truncLine = ctx.graphMeta?.truncatedSources?.length
+    ? ctx.graphMeta.truncatedSources
+        .map((t) => `${t.source} capped at ${formatNum(t.limit)} (${formatNum(t.totalMatching)} available)`)
+        .join('; ')
+    : '';
   const kgLine = om.kgAvailable
     ? om.kgSummary || '—'
     : 'Knowledge graph statistics are unavailable from the current API.';
@@ -254,8 +268,8 @@ function renderOverviewInspector(ctx) {
   const palaceBlurb = [
     `Palace scale: ${formatNum(om.totalDrawers)} drawers across ${formatNum(om.wingCount)} wings and ${formatNum(om.roomCount)} rooms.`,
     om.tunnelNodeCount
-      ? `Tunnel index lists ${formatNum(om.tunnelNodeCount)} room keys and ${formatNum(om.graphEdgeCount)} directed edges.`
-      : 'No tunnel index entries in graph-stats.',
+      ? `Graph summary: ${formatNum(om.graphEdgeCount)} resolved undirected edges (all relationship types).`
+      : 'No graph edges in graph-stats.',
     om.graphBlurb,
   ]
     .filter(Boolean)
@@ -275,9 +289,11 @@ function renderOverviewInspector(ctx) {
           ${metaRow('Total drawers', formatNum(om.totalDrawers))}
           ${metaRow('Wings', formatNum(om.wingCount))}
           ${metaRow('Rooms (taxonomy)', formatNum(om.roomCount))}
-          ${metaRow('Tunnel edges (raw)', formatNum(om.graphEdgeCount))}
-          ${metaRow('Cross-wing (resolved)', om.ga.hasResolvableEdges ? formatNum(om.crossWingEdges) : '—')}
-          ${metaRow('Rooms with no tunnels', om.ga.hasResolvableEdges ? formatNum(om.roomsWithNoTunnels) : '—')}
+          ${metaRow('Resolved graph edges', formatNum(om.graphEdgeCount))}
+          ${metaRow('Edge types', edgeTypeLine || '—')}
+          ${metaRow('Cross-wing (tunnels)', om.ga.hasResolvableEdges ? formatNum(om.crossWingEdges) : '—')}
+          ${metaRow('Rooms with no graph links', om.ga.hasResolvableEdges ? formatNum(om.roomsWithNoTunnels) : '—')}
+          ${metaRow('Upstream truncation', truncLine || 'none')}
         </div>
         <p class="inspect-muted inspect-muted--tight">${escapeHtml(kgLine)}</p>
         `,

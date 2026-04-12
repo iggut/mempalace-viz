@@ -4,9 +4,10 @@ This document describes the **enriched** HTTP API exposed by `server.js` for the
 
 ## Version field
 
-Responses that include canonical enrichment carry:
+Responses that include canonical graph enrichment carry:
 
-- `graphContractVersion: 1`
+- `graphContractVersion: 2` — typed edges, merged sources, provenance (`graphMeta`). See **`docs/GRAPH_SEMANTICS.md`**.
+- `graphContractVersion: 1` — still used for **`/api/taxonomy`** only (taxonomy-only payloads).
 
 Legacy fields from the underlying MemPalace MCP tools are preserved where practical.
 
@@ -63,24 +64,27 @@ Combines:
 
 - `mempalace_graph_stats` (legacy summary: `total_rooms`, `tunnel_rooms`, `total_edges`, …)
 - `mempalace_get_taxonomy`
-- `mempalace_find_tunnels`
+- `mempalace_find_tunnels` (see MCP note below)
 
 ### Canonical graph arrays
 
 | Field | Description |
 | --- | --- |
-| `edgesResolved` | Tunnel edges fully resolved to taxonomy rooms. Each edge: `edgeId`, `sourceRoomId`, `targetRoomId`, `sourceWingId`, `targetWingId`, `crossWing`, `weight`. |
-| `edgesUnresolved` | Endpoints that could not be matched to taxonomy: `{ rawSource, rawTarget, reason, detail? }`. Typical `reason`: `missing_in_taxonomy`. |
-| `summary` | `{ resolvedEdgeCount, unresolvedEdgeCount, crossWingEdgeCount, intraWingEdgeCount }` |
+| `edgesResolved` | Merged **tunnel** + **taxonomy adjacency** edges resolved to taxonomy. Each edge includes `relationshipType`, optional `metadata`, plus `edgeId`, `sourceRoomId`, `targetRoomId`, `sourceWingId`, `targetWingId`, `crossWing`, `weight`. |
+| `edgesUnresolved` | Tunnel endpoints that could not be matched to taxonomy: `{ rawSource, rawTarget, reason, detail? }`. Typical `reason`: `missing_in_taxonomy`. |
+| `summary` | `{ resolvedEdgeCount, unresolvedEdgeCount, crossWingEdgeCount, intraWingEdgeCount, byType }` — `byType` maps `relationshipType` → count. |
+| `graphMeta` | `{ sources, truncatedSources, estimatedAvailable }` — see **`docs/GRAPH_SEMANTICS.md`**. |
 
-**Resolution model:** Tunnels come from MemPalace `find_tunnels`: room names that appear in **multiple wings**. For each unordered wing pair `(wa, wb)` on that room, one canonical edge is emitted between `makeRoomId(wa, room)` and `makeRoomId(wb, room)`. Intra-wing-only tunnel edges are not produced by this source; `intraWingEdgeCount` is reserved for future edge sources.
+**Tunnel resolution:** From Chroma via `find_tunnels`: room names that appear in **multiple wings**. For each unordered wing pair `(wa, wb)` on that room, one edge with `relationshipType: "tunnel"`.
+
+**Intra-wing edges:** `relationshipType: "taxonomy_adjacency"` — consecutive rooms in **per-wing sorted-by-name** order (inferred, structural; not topical).
 
 ### Legacy compatibility
 
 | Field | Description |
 | --- | --- |
-| `tunnels` | Adjacency-style map: `fromRoomId → { toRoomId: targetWingId }` for consumers that expected a `tunnels` object (previously often empty). |
-| `legacyGraphEdges` | `{ from, to, wing, sourceRoomId, targetRoomId, ... }[]` |
+| `tunnels` | Adjacency-style map: `fromRoomId → { toRoomId: targetWingId }` (includes merged edges for older consumers). |
+| `legacyGraphEdges` | `{ from, to, wing, sourceRoomId, targetRoomId, relationshipType?, ... }[]` |
 | `rooms` | Taxonomy rooms enriched with graph-derived fields where applicable: `neighborCount`, `crossWingNeighborCount`, `intraWingNeighborCount`, `isBridge`, `rankInWingByDrawers`. |
 
 ---
@@ -89,7 +93,7 @@ Combines:
 
 Single bundle for dashboards (aggregates several MCP calls).
 
-Includes: `status`, `wingsData`, `taxonomy`, `roomsData`, `wings`, `rooms`, `edgesResolved`, `edgesUnresolved`, `summary`, `stats`, `rawGraphStats`.
+Includes: `status`, `wingsData`, `taxonomy`, `roomsData`, `wings`, `rooms`, `edgesResolved`, `edgesUnresolved`, `summary`, `graphMeta`, `stats`, `rawGraphStats`.
 
 ### `stats` (overview summary)
 
@@ -97,8 +101,24 @@ Server-computed rollups:
 
 - `totalDrawers`, `totalWings`, `totalRooms`
 - `resolvedEdgeCount`, `unresolvedEdgeCount`, `crossWingEdgeCount`, `intraWingEdgeCount`
-- `roomsWithNoLinks` — taxonomy rooms with no incident resolved edge
-- `topWingsByDrawers`, `topConnectedRooms`, `topCrossLinkedWings` (pairwise wing counts for cross-wing edges)
+- `byRelationshipType` — mirror of `summary.byType`
+- `roomsWithNoLinks` — taxonomy rooms with no incident resolved edge (any type)
+- `bridgeRoomCount` — rooms with ≥1 cross-wing edge
+- `strongestIntraWingByTaxonomy` — wings ranked by `taxonomy_adjacency` edge count
+- `topWingsByDrawers`, `topConnectedRooms`, `topCrossLinkedWings` (pairwise wing counts for **cross-wing** edges)
+
+---
+
+## MCP: `mempalace_find_tunnels`
+
+Returns an object:
+
+- `tunnels` — list of tunnel room rows (same shape as before).
+- `truncated` — whether `limit` cut the list.
+- `limit` — applied cap, or `null` when unlimited.
+- `total_matching` — count before truncation.
+
+Omit `limit` (or use `0` / negative) for the **full** tunnel list. The HTTP bridge does not request a limit by default.
 
 ---
 
@@ -109,16 +129,17 @@ Server-computed rollups:
 - Continue using `taxonomy` tree and `wings` drawer map.
 - If you ignored `graphStats.tunnels` because it was empty: use `edgesResolved` / `summary` instead.
 - String keys like `wing/room` should be replaced by `roomId` via `makeRoomId(wing, room)` for rooms whose names contain `/`.
+- Raw MCP `mempalace_find_tunnels` **no longer returns a bare JSON array** — unwrap `.tunnels` or use the viz HTTP API.
 
 ### Frontend (`mempalace-viz`)
 
-- `loadPalaceData()` now loads `overviewBundle` and enriched `graph-stats`.
-- `graphEdges` are derived from `edgesResolved` when present.
-- Analytics (`insights.js`) resolve tunnel endpoints via `parseRoomId` for canonical ids.
+- `loadPalaceData()` loads `overviewBundle` and enriched `graph-stats`; `graph.graphMeta` and top-level `graphMeta` expose provenance.
+- `graphEdges` are derived from `edgesResolved` when present (`toLegacyGraphEdges` includes `relationshipType` when available).
+- Analytics (`insights.js`) use `summary.byType` when present.
 
 ---
 
 ## Assumptions
 
 - Taxonomy from `get_taxonomy` is the authority for which `(wing, room)` pairs exist.
-- `find_tunnels` is capped (e.g. top 50 tunnel rooms in MCP). Very large palaces may not list every tunnel in one response; counts are **consistent with that sample**, not necessarily global exhaustiveness.
+- When MCP applies a `limit` on `find_tunnels`, `graphMeta.truncatedSources` records it; otherwise the graph is complete relative to Chroma’s tunnel discovery pass.

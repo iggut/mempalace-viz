@@ -200,6 +200,7 @@ function buildGraphAnalyticsCanonical(roomsData, edgesResolved, graphSummary, ov
     resolvedEdgeCount: totalResolvedEdges,
     crossWingEdgeCount: crossFromSummary ?? crossWingEdgeCount,
     intraWingEdgeCount: intraFromSummary ?? intraWingEdgeCount,
+    byRelationshipType: graphSummary?.byType && typeof graphSummary.byType === 'object' ? { ...graphSummary.byType } : null,
     crossFraction,
     degreeByKey,
     crossByKey,
@@ -675,20 +676,20 @@ export function buildOverviewModel(ctx, viewId) {
     rooms: ctx.focusWing
       ? `Focused on “${ctx.focusWing}”: rooms orbit the wing. Click another wing in “all rooms” layout or use search.`
       : 'Each cluster is a wing; rooms orbit their wing. Click a room to inspect and center.',
-    graph: 'Force-directed tunnel graph. Edges show MemPalace relationships between rooms.',
+    graph: 'Force-directed graph. Edges combine tunnel links and same-wing taxonomy adjacency.',
   };
 
   let graphBlurb = '';
   if (!ga.hasResolvableEdges && graphEdgeCount === 0) {
-    graphBlurb = 'No tunnel edges loaded.';
+    graphBlurb = 'No graph edges loaded.';
   } else if (!ga.hasResolvableEdges) {
     graphBlurb =
-      'Tunnel metadata is present but endpoints could not be matched to taxonomy rooms (check naming).';
+      'Graph metadata is present but endpoints could not be matched to taxonomy rooms (check naming).';
   } else if (ga.crossFraction != null) {
     graphBlurb =
       ga.crossFraction >= 0.5
-        ? 'Cross-wing connections dominate the resolved tunnel edges.'
-        : 'Most resolved tunnel edges stay within the same wing.';
+        ? 'Cross-wing tunnel links account for a large share of resolved graph edges.'
+        : 'Resolved edges mix same-wing taxonomy adjacency with cross-wing tunnels.';
   }
 
   return {

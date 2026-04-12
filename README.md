@@ -65,7 +65,7 @@ open index.html      # macOS
 - `GET /api/overview` — Aggregated palace + graph summary in one payload (see `docs/API_CONTRACT.md`)
 - `GET /api/kg-stats` — Knowledge graph statistics
 
-Canonical ID semantics, resolved vs unresolved edges, and migration notes: **`docs/API_CONTRACT.md`**.
+Canonical ID semantics, relationship types, resolved vs unresolved edges, and migration notes: **`docs/API_CONTRACT.md`**, **`docs/GRAPH_SEMANTICS.md`**, **`docs/SOURCE_AUDIT.md`**.
 
 ## Configuration
 
