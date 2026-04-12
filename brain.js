@@ -60,9 +60,22 @@ class NodeManager {
         const cameraFrustum = new THREE.Frustum();
         cameraFrustum.setFromProjectionMatrix(new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
 
+        // Remove nodes that left the frustum
         this.activeNodes.forEach((node, id) => {
             if (node.kind === 'crystal' && !_nodeInFrustum(node, cameraFrustum)) {
                 this.invalidateNode(node);
+            }
+        });
+
+        // Revive nodes that re-entered the frustum
+        this.inactiveNodes.forEach((id) => {
+            const cached = this.cache.get(id);
+            if (cached) {
+                const mockPos = new THREE.Vector3(cached.baseX, cached.baseY, cached.baseZ);
+                const sphere = new THREE.Sphere(mockPos, cached.radius || 5);
+                if (cameraFrustum.intersectsSphere(sphere)) {
+                    this.reviveNode(id);
+                }
             }
         });
     }
@@ -71,8 +84,31 @@ class NodeManager {
         this.activeNodes.delete(node.id);
         this.inactiveNodes.add(node.id);
 
+        // Remove from global nodeMap and nodes array
+        const globalIndex = nodes.findIndex(n => n.id === node.id);
+        if (globalIndex !== -1) {
+            nodes.splice(globalIndex, 1);
+        }
+        delete nodeMap[node.id];
+
+        // Remove mesh from scene
         if (node.mesh.parent) {
             node.mesh.parent.remove(node.mesh);
+        }
+
+        // Remove associated links
+        const linkIndices = [];
+        links.forEach((link, idx) => {
+            if (link.source === node.id || link.target === node.id) {
+                if (link.line && link.line.parent) {
+                    link.line.parent.remove(link.line);
+                }
+                if (link.line) _disposeMesh(link.line);
+                linkIndices.push(idx);
+            }
+        });
+        for (let i = linkIndices.length - 1; i >= 0; i--) {
+            links.splice(linkIndices[i], 1);
         }
 
         // Keep data in memory
@@ -82,7 +118,8 @@ class NodeManager {
             baseX: node.baseX,
             baseY: node.baseY,
             baseZ: node.baseZ,
-            radius: node.radius
+            radius: node.radius,
+            mesh: node.mesh
         });
 
         _disposeMesh(node.mesh);
@@ -92,9 +129,44 @@ class NodeManager {
         const cached = this.cache.get(id);
         if (!cached) return null;
 
-        // This is a simplified version; in a real app, you'd call the original creation logic
-        // For now, we'll let the loadChunk handle revival by checking this manager
-        return cached;
+        this.inactiveNodes.delete(id);
+
+        // Re-create or re-attach the mesh
+        const mesh = cached.mesh;
+        if (!mesh.parent) {
+            graphGroup.add(mesh);
+        }
+
+        const nodeObj = {
+            id: id,
+            rawId: cached.data.id,
+            kind: cached.kind,
+            data: cached.data,
+            label: cached.data.title || cached.data.summary || 'Crystal',
+            mesh: mesh,
+            baseX: cached.baseX,
+            baseY: cached.baseY,
+            baseZ: cached.baseZ,
+            timelineY: computeTimelineY(cached.data, sceneData.crystals || []),
+            wing: cached.data.wing,
+            room: cached.data.room,
+            actor: cached.data.actor || 'user',
+            radius: cached.radius,
+            visualType: mesh.geometry.type
+        };
+
+        // Restore to global state
+        nodeMap[id] = nodeObj;
+        nodes.push(nodeObj);
+        this.activeNodes.set(id, nodeObj);
+
+        return nodeObj;
+    }
+
+    reset() {
+        this.activeNodes.clear();
+        this.inactiveNodes.clear();
+        this.cache.clear();
     }
 }
 
@@ -287,8 +359,12 @@ async function loadScopeOverview() {
   }
 }
 
+let _buildId = 0;
+
 function buildGraph(data) {
   clearGraph();
+  _buildId++;
+  const currentBuildId = _buildId;
   const { wings = [], crystals = [], entities = [], relations = [] } = data;
   const wingNodes = {};
   const roomNodes = {};
@@ -350,9 +426,13 @@ function buildGraph(data) {
   const CHUNK_SIZE = 40;
   const frustum = _calculateFrustum();
 
-  const loadCrystalsChunk = (startIndex) => {
+  const loadCrystalsChunk = (startIndex, buildId) => {
+    if (buildId !== _buildId) return; // Early return if stale build
+
     const chunk = crystals.slice(startIndex, startIndex + CHUNK_SIZE);
     chunk.forEach((crystal, idx) => {
+      if (buildId !== _buildId) return; // Check again before mutating state
+
       const ci = startIndex + idx;
       const roomKey = `${crystal.wing || "general"}:${crystal.room || "memories"}`;
       const roomNode = roomNodes[roomKey];
@@ -396,8 +476,13 @@ function buildGraph(data) {
     });
 
     if (startIndex + CHUNK_SIZE < crystals.length) {
-      requestAnimationFrame(() => loadCrystalsChunk(startIndex + CHUNK_SIZE));
+      requestAnimationFrame(() => loadCrystalsChunk(startIndex + CHUNK_SIZE, buildId));
     } else {
+        if (buildId !== _buildId) return; // Final check before finalization
+
+        // Build relations after all crystals are materialized
+        buildRelations(relations, currentBuildId);
+
         // Finalize after all crystals (including those that might be revived later)
         resolveNodeCollisions();
         applyVisibilityMode();
@@ -420,8 +505,27 @@ function buildGraph(data) {
     nodes.push(nodeMap[mesh.userData.id]);
   });
 
-  // 6. Create Relations
+  // 6. Relations will be built after crystals are loaded (see buildRelations function)
+
+  // Start chunked loading
+  if (crystals.length > 0) {
+      loadCrystalsChunk(0, currentBuildId);
+  } else {
+      buildRelations(relations, currentBuildId);
+      resolveNodeCollisions();
+      applyVisibilityMode();
+      fitCameraToGraph();
+      updateStats();
+      drawMinimap();
+  }
+}
+
+function buildRelations(relations, buildId) {
+  if (buildId !== _buildId) return; // Prevent stale builds from creating relations
+
   relations.forEach(relation => {
+    if (buildId !== _buildId) return; // Check again in loop
+
     const source = nodeMap[relation.source_type + ':' + relation.source_id], target = nodeMap[relation.target_type + ':' + relation.target_id];
     if (!source || !target) return;
     const color = RELATION_COLORS[relation.relation] || 0x8ca4ff;
@@ -430,17 +534,6 @@ function buildGraph(data) {
     graphGroup.add(line);
     links.push({ key: line.userData.key, source: source.id, target: target.id, relation: relation.relation, weight: relation.weight || 0.5, line, phase: (Math.abs(relation.source_id + relation.target_id) % 100) / 100 });
   });
-
-  // Start chunked loading
-  if (crystals.length > 0) {
-      loadCrystalsChunk(0);
-  } else {
-      resolveNodeCollisions();
-      applyVisibilityMode();
-      fitCameraToGraph();
-      updateStats();
-      drawMinimap();
-  }
 }
 
 function pickCrystalGeometry(crystal, radius, index) {
@@ -529,6 +622,7 @@ function clearGraph() {
   nodeMap = {};
   hoveredNode = null;
   selectedNode = null;
+  nodeManager.reset();
 }
 
 function passesFilters(node) {

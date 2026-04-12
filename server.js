@@ -543,6 +543,11 @@ class LRUCache {
     this.accessHistory.set(key, Date.now());
   }
 
+  delete(key) {
+    this.cache.delete(key);
+    this.accessHistory.delete(key);
+  }
+
   has(key) {
     return this.cache.has(key);
   }
@@ -835,6 +840,7 @@ const server = createServer(async (req, res) => {
         const room = inferRoomForStructuredKind(body.kind || body.memory_kind || '', finalText, actor, body.room || null);
         const content = structuredText || `[${actor}] ${finalText}`;
         result = await callMcp('mempalace_add_drawer', { wing, room, content, added_by: actor });
+        wingsCache.delete('wings-static');
         result = { message: `Ingested into ${wing}/${room}` };
         break;
       }
