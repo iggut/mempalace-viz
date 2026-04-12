@@ -27,15 +27,123 @@ def replace_function_block(content, func_name, new_implementation):
 
     brace_count = 1
     end_idx = -1
-    for i in range(brace_start + 1, len(content)):
-        if content[i] == '{':
-            brace_count += 1
-        elif content[i] == '}':
-            brace_count -= 1
 
-        if brace_count == 0:
-            end_idx = i + 1
-            break
+    # State machine for robust parsing
+    in_string = None  # None, '"', "'", or '`'
+    in_comment = None  # None, 'line', or 'block'
+    in_regex = False
+    escape_next = False
+
+    i = brace_start + 1
+    while i < len(content):
+        char = content[i]
+        prev_char = content[i-1] if i > 0 else ''
+        next_char = content[i+1] if i < len(content) - 1 else ''
+
+        # Handle escape sequences in strings
+        if in_string and escape_next:
+            escape_next = False
+            i += 1
+            continue
+
+        if in_string and char == '\\':
+            escape_next = True
+            i += 1
+            continue
+
+        # Handle string boundaries
+        if in_string:
+            if char == in_string:
+                # Check for template literal with ${...}
+                if in_string == '`':
+                    # Stay in template literal mode, but we need to track ${...} for brace counting
+                    in_string = None
+                else:
+                    in_string = None
+            elif in_string == '`' and char == '$' and next_char == '{':
+                # Entering ${...} in template literal - count braces here
+                pass
+            i += 1
+            continue
+
+        # Handle comment boundaries
+        if in_comment == 'line':
+            if char == '\n':
+                in_comment = None
+            i += 1
+            continue
+
+        if in_comment == 'block':
+            if char == '*' and next_char == '/':
+                in_comment = None
+                i += 2
+                continue
+            i += 1
+            continue
+
+        # Detect new comments
+        if char == '/' and next_char == '/':
+            in_comment = 'line'
+            i += 2
+            continue
+
+        if char == '/' and next_char == '*':
+            in_comment = 'block'
+            i += 2
+            continue
+
+        # Detect regex (simplified heuristic)
+        # Look for patterns like: = /, ( /, , /, return /, etc.
+        if char == '/' and not in_regex:
+            # Check if this could be a regex by looking at previous non-whitespace char
+            look_back = i - 1
+            while look_back >= 0 and content[look_back] in ' \t\n':
+                look_back -= 1
+            if look_back >= 0:
+                prev_significant = content[look_back]
+                # Common regex contexts
+                if prev_significant in '=,(;:!&|?':
+                    in_regex = True
+                    i += 1
+                    continue
+                # Check for 'return' keyword
+                if look_back >= 5 and content[look_back-5:look_back+1] == 'return':
+                    in_regex = True
+                    i += 1
+                    continue
+
+        # Exit regex
+        if in_regex and char == '/':
+            # Skip regex flags (g, i, m, etc.)
+            in_regex = False
+            i += 1
+            while i < len(content) and content[i] in 'gimsuvy':
+                i += 1
+            continue
+
+        if in_regex:
+            if char == '\\':
+                i += 2  # Skip escaped character
+                continue
+            i += 1
+            continue
+
+        # Detect string start
+        if char in '"\'`':
+            in_string = char
+            i += 1
+            continue
+
+        # Count braces only when not in strings, comments, or regex
+        if char == '{':
+            brace_count += 1
+        elif char == '}':
+            brace_count -= 1
+            if brace_count == 0:
+                end_idx = i + 1
+                break
+
+        i += 1
 
     if end_idx == -1:
         raise RuntimeError(f"Could not find closing brace for function {func_name} (start_idx={start_idx}, end_idx={end_idx})")
@@ -314,7 +422,9 @@ with open('brain.js', 'w') as f:
 with open('constellation.html', 'r') as f:
     html = f.read()
 
-styles = """
+# Only add styles if not already present (check for unique marker)
+if '.inspect-header-large' not in html:
+    styles = """    /* viz-styles */
     .inspect-header-large { font-size: 18px; margin-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 8px; }
     .inspect-content-scrollable {
       max-height: 300px; overflow-y: auto; background: rgba(0,0,0,0.2);
@@ -324,9 +434,12 @@ styles = """
     }
     .meta-time { font-size: 12px; color: rgba(255,255,255,0.6); }
 """
-html = html.replace('</style>', styles + '</style>')
-html = html.replace('<button class="btn" onclick="resetCamera()">🎯 Reset camera</button>',
-                    '<button class="btn" onclick="resetCamera()">🎯 Reset camera</button>\n        <button class="btn" onclick="playTemporalGrowth()">⏳ Play Growth</button>')
+    html = html.replace('</style>', styles + '</style>')
+
+# Only add Play Growth button if not already present
+if 'playTemporalGrowth()' not in html:
+    html = html.replace('<button class="btn" onclick="resetCamera()">🎯 Reset camera</button>',
+                        '<button class="btn" onclick="resetCamera()">🎯 Reset camera</button>\n        <button class="btn" onclick="playTemporalGrowth()">⏳ Play Growth</button>')
 
 with open('constellation.html', 'w') as f:
     f.write(html)
