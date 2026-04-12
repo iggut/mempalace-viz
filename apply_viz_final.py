@@ -175,7 +175,7 @@ content = replace_function_block(content, 'selectNode', """function selectNode(n
   if (node.kind === 'wing') {
     selectedScopeWings.clear(); selectedScopeWings.add(node.wing);
     loadGraph().then(() => {
-      const fresh = nodeMap.get(node.id) || nodeMap.get('wing:' + node.wing) || node;
+      const fresh = nodeMap[node.id] || nodeMap['wing:' + node.wing] || node;
       updateSceneBanner('Wing focus', fresh.wing);
       setOrbitDistance(120, fresh.mesh.position.clone());
       renderInspector(fresh);
@@ -186,7 +186,7 @@ content = replace_function_block(content, 'selectNode', """function selectNode(n
     selectedScopeWings.clear(); selectedScopeWings.add(node.wing);
     selectedScopeRooms.clear(); selectedScopeRooms.add(node.room);
     loadGraph().then(() => {
-      const fresh = nodeMap.get(node.id) || nodeMap.get(`room:${node.wing}:${node.room}`) || node;
+      const fresh = nodeMap[node.id] || nodeMap[`room:${node.wing}:${node.room}`] || node;
       updateSceneBanner('Room focus', fresh.wing + ' • ' + fresh.room);
       setOrbitDistance(60, fresh.mesh.position.clone());
       renderInspector(fresh);
