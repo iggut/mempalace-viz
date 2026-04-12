@@ -1,4 +1,5 @@
 import re
+import sys
 
 def replace_function_block(content, func_name, new_implementation):
     # Find the start of the function
@@ -17,14 +18,12 @@ def replace_function_block(content, func_name, new_implementation):
             break
 
     if start_idx == -1:
-        print(f"ERROR: Could not find function {func_name}")
-        return content
+        raise RuntimeError(f"Could not find function {func_name} (start_idx={start_idx})")
 
     # Find the matching closing brace
     brace_start = content.find('{', start_idx)
     if brace_start == -1:
-        print(f"ERROR: No opening brace for {func_name}")
-        return content
+        raise RuntimeError(f"Could not find opening brace for function {func_name} (start_idx={start_idx}, brace_start={brace_start})")
 
     brace_count = 1
     end_idx = -1
@@ -39,8 +38,7 @@ def replace_function_block(content, func_name, new_implementation):
             break
 
     if end_idx == -1:
-        print(f"ERROR: Could not find closing brace for {func_name}")
-        return content
+        raise RuntimeError(f"Could not find closing brace for function {func_name} (start_idx={start_idx}, end_idx={end_idx})")
 
     return content[:start_idx] + new_implementation + content[end_idx:]
 
@@ -179,6 +177,7 @@ content = replace_function_block(content, 'selectNode', """function selectNode(n
     loadGraph().then(() => {
       updateSceneBanner('Wing focus', node.wing);
       setOrbitDistance(120, node.mesh.position.clone());
+      renderInspector(node);
     });
   } else if (node.kind === 'room') {
     selectedScopeWings.clear(); selectedScopeWings.add(node.wing);
@@ -186,6 +185,7 @@ content = replace_function_block(content, 'selectNode', """function selectNode(n
     loadGraph().then(() => {
       updateSceneBanner('Room focus', node.wing + ' • ' + node.room);
       setOrbitDistance(60, node.mesh.position.clone());
+      renderInspector(node);
     });
   } else {
     focusedIds = computeNeighborhood(node.id, expansionDepth);
@@ -232,8 +232,10 @@ content = replace_function_block(content, 'setCameraPreset', """window.setCamera
       tweenCamera(selectedNode.mesh.position.clone().add(dir.multiplyScalar(22)), selectedNode.mesh.position.clone());
     } else { setOrbitDistance(22); }
   } else if (mode === 'timeline') {
-    timelineMode = true; document.getElementById('timelineBtn').textContent = 'Timeline: ON'; loadGraph();
-    tweenCamera(new THREE.Vector3(300, 100, 300), new THREE.Vector3(0, 0, 0));
+    timelineMode = true; document.getElementById('timelineBtn').textContent = 'Timeline: ON';
+    loadGraph().then(() => {
+      tweenCamera(new THREE.Vector3(300, 100, 300), new THREE.Vector3(0, 0, 0));
+    });
   }
 }""")
 
@@ -267,26 +269,34 @@ function tweenCamera(targetPos, targetLookAt, duration = 1200) {
   cameraTween = requestAnimationFrame(update);
 }
 
+let isPlayingTemporalGrowth = false;
+
 async function playTemporalGrowth() {
-  const crystalNodes = nodes.filter(n => n.kind === 'crystal').sort((a, b) => (a.data.created_at || 0) - (b.data.created_at || 0));
-  crystalNodes.forEach(n => n.mesh.scale.setScalar(0.0001));
-  updateSceneBanner('Temporal Growth', 'Playing memory sequence...');
-  for (let node of crystalNodes) {
-    const startTime = performance.now();
-    await new Promise(resolve => {
-      function animateGrowth() {
-        const elapsed = performance.now() - startTime;
-        const progress = Math.min(elapsed / 400, 1);
-        const t = 1 - Math.pow(1 - progress, 3);
-        node.mesh.scale.setScalar(Math.max(0.0001, t));
-        if (progress < 1) requestAnimationFrame(animateGrowth);
-        else resolve();
-      }
-      requestAnimationFrame(animateGrowth);
-    });
-    await new Promise(r => setTimeout(r, 100));
+  if (isPlayingTemporalGrowth) return;
+  isPlayingTemporalGrowth = true;
+  try {
+    const crystalNodes = nodes.filter(n => n.kind === 'crystal').sort((a, b) => (a.data.created_at || 0) - (b.data.created_at || 0));
+    crystalNodes.forEach(n => n.mesh.scale.setScalar(0.0001));
+    updateSceneBanner('Temporal Growth', 'Playing memory sequence...');
+    for (let node of crystalNodes) {
+      const startTime = performance.now();
+      await new Promise(resolve => {
+        function animateGrowth() {
+          const elapsed = performance.now() - startTime;
+          const progress = Math.min(elapsed / 400, 1);
+          const t = 1 - Math.pow(1 - progress, 3);
+          node.mesh.scale.setScalar(Math.max(0.0001, t));
+          if (progress < 1) requestAnimationFrame(animateGrowth);
+          else resolve();
+        }
+        requestAnimationFrame(animateGrowth);
+      });
+      await new Promise(r => setTimeout(r, 100));
+    }
+    updateSceneBanner('Growth Complete', crystalNodes.length + ' memories sequenced');
+  } finally {
+    isPlayingTemporalGrowth = false;
   }
-  updateSceneBanner('Growth Complete', crystalNodes.length + ' memories sequenced');
 }
 window.playTemporalGrowth = playTemporalGrowth;
 """
