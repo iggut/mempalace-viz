@@ -424,6 +424,62 @@ export function getRoomGraphSlice(roomKey, ga) {
 }
 
 /**
+ * Metrics for one room from an arbitrary canonical edge list (e.g. visibility-filtered).
+ * @param {string} roomKey
+ * @param {Array<{ sourceRoomId?: string, targetRoomId?: string, sourceWingId?: string, targetWingId?: string, relationshipType?: string }>} edges
+ */
+export function computeRoomIncidentSummary(roomKey, edges) {
+  if (!roomKey || !Array.isArray(edges)) {
+    return { degree: 0, crossWingLinks: 0, intraWingLinks: 0, byType: {}, relatedRoomKeys: [] };
+  }
+  let degree = 0;
+  let crossWingLinks = 0;
+  let intraWingLinks = 0;
+  /** @type {Record<string, number>} */
+  const byType = {};
+  const related = [];
+  for (const e of edges) {
+    const a = e.sourceRoomId;
+    const b = e.targetRoomId;
+    if (!a || !b) continue;
+    if (a !== roomKey && b !== roomKey) continue;
+    degree += 1;
+    const rt = e.relationshipType || 'tunnel';
+    byType[rt] = (byType[rt] || 0) + 1;
+    const cross = e.sourceWingId != null && e.targetWingId != null && e.sourceWingId !== e.targetWingId;
+    if (cross) crossWingLinks += 1;
+    else intraWingLinks += 1;
+    related.push(a === roomKey ? b : a);
+  }
+  return {
+    degree,
+    crossWingLinks,
+    intraWingLinks,
+    byType,
+    relatedRoomKeys: [...new Set(related)],
+  };
+}
+
+/**
+ * @param {string} wingId
+ * @param {Array<{ sourceRoomId?: string, targetRoomId?: string, sourceWingId?: string, targetWingId?: string, relationshipType?: string }>} edges
+ */
+export function computeWingEdgeTypeSummary(wingId, edges) {
+  /** @type {Record<string, number>} */
+  const byType = {};
+  let crossWingTouches = 0;
+  for (const e of edges || []) {
+    if (!e.sourceWingId || !e.targetWingId) continue;
+    const touches = e.sourceWingId === wingId || e.targetWingId === wingId;
+    if (!touches) continue;
+    const rt = e.relationshipType || 'tunnel';
+    byType[rt] = (byType[rt] || 0) + 1;
+    if (e.sourceWingId !== e.targetWingId) crossWingTouches += 1;
+  }
+  return { byType, crossWingTouches };
+}
+
+/**
  * @param {string} wingId
  * @param {Array<{ from: string, to: string, wing?: string }>} graphEdges legacy
  * @param {Record<string, unknown>} roomsData

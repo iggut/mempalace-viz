@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   buildGraphAnalytics,
+  computeRoomIncidentSummary,
+  computeWingEdgeTypeSummary,
   countEdgesWithUnresolvedEndpoints,
   formatPct,
   ordinal,
@@ -92,4 +94,44 @@ test('formatPct and ordinal', () => {
   assert.equal(formatPct(1, 0), null);
   assert.equal(ordinal(11), '11th');
   assert.equal(ordinal(3), '3rd');
+});
+
+test('computeRoomIncidentSummary counts by type and cross-wing', () => {
+  const edges = [
+    {
+      sourceRoomId: 'w/a',
+      targetRoomId: 'w2/b',
+      sourceWingId: 'w',
+      targetWingId: 'w2',
+      relationshipType: 'tunnel',
+    },
+    {
+      sourceRoomId: 'w/a',
+      targetRoomId: 'w/c',
+      sourceWingId: 'w',
+      targetWingId: 'w',
+      relationshipType: 'taxonomy_adjacency',
+    },
+  ];
+  const s = computeRoomIncidentSummary('w/a', edges);
+  assert.equal(s.degree, 2);
+  assert.equal(s.crossWingLinks, 1);
+  assert.equal(s.intraWingLinks, 1);
+  assert.equal(s.byType.tunnel, 1);
+  assert.equal(s.byType.taxonomy_adjacency, 1);
+});
+
+test('computeWingEdgeTypeSummary aggregates edges touching wing', () => {
+  const edges = [
+    {
+      sourceRoomId: 'w/a',
+      targetRoomId: 'w2/b',
+      sourceWingId: 'w',
+      targetWingId: 'w2',
+      relationshipType: 'tunnel',
+    },
+  ];
+  const s = computeWingEdgeTypeSummary('w', edges);
+  assert.equal(s.byType.tunnel, 1);
+  assert.equal(s.crossWingTouches, 1);
 });

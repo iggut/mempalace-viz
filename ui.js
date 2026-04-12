@@ -8,6 +8,8 @@ import {
   buildGraphAnalytics,
   buildOverviewModel,
   characterizeRoom,
+  computeRoomIncidentSummary,
+  computeWingEdgeTypeSummary,
   countEdgesWithUnresolvedEndpoints,
   countTotalRooms,
   formatPct,
@@ -20,11 +22,27 @@ import {
   sumDrawerCountsInWing,
   totalDrawersAcrossWings,
 } from './insights.js';
+import {
+  GRAPH_REL_FILTERS_LS_KEY,
+  buildGraphCompletenessHint,
+  collectRelationshipTypesFromEdges,
+  describeRoomRelationshipMix,
+  filterEdgesByRelationshipTypes,
+  formatRelationshipTypeCounts,
+  getRelationshipTypeMeta,
+  normalizeVisibleRelationshipTypes,
+  parseSavedGraphRelFilters,
+  sceneRelationshipFilterArg,
+  summarizeVisibleGraphEdges,
+} from './graph-relationships.js';
 import { assertValidState, normalizePersistedNavigation, sanitizeNavigationAgainstData } from './state-utils.js';
 import { devWarn, isDev } from './debug.js';
 
 const LS_KEY = 'mempalace-viz-explorer-v1';
 const PANEL_STATE_KEY = 'mempalace-viz-panel-state-v1';
+
+/** Enabled relationship types for graph view; normalized when palace data loads. */
+let graphRelEnabledTypes = new Set();
 
 const VIEWS = [
   { id: 'wings', title: 'Wings', hint: 'High-level structure by domain or project.' },
@@ -165,6 +183,10 @@ function buildPalaceContext() {
   const kgSummary = formatKgSummary(kg);
   const kgAvailable = !!(kg && typeof kg === 'object' && !kg.error);
 
+  const availableRelationshipTypes = collectRelationshipTypesFromEdges(graphEdges);
+  const visibleGraphSummary = summarizeVisibleGraphEdges(edgesResolved, graphRelEnabledTypes);
+  const graphFilterNarrowed = sceneRelationshipFilterArg(graphRelEnabledTypes, availableRelationshipTypes) !== null;
+
   return {
     status: st,
     wingsData,
@@ -184,7 +206,109 @@ function buildPalaceContext() {
     focusWing: appState.currentWing,
     overviewStats,
     graphMeta,
+    summary,
+    availableRelationshipTypes,
+    visibleGraphSummary,
+    graphFilterNarrowed,
   };
+}
+
+function loadGraphRelFiltersBlob() {
+  try {
+    const raw = localStorage.getItem(GRAPH_REL_FILTERS_LS_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function persistGraphRelFilters(enabledSet) {
+  try {
+    localStorage.setItem(GRAPH_REL_FILTERS_LS_KEY, JSON.stringify({ enabledTypes: [...(enabledSet || [])] }));
+  } catch {
+    /* ignore */
+  }
+}
+
+function syncGraphRelationshipFiltersWithData() {
+  const edges = dataBundle?.graphEdges || [];
+  const available = collectRelationshipTypesFromEdges(edges);
+  const blob = loadGraphRelFiltersBlob();
+  const saved = blob == null ? undefined : parseSavedGraphRelFilters(blob);
+  graphRelEnabledTypes = normalizeVisibleRelationshipTypes(saved, available);
+  persistGraphRelFilters(graphRelEnabledTypes);
+  sceneApi?.setRelationshipFilters(sceneRelationshipFilterArg(graphRelEnabledTypes, available));
+}
+
+function toggleRelationshipType(type) {
+  const available = collectRelationshipTypesFromEdges(dataBundle?.graphEdges || []);
+  if (!type || !available.includes(type)) return;
+  if (graphRelEnabledTypes.has(type)) graphRelEnabledTypes.delete(type);
+  else graphRelEnabledTypes.add(type);
+  persistGraphRelFilters(graphRelEnabledTypes);
+  sceneApi?.setRelationshipFilters(sceneRelationshipFilterArg(graphRelEnabledTypes, available));
+  renderInspector();
+  updateMetrics();
+  updateGraphViewChrome();
+}
+
+function updateGraphViewChrome() {
+  const wrap = $('graph-view-extras');
+  if (!wrap) return;
+  const show = appState.view === 'graph' && !!dataBundle && !dataBundle.error;
+  wrap.hidden = !show;
+  if (!show) return;
+
+  const ctx = buildPalaceContext();
+  const avail = ctx.availableRelationshipTypes || [];
+
+  const chips = $('graph-rel-chips');
+  if (chips) {
+    if (!avail.length) {
+      chips.innerHTML = '<span class="inspect-muted">No typed edges in this graph.</span>';
+    } else {
+      chips.innerHTML = avail
+        .map((t) => {
+          const meta = getRelationshipTypeMeta(t);
+          const on = graphRelEnabledTypes.has(t);
+          const swatch = t === 'tunnel' ? '#5b8cff' : t === 'taxonomy_adjacency' ? '#3dc9b8' : '#a78bfa';
+          return `<button type="button" class="rel-chip ${on ? 'is-on' : ''}" data-rel-type="${escapeHtml(t)}" title="${escapeHtml(meta.description)}">
+          <span class="rel-chip__swatch" style="background:${swatch}"></span>
+          <span>${escapeHtml(meta.shortLabel)}</span>
+        </button>`;
+        })
+        .join('');
+    }
+  }
+
+  const statusEl = $('graph-status-pill');
+  if (statusEl) {
+    const narrowed = ctx.graphFilterNarrowed;
+    const vis = ctx.visibleGraphSummary;
+    const hint = buildGraphCompletenessHint(ctx.graphMeta, ctx.summary);
+    const primary = narrowed
+      ? `Visible edges: ${formatNum(vis.visibleEdgeCount)} (filtered)`
+      : `Edges: ${formatNum(ctx.graphEdgeCount)} (all types)`;
+    statusEl.innerHTML = `<span class="graph-status-pill__primary">${escapeHtml(primary)}</span>${
+      hint
+        ? `<span class="graph-status-pill__hint">${escapeHtml(hint.length > 240 ? `${hint.slice(0, 240)}…` : hint)}</span>`
+        : ''
+    }`;
+  }
+
+  const legend = $('graph-legend-compact');
+  if (legend) {
+    legend.innerHTML = avail.length
+      ? avail
+          .map((t) => {
+            const m = getRelationshipTypeMeta(t);
+            const swatch = t === 'tunnel' ? '#5b8cff' : t === 'taxonomy_adjacency' ? '#3dc9b8' : '#a78bfa';
+            return `<div class="graph-legend-compact__row"><span class="legend-swatch" style="background:${swatch}"></span><span><strong>${escapeHtml(m.shortLabel)}</strong> — ${escapeHtml(m.description)}</span></div>`;
+          })
+          .join('')
+      : '';
+  }
 }
 
 function inspectSection(title, inner, emptyMessage) {
@@ -280,6 +404,13 @@ function renderOverviewInspector(ctx) {
     .filter(Boolean)
     .join(' ');
 
+  const graphExplorerNote =
+    appState.view === 'graph' && ctx.ga?.hasResolvableEdges
+      ? ctx.graphFilterNarrowed
+        ? `<div class="inspect-card inspect-card--hint" role="status"><strong>Graph filters active</strong><p class="inspect-muted inspect-muted--tight">Visible: ${formatNum(ctx.visibleGraphSummary.visibleEdgeCount)} edges (${formatRelationshipTypeCounts(ctx.visibleGraphSummary.visibleByType) || '—'}). Inspector “visible” rows match the scene. Footer and resolved totals above remain global.</p></div>`
+        : `<div class="inspect-card inspect-card--hint" role="status"><strong>Graph view</strong><p class="inspect-muted inspect-muted--tight">Brighter blue edges = cross-wing tunnels; softer teal = inferred same-wing adjacency. Narrow types in the left panel.</p></div>`
+      : '';
+
   return `
     <div class="inspect-stack">
       <div class="inspect-card inspect-card--hero">
@@ -287,6 +418,7 @@ function renderOverviewInspector(ctx) {
         <p class="inspect-lead">${escapeHtml(om.viewHint)}</p>
         <p class="inspect-muted">${escapeHtml(palaceBlurb)}</p>
       </div>
+      ${graphExplorerNote}
       ${inspectSection(
         'Palace summary',
         `
@@ -357,6 +489,23 @@ function renderWingInspector(ctx, wingName, _mode) {
     .join(' ');
 
   const tunnel = getWingTunnelSlice(wingName, graphEdges, roomsData, ctx.edgesResolved);
+  const edgesResolved = ctx.edgesResolved || [];
+  const filteredForWing = filterEdgesByRelationshipTypes(edgesResolved, graphRelEnabledTypes);
+  const wFull = computeWingEdgeTypeSummary(wingName, edgesResolved);
+  const wVis = computeWingEdgeTypeSummary(wingName, filteredForWing);
+  const wingRelNarrative = (() => {
+    if (!ctx.graphFilterNarrowed || !ga.hasResolvableEdges) return '';
+    const tf = wFull.byType.tunnel || 0;
+    const tv = wVis.byType.tunnel || 0;
+    const af = wFull.byType.taxonomy_adjacency || 0;
+    const av = wVis.byType.taxonomy_adjacency || 0;
+    if (tv > av * 2 && tf > 0) return 'With current filters, this wing shows mostly cross-wing tunnel links.';
+    if (av > tv * 2 && af > 0) return 'With current filters, visible links here are mostly inferred same-wing adjacency.';
+    if (wVis.crossWingTouches === 0 && tunnel.crossWingTouches > 0)
+      return 'Cross-wing tunnel links are hidden by filters; only same-wing structure may be visible.';
+    return '';
+  })();
+
   const externalBlock =
     tunnel.crossWingTouches > 0
       ? `
@@ -447,8 +596,14 @@ function renderWingInspector(ctx, wingName, _mode) {
       ${inspectSection(
         'Connections',
         ga.hasResolvableEdges
-          ? `${externalBlock || `<p class="inspect-empty">No cross-wing tunnel relationships touch this wing.</p>`}
-             ${topByCross ? `<p class="inspect-micro">Rooms with cross-wing links</p><div class="inspect-rows">${topByCross}</div>` : ''}`
+          ? `<div class="meta-block">
+          ${metaRow('Edge types (global)', formatRelationshipTypeCounts(wFull.byType) || '—')}
+          ${ctx.graphFilterNarrowed ? metaRow('Edge types (visible)', formatRelationshipTypeCounts(wVis.byType) || '—') : ''}
+          ${ctx.graphFilterNarrowed ? metaRow('Cross-wing touches (visible)', formatNum(wVis.crossWingTouches)) : ''}
+        </div>
+        ${wingRelNarrative ? `<p class="inspect-muted inspect-muted--tight">${escapeHtml(wingRelNarrative)}</p>` : ''}
+        ${externalBlock || `<p class="inspect-empty">No cross-wing tunnel relationships touch this wing.</p>`}
+             ${topByCross ? `<p class="inspect-micro">Rooms with cross-wing links (global)</p><div class="inspect-rows">${topByCross}</div>` : ''}`
           : '<p class="inspect-empty">No tunnel relationships could be resolved against taxonomy rooms.</p>',
       )}
       ${inspectSection(
@@ -499,6 +654,11 @@ function renderRoomInspector(ctx, wingName, roomName, _mode) {
   const roomKey = makeRoomId(wingName, roomName);
   const slice = getRoomGraphSlice(roomKey, ga);
   const graphAvailable = ga.hasResolvableEdges;
+  const edgesResolved = ctx.edgesResolved || [];
+  const filteredEdges = filterEdgesByRelationshipTypes(edgesResolved, graphRelEnabledTypes);
+  const fullRoomInc = computeRoomIncidentSummary(roomKey, edgesResolved);
+  const visRoomInc = computeRoomIncidentSummary(roomKey, filteredEdges);
+  const relMixNote = describeRoomRelationshipMix(visRoomInc.byType, fullRoomInc.byType);
 
   const insight = characterizeRoom(
     {
@@ -591,14 +751,20 @@ function renderRoomInspector(ctx, wingName, roomName, _mode) {
         graphAvailable && slice
           ? `
         <div class="meta-block">
-          ${metaRow('Tunnel degree', formatNum(slice.degree))}
-          ${metaRow('Cross-wing links', formatNum(slice.crossWingLinks))}
-          ${metaRow('Intra-wing links', formatNum(slice.intraWingLinks))}
+          ${metaRow(ctx.graphFilterNarrowed ? 'Degree (visible)' : 'Degree (global)', formatNum(visRoomInc.degree))}
+          ${ctx.graphFilterNarrowed ? metaRow('Degree (global)', formatNum(fullRoomInc.degree)) : ''}
+          ${metaRow(ctx.graphFilterNarrowed ? 'Cross-wing (visible)' : 'Cross-wing links', formatNum(visRoomInc.crossWingLinks))}
+          ${ctx.graphFilterNarrowed ? metaRow('Cross-wing (global)', formatNum(fullRoomInc.crossWingLinks)) : ''}
+          ${metaRow(ctx.graphFilterNarrowed ? 'Intra-wing (visible)' : 'Intra-wing links', formatNum(visRoomInc.intraWingLinks))}
+          ${ctx.graphFilterNarrowed ? metaRow('Intra-wing (global)', formatNum(fullRoomInc.intraWingLinks)) : ''}
+          ${metaRow('Relationship mix (global)', formatRelationshipTypeCounts(fullRoomInc.byType) || '—')}
+          ${ctx.graphFilterNarrowed ? metaRow('Relationship mix (visible)', formatRelationshipTypeCounts(visRoomInc.byType) || '—') : ''}
           ${metaRow('Median degree (all rooms)', slice.medianDegree != null ? formatNum(slice.medianDegree) : '—')}
         </div>
+        ${relMixNote ? `<p class="inspect-muted inspect-muted--tight">${escapeHtml(relMixNote)}</p>` : ''}
         <p class="inspect-muted inspect-muted--tight">${escapeHtml(bridgeNote)}</p>
-        ${relRoomRows ? `<p class="inspect-micro">Related rooms</p><div class="inspect-rows">${relRoomRows}</div>` : '<p class="inspect-empty">No tunnel neighbors found for this room.</p>'}
-        ${relWingRows ? `<p class="inspect-micro">Related wings</p><div class="inspect-rows">${relWingRows}</div>` : ''}
+        ${relRoomRows ? `<p class="inspect-micro">Related rooms (global graph)</p><div class="inspect-rows">${relRoomRows}</div>` : '<p class="inspect-empty">No tunnel neighbors found for this room.</p>'}
+        ${relWingRows ? `<p class="inspect-micro">Related wings (global graph)</p><div class="inspect-rows">${relWingRows}</div>` : ''}
         `
           : '<p class="inspect-empty">No tunnel relationships available for this room (unresolved graph or empty tunnels).</p>',
       )}
@@ -649,6 +815,8 @@ function selectRoomFromInspector(wing, room) {
   sceneApi?.centerOnNodeId(`room:${wing}:${room}`);
   setActiveViewButtons();
   $('view-helper-text').textContent = VIEWS.find((v) => v.id === 'rooms')?.hint || '';
+  updateGraphViewChrome();
+  updateMetrics();
   renderInspector();
   persistState();
 }
@@ -817,13 +985,18 @@ function updateMetrics() {
   if (foot) {
     const topW = ga.topCrossLinkedWings[0];
     const topR = ga.topConnectedRooms[0];
+    let line = '';
     if (ga.hasResolvableEdges && topW && topR) {
-      foot.textContent = `Most cross-linked wing: ${topW.wing} · Most connected room: ${topR.room} (${topR.wing})`;
+      line = `Most cross-linked wing: ${topW.wing} · Most connected room: ${topR.room} (${topR.wing})`;
     } else if (ga.hasResolvableEdges && topW) {
-      foot.textContent = `Most cross-linked wing: ${topW.wing}`;
+      line = `Most cross-linked wing: ${topW.wing}`;
     } else {
-      foot.textContent = 'Tunnel graph: resolve endpoints to see cross-wing stats.';
+      line = 'Tunnel graph: resolve endpoints to see cross-wing stats.';
     }
+    if (appState.view === 'graph' && ctx.graphFilterNarrowed) {
+      line = `Visible ${formatNum(ctx.visibleGraphSummary.visibleEdgeCount)} edges · ${line}`;
+    }
+    foot.textContent = line;
   }
 
   if (kg && typeof kg === 'object' && !kg.error) {
@@ -966,6 +1139,8 @@ function goAllWings() {
   syncScenePresentation();
   setActiveViewButtons();
   $('view-helper-text').textContent = VIEWS.find((v) => v.id === 'wings')?.hint || '';
+  updateGraphViewChrome();
+  updateMetrics();
   renderInspector();
   persistState();
 }
@@ -982,6 +1157,8 @@ function navigateToWing(wing) {
   syncScenePresentation();
   setActiveViewButtons();
   $('view-helper-text').textContent = VIEWS.find((v) => v.id === 'rooms')?.hint || '';
+  updateGraphViewChrome();
+  updateMetrics();
   renderInspector();
   persistState();
 }
@@ -1137,6 +1314,8 @@ function applyView(view) {
   syncScenePresentation();
   setActiveViewButtons();
   $('view-helper-text').textContent = VIEWS.find((v) => v.id === view)?.hint || '';
+  updateGraphViewChrome();
+  updateMetrics();
   renderInspector();
   persistState();
 }
@@ -1184,6 +1363,8 @@ function handleSceneClick(ud) {
     syncScenePresentation();
     setActiveViewButtons();
     $('view-helper-text').textContent = VIEWS.find((v) => v.id === 'rooms')?.hint || '';
+    updateGraphViewChrome();
+    updateMetrics();
     renderInspector();
     persistState();
     return;
@@ -1407,6 +1588,13 @@ function wireControls() {
   applyPanelLayoutFromStorage();
   wirePanelCollapse();
 
+  $('graph-view-extras')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-rel-type]');
+    if (!btn) return;
+    const t = btn.getAttribute('data-rel-type');
+    if (t) toggleRelationshipType(t);
+  });
+
   window.addEventListener('keydown', (e) => {
     if (isTypingTarget(e.target) && e.key !== 'Escape') return;
     if (e.key === 'Escape') {
@@ -1578,6 +1766,7 @@ async function loadData(preserveContext) {
 
   const focusWing = appState.view === 'rooms' ? appState.currentWing : null;
   sceneApi?.setView(appState.view, focusWing);
+  syncGraphRelationshipFiltersWithData();
   syncScenePresentation();
 
   sceneApi?.setAutoRotate($('toggle-rotate')?.checked ?? true);
@@ -1605,6 +1794,7 @@ async function loadData(preserveContext) {
     if (u) devWarn(`${u} tunnel edge(s) have unresolved endpoints vs taxonomy`);
   }
 
+  updateGraphViewChrome();
   renderInspector();
   persistState();
 

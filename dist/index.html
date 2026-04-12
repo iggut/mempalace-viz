@@ -4,8 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MemPalace 3D Visualization</title>
-    <script type="module" crossorigin src="/assets/index-CE80kM6F.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-C88MJAcM.css">
+    <script type="module" crossorigin src="/assets/index-CpvUUkzY.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-BTL0SBtU.css">
   </head>
   <body>
     <a href="#main-canvas-wrap" class="skip-link">Skip to 3D view</a>
@@ -62,6 +62,15 @@
             />
             <div id="view-buttons" class="view-seg" role="tablist" aria-label="Visualization view"></div>
             <p id="view-helper-text" class="hint-row" style="margin-top: 10px" role="status" aria-live="polite"></p>
+
+            <div id="graph-view-extras" class="graph-view-extras" hidden>
+              <div id="graph-status-pill" class="graph-status-pill" role="status" aria-live="polite"></div>
+              <div class="graph-rel-toolbar">
+                <span class="graph-rel-toolbar__label">Relationship types</span>
+                <div id="graph-rel-chips" class="rel-chips" aria-label="Toggle relationship types in the 3D graph"></div>
+              </div>
+              <div id="graph-legend-compact" class="graph-legend-compact"></div>
+            </div>
 
             <div class="control-row" style="margin-top: 14px">
               <label for="toggle-rotate"><input type="checkbox" id="toggle-rotate" checked /> Auto-rotate scene</label>

@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { makeRoomId } from './canonical.js';
+import { getEdgeRelationshipType, getStyleForRelationshipType } from './graph-relationships.js';
 
 /** @param {Array<{ type: string, wing?: string, name?: string }>} nodeList @param {object} edge @param {'from'|'to'} end */
 function findRoomNodeForEdge(nodeList, edge, end) {
@@ -92,6 +93,8 @@ export function createPalaceScene(container, options = {}) {
   let nodes = [];
   let linkObjects = [];
   let labelSprites = [];
+  /** @type {Map<string, number>} room scene node id → incident graph edge count (full graph) */
+  let graphRoomIncidentFull = new Map();
 
   let currentView = 'wings';
   let roomsFocusWing = null;
@@ -105,6 +108,8 @@ export function createPalaceScene(container, options = {}) {
     hoveredId: null,
     selectedId: null,
     pinActive: false,
+    /** @type {Set<string>|null} when null, all relationship types are shown */
+    relationshipTypesVisible: null,
   };
   let prefersReducedMotion =
     typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
@@ -154,6 +159,7 @@ export function createPalaceScene(container, options = {}) {
     nodes = [];
     linkObjects = [];
     labelSprites = [];
+    graphRoomIncidentFull = new Map();
     nodeRegistry.clear();
     labelByNodeId.clear();
   }
@@ -332,12 +338,18 @@ export function createPalaceScene(container, options = {}) {
     return parts.includes(q) || q.split(/\s+/).every((t) => t.length < 2 || parts.includes(t));
   }
 
+  function relationshipSetKey(s) {
+    if (s == null) return '';
+    return [...s].sort().join('\0');
+  }
+
   function presentationEqual(a, b) {
     return (
       a.searchQuery === b.searchQuery &&
       a.hoveredId === b.hoveredId &&
       a.selectedId === b.selectedId &&
-      a.pinActive === b.pinActive
+      a.pinActive === b.pinActive &&
+      relationshipSetKey(a.relationshipTypesVisible) === relationshipSetKey(b.relationshipTypesVisible)
     );
   }
 
@@ -346,6 +358,39 @@ export function createPalaceScene(container, options = {}) {
     const hid = presentation.hoveredId;
     const sid = presentation.selectedId;
     const pin = presentation.pinActive;
+    const relVis = presentation.relationshipTypesVisible;
+
+    /** @type {Map<string, number>} */
+    const visibleGraphIncidents = new Map();
+
+    linkObjects.forEach((lo) => {
+      const { line, fromId, toId, baseOpacity = 0.28, isGraphRelationship, relationshipType } = lo;
+      const mf = fromId ? nodeMatchesSearch(nodeRegistry.get(fromId)?.data || {}, q) : true;
+      const mt = toId ? nodeMatchesSearch(nodeRegistry.get(toId)?.data || {}, q) : true;
+      const searchOk = !q || (mf && mt);
+
+      let typeOk = true;
+      if (isGraphRelationship && relVis != null) {
+        const rt = relationshipType || 'tunnel';
+        typeOk = relVis.has(rt);
+      }
+
+      if (!searchOk) {
+        line.visible = true;
+        line.material.opacity = baseOpacity * 0.12;
+        return;
+      }
+      if (isGraphRelationship && !typeOk) {
+        line.visible = false;
+        return;
+      }
+      line.visible = true;
+      line.material.opacity = baseOpacity;
+      if (isGraphRelationship) {
+        if (fromId) visibleGraphIncidents.set(fromId, (visibleGraphIncidents.get(fromId) || 0) + 1);
+        if (toId) visibleGraphIncidents.set(toId, (visibleGraphIncidents.get(toId) || 0) + 1);
+      }
+    });
 
     nodeRegistry.forEach((entry, id) => {
       const { mesh, data, baseOpacity, baseEmissive } = entry;
@@ -360,6 +405,13 @@ export function createPalaceScene(container, options = {}) {
       if (id === sid) emissiveMult *= pin ? 1.85 : 1.65;
       if (id === sid && pin) opacityMult = Math.max(opacityMult, 0.85);
 
+      const fullG = graphRoomIncidentFull.get(id) || 0;
+      const visG = visibleGraphIncidents.get(id) || 0;
+      if (data.type === 'room' && fullG > 0 && visG === 0 && currentView === 'graph') {
+        opacityMult *= 0.32;
+        emissiveMult *= 0.55;
+      }
+
       mat.opacity = Math.min(1, baseOpacity * opacityMult);
       mat.emissiveIntensity = baseEmissive * emissiveMult;
 
@@ -373,13 +425,6 @@ export function createPalaceScene(container, options = {}) {
       if (!data) return;
       const match = nodeMatchesSearch(data, q);
       sprite.material.opacity = match ? (id === sid ? 1 : 0.92) : 0.2;
-    });
-
-    linkObjects.forEach(({ line, fromId, toId, baseOpacity = 0.28 }) => {
-      const mf = fromId ? nodeMatchesSearch(nodeRegistry.get(fromId)?.data || {}, q) : true;
-      const mt = toId ? nodeMatchesSearch(nodeRegistry.get(toId)?.data || {}, q) : true;
-      const show = !q || (mf && mt);
-      line.material.opacity = show ? baseOpacity : baseOpacity * 0.12;
     });
   }
 
@@ -612,6 +657,8 @@ export function createPalaceScene(container, options = {}) {
     const labelBudget = prefersReducedMotion ? 120 : 220;
     const hideLabels = nodeList.length > labelBudget;
 
+    graphRoomIncidentFull = new Map();
+
     simulateForceLayout(nodeList, graphEdges);
 
     nodeList.forEach((nodeData) => {
@@ -640,13 +687,21 @@ export function createPalaceScene(container, options = {}) {
       if (fromNode && toNode) {
         const fid = fromNode.type === 'wing' ? `wing:${fromNode.name}` : `room:${fromNode.wing}:${fromNode.name}`;
         const tid = toNode.type === 'wing' ? `wing:${toNode.name}` : `room:${toNode.wing}:${toNode.name}`;
-        createLink(
-          [fromNode.x, fromNode.y, fromNode.z],
-          [toNode.x, toNode.y, toNode.z],
-          CONFIG.accent.linkGraph,
-          0.38,
-          { fromId: fid, toId: tid, baseOpacity: 0.38 },
-        );
+        const rt = getEdgeRelationshipType(edge);
+        const st = getStyleForRelationshipType(rt);
+        if (fid.startsWith('room:')) {
+          graphRoomIncidentFull.set(fid, (graphRoomIncidentFull.get(fid) || 0) + 1);
+        }
+        if (tid.startsWith('room:')) {
+          graphRoomIncidentFull.set(tid, (graphRoomIncidentFull.get(tid) || 0) + 1);
+        }
+        createLink([fromNode.x, fromNode.y, fromNode.z], [toNode.x, toNode.y, toNode.z], st.color, st.opacity, {
+          fromId: fid,
+          toId: tid,
+          baseOpacity: st.opacity,
+          isGraphRelationship: true,
+          relationshipType: rt,
+        });
       }
     });
 
@@ -833,6 +888,11 @@ export function createPalaceScene(container, options = {}) {
     syncVisualPresentation();
   }
 
+  /** @param {Set<string>|null} typesSet — null = show all relationship types */
+  function setRelationshipFilters(typesSet) {
+    updatePresentation({ relationshipTypesVisible: typesSet });
+  }
+
   function clearPin() {
     presentation.selectedId = null;
     syncVisualPresentation();
@@ -891,5 +951,6 @@ export function createPalaceScene(container, options = {}) {
     setCallbacks(c) {
       Object.assign(callbacks, c);
     },
+    setRelationshipFilters,
   };
 }
