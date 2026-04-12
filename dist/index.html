@@ -4,8 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MemPalace 3D Visualization</title>
-    <script type="module" crossorigin src="/assets/index-CC9ugB2z.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-DZrmhc6C.css">
+    <script type="module" crossorigin src="/assets/index-g9bwHsIc.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-DKJA-Wm0.css">
   </head>
   <body>
     <a href="#main-canvas-wrap" class="skip-link">Skip to 3D view</a>
@@ -264,7 +264,9 @@
             <kbd>[</kbd> / <kbd>]</kbd> — With an active route: step hops on the highlighted path; otherwise step along connected
             rooms (graph) · <kbd>U</kbd> — Prior focus
           </li>
-          <li><strong>Route</strong> — Inspector (Graph, room): set start → “Route to here” or search result <strong>Route</strong>; 3D edges/nodes emphasize the path</li>
+          <li>
+            <strong>Route</strong> — Inspector (Graph, room): set start → “Route to here” or search result <strong>Route</strong>; the scene highlights that path on explicit edges from MCP. Routes never invent links. Stock MemPalace does not expose arbitrary graph persistence — see <code>docs/MCP_CONNECTION_CAPABILITIES.md</code>.
+          </li>
           <li><strong>Click</strong> empty canvas — Clear selection (unless pinned); subtle canvas cue</li>
           <li><strong>Breadcrumb</strong> — Navigate: All wings → wing → refocus room</li>
         </ul>

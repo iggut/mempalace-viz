@@ -82,7 +82,7 @@ test('computeGraphRoute handles no_path', () => {
   assert.equal(r.ok, false);
   assert.equal(r.reason, 'no_path');
   assert.equal(r.routingBasis, 'explicit_mcp_only');
-  assert.ok(String(r.message || '').includes('MCP tunnel'));
+  assert.ok(String(r.message || '').includes('explicit MCP path'));
 });
 
 test('computeGraphRoute includes routeMode and comparison for shortest', () => {

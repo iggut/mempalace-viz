@@ -63,6 +63,17 @@ import {
   sceneRoomIdFromRoomId,
   stepRouteIndex,
 } from './graph-route.js';
+import {
+  actionableWorkflowBullets,
+  graphInspectorNoEdgesNoticeLines,
+  graphInspectorUnresolvedEndpointsLines,
+  howConnectionsWorkBullets,
+  neighborStepDisconnectedMessage,
+  routeDisconnectedDetailLines,
+  roomWithNoTunnelNeighborsGuidance,
+  shouldShowHowConnectionsExplainer,
+  shouldShowTunnelWorkflowCard,
+} from './graph-guidance.js';
 
 const LS_KEY = 'mempalace-viz-explorer-v1';
 const ROUTE_MODE_LS_KEY = 'mempalace-viz-route-mode-v1';
@@ -74,7 +85,7 @@ let graphRelEnabledTypes = new Set();
 const VIEWS = [
   { id: 'wings', title: 'Wings', hint: 'High-level structure by domain or project.' },
   { id: 'rooms', title: 'Rooms', hint: 'Rooms within each wing, orbiting their parent.' },
-  { id: 'graph', title: 'Graph', hint: 'Tunnel relationships across rooms.' },
+  { id: 'graph', title: 'Graph', hint: 'Explicit MemPalace tunnel links (same room name across wings).' },
 ];
 
 /** Canonical app state — single source of truth for navigation & selection */
@@ -185,7 +196,8 @@ function graphViewInspectorNotice(ctx) {
       ? gs.edgesUnresolved.length
       : null;
   if (!edges) {
-    return `<div class="inspect-card inspect-card--hint" role="status"><strong>Graph view</strong><p class="inspect-muted inspect-muted--tight">No tunnel edges were returned from graph-stats. Wings and rooms may still appear if taxonomy is loaded. Edges come only from MemPalace tunnel discovery (<code>mempalace_find_tunnels</code>).</p></div>`;
+    const n = graphInspectorNoEdgesNoticeLines();
+    return `<div class="inspect-card inspect-card--hint" role="status"><strong>${escapeHtml(n.title)}</strong><p class="inspect-muted inspect-muted--tight">${escapeHtml(n.body)}</p></div>`;
   }
   if (!ctx.ga?.hasResolvableEdges) {
     const unresolved =
@@ -196,9 +208,48 @@ function graphViewInspectorNotice(ctx) {
             dataBundle?.roomsData,
             graph?.edgesUnresolved?.length ?? null,
           );
-    return `<div class="inspect-card inspect-card--hint" role="status"><strong>Graph view</strong><p class="inspect-muted inspect-muted--tight">Loaded ${edges} graph edge${edges === 1 ? '' : 's'}, but endpoints could not be fully matched to taxonomy rooms${unresolved ? ` (${unresolved} edge${unresolved === 1 ? '' : 's'} unresolved).` : '.'} Layout may be sparse.</p></div>`;
+    const n = graphInspectorUnresolvedEndpointsLines(edges, unresolved);
+    return `<div class="inspect-card inspect-card--hint" role="status"><strong>${escapeHtml(n.title)}</strong><p class="inspect-muted inspect-muted--tight">${escapeHtml(n.body)}</p></div>`;
   }
   return '';
+}
+
+/** Collapsible MCP-honest guidance in Graph overview (compact; keeps scene primary). */
+function graphGuidanceBlocksHtml(ctx) {
+  const palaceOk = !!dataBundle && !dataBundle.error;
+  if (
+    !shouldShowHowConnectionsExplainer({
+      viewIsGraph: appState.view === 'graph',
+      palaceDataOk: palaceOk,
+    })
+  ) {
+    return '';
+  }
+  const how = howConnectionsWorkBullets()
+    .map((b) => `<li>${escapeHtml(b)}</li>`)
+    .join('');
+  const showWorkflow = shouldShowTunnelWorkflowCard({
+    viewIsGraph: appState.view === 'graph',
+    hasResolvableGraph: !!ctx.ga?.hasResolvableEdges,
+  });
+  const workflow = showWorkflow
+    ? actionableWorkflowBullets()
+        .map((b) => `<li>${escapeHtml(b)}</li>`)
+        .join('')
+    : '';
+  return `
+    <details class="graph-guidance-details inspect-card inspect-card--hint">
+      <summary class="graph-guidance-details__summary">How connections work</summary>
+      <ul class="graph-guidance-list inspect-muted inspect-muted--tight">${how}</ul>
+    </details>
+    ${
+      showWorkflow
+        ? `<details class="graph-guidance-details inspect-card inspect-card--hint">
+      <summary class="graph-guidance-details__summary">Tunnels &amp; refresh</summary>
+      <ul class="graph-guidance-list inspect-muted inspect-muted--tight">${workflow}</ul>
+    </details>`
+        : ''
+    }`;
 }
 
 function shouldIgnoreHover() {
@@ -278,7 +329,7 @@ function graphStepNeighbor(delta) {
   const nbr = sceneApi.getGraphNeighbors(cur);
   const next = stepAdjacentRoom(nbr, cur, delta);
   if (!next) {
-    showToast('No connected rooms in this graph slice.');
+    showToast(neighborStepDisconnectedMessage());
     return;
   }
   if (next === cur) return;
@@ -514,7 +565,7 @@ function formatRouteInspectorSummary(res) {
     res.routeMode !== 'shortest' && res.totalCost != null ? ` · weighted cost ${res.totalCost}` : '';
   const mixLine = res.mixSummary ? `${res.mixSummary} ` : '';
   const compare = res.comparisonNote ? ` ${res.comparisonNote}` : '';
-  const basis = 'Structure: explicit MCP tunnel edges only.';
+  const basis = 'Uses only explicit edges from MemPalace MCP (what is visible in the scene).';
   return `${basis} Mode: ${modeLabel}${costBit}. ${res.hops} hop(s) on visible edges. ${mixLine}Types: ${mix}. ${br}${compare}`;
 }
 
@@ -655,7 +706,7 @@ function toggleRelationshipType(type) {
     recomputeGraphRoute();
     const res = graphRoute.result;
     if (res && !res.ok) {
-      showToast(res.message || 'Route no longer exists with these filters — adjust or clear route.');
+      showToast(res.message || 'No route on current visible edges — adjust filters or clear route.');
     }
   }
   renderInspector();
@@ -817,10 +868,8 @@ function renderOverviewInspector(ctx) {
     .join(' ');
 
   const graphExplorerNote =
-    appState.view === 'graph' && ctx.ga?.hasResolvableEdges
-      ? ctx.graphFilterNarrowed
-        ? `<div class="inspect-card inspect-card--hint" role="status"><strong>Graph filters active</strong><p class="inspect-muted inspect-muted--tight">Visible: ${formatNum(ctx.visibleGraphSummary.visibleEdgeCount)} edges (${formatRelationshipTypeCounts(ctx.visibleGraphSummary.visibleByType) || '—'}). Inspector “visible” rows match the scene. Footer and resolved totals above remain global.</p></div>`
-        : `<div class="inspect-card inspect-card--hint" role="status"><strong>Graph view</strong><p class="inspect-muted inspect-muted--tight">Edges are MCP tunnel links (same room name in multiple wings). See <code>docs/MCP_CONNECTION_CAPABILITIES.md</code> — stock MemPalace has no API to save arbitrary room-to-room links.</p></div>`
+    appState.view === 'graph' && ctx.ga?.hasResolvableEdges && ctx.graphFilterNarrowed
+      ? `<div class="inspect-card inspect-card--hint" role="status"><strong>Graph filters active</strong><p class="inspect-muted inspect-muted--tight">Visible: ${formatNum(ctx.visibleGraphSummary.visibleEdgeCount)} edges (${formatRelationshipTypeCounts(ctx.visibleGraphSummary.visibleByType) || '—'}). Inspector “visible” rows match the scene. Footer and resolved totals above remain global.</p></div>`
       : '';
 
   return `
@@ -830,6 +879,7 @@ function renderOverviewInspector(ctx) {
         <p class="inspect-lead">${escapeHtml(om.viewHint)}</p>
         <p class="inspect-muted">${escapeHtml(palaceBlurb)}</p>
       </div>
+      ${graphGuidanceBlocksHtml(ctx)}
       ${graphExplorerNote}
       ${inspectSection(
         'Palace summary',
@@ -1166,7 +1216,14 @@ function renderRoomInspector(ctx, wingName, roomName, _mode) {
           }
           ${
             graphRoute.result && !graphRoute.result.ok
-              ? `<p class="inspect-muted inspect-muted--tight" role="status">${escapeHtml(graphRoute.result.message || '')}</p>`
+              ? `<div class="route-fail-guidance" role="status">
+            <p class="inspect-muted inspect-muted--tight">${escapeHtml(graphRoute.result.message || '')}</p>
+            ${routeDisconnectedDetailLines(String(graphRoute.result.reason || ''), {
+              graphFilterNarrowed: graphRoute.result.graphFilterNarrowed ?? ctx.graphFilterNarrowed,
+            })
+              .map((line) => `<p class="inspect-muted inspect-muted--tight inspect-guidance-line">${escapeHtml(line)}</p>`)
+              .join('')}
+          </div>`
               : ''
           }`,
         )
@@ -1219,7 +1276,9 @@ function renderRoomInspector(ctx, wingName, roomName, _mode) {
         </div>
         ${relMixNote ? `<p class="inspect-muted inspect-muted--tight">${escapeHtml(relMixNote)}</p>` : ''}
         <p class="inspect-muted inspect-muted--tight">${escapeHtml(bridgeNote)}</p>
-        ${relRoomRows ? `<p class="inspect-micro">Related rooms (global graph)</p><div class="inspect-rows">${relRoomRows}</div>` : '<p class="inspect-empty">No tunnel neighbors found for this room.</p>'}
+        ${relRoomRows ? `<p class="inspect-micro">Related rooms (global graph)</p><div class="inspect-rows">${relRoomRows}</div>` : `<p class="inspect-empty">No tunnel neighbors found for this room.</p>${
+          graphAvailable ? `<p class="inspect-muted inspect-muted--tight">${escapeHtml(roomWithNoTunnelNeighborsGuidance())}</p>` : ''
+        }`}
         ${relWingRows ? `<p class="inspect-micro">Related wings (global graph)</p><div class="inspect-rows">${relWingRows}</div>` : ''}
         `
           : '<p class="inspect-empty">No tunnel relationships available for this room (unresolved graph or empty tunnels).</p>',
@@ -1507,6 +1566,9 @@ function updateMetrics() {
       line = `Most cross-linked wing: ${topW.wing}`;
     } else {
       line = 'Tunnel graph: resolve endpoints to see cross-wing stats.';
+    }
+    if (appState.view === 'graph') {
+      line = `Explicit MemPalace edges only (no inferred links) · ${line}`;
     }
     if (appState.view === 'graph' && ctx.graphFilterNarrowed) {
       line = `Visible ${formatNum(ctx.visibleGraphSummary.visibleEdgeCount)} edges · ${line}`;

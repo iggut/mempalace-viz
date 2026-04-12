@@ -10,6 +10,7 @@ import {
   getEdgeRelationshipType,
   sceneRelationshipFilterArg,
 } from './graph-relationships.js';
+import { routeFailureMessage } from './graph-guidance.js';
 import { resolveTunnelEndpoint } from './insights.js';
 import { parseRoomSceneId } from './graph-navigation.js';
 
@@ -512,19 +513,23 @@ export function computeGraphRoute(opts) {
   const start = String(startRoomId || '');
   const end = String(endRoomId || '');
   if (!start || !end) {
-    return { ok: false, reason: 'missing_endpoint', message: 'Choose a start room and a target room.' };
+    return { ok: false, reason: 'missing_endpoint', message: routeFailureMessage('missing_endpoint') };
   }
   const avail = availableRelTypes?.length
     ? availableRelTypes
     : collectRelationshipTypesFromEdges(graphEdges);
+  const filterArg = sceneRelationshipFilterArg(enabledRelTypes, avail);
+  const graphFilterNarrowed = filterArg !== null;
+  const rawEdgeCount = Array.isArray(graphEdges) ? graphEdges.length : 0;
   const routingEdges = getRoutingEdgesLikeScene(graphEdges, enabledRelTypes, avail);
   if (!routingEdges.length) {
     return {
       ok: false,
       reason: 'no_edges',
-      message: 'No graph edges match the current relationship filters — widen filters or refresh data.',
+      message: routeFailureMessage('no_edges', { graphFilterNarrowed: rawEdgeCount > 0 }),
       routingBasis: 'explicit_mcp_only',
       inferredLayerEnabled: false,
+      graphFilterNarrowed,
     };
   }
   const adjBfs = buildRoomAdjacency(routingEdges, roomsData);
@@ -533,9 +538,10 @@ export function computeGraphRoute(opts) {
     return {
       ok: false,
       reason: 'no_path',
-      message: 'No route through visible MCP tunnel edges — widen filters or pick different rooms.',
+      message: routeFailureMessage('no_path'),
       routingBasis: 'explicit_mcp_only',
       inferredLayerEnabled: false,
+      graphFilterNarrowed,
     };
   }
 
@@ -552,16 +558,22 @@ export function computeGraphRoute(opts) {
       return {
         ok: false,
         reason: 'no_path',
-        message: 'No route through visible MCP tunnel edges — widen filters or pick different rooms.',
+        message: routeFailureMessage('no_path'),
         routingBasis: 'explicit_mcp_only',
         inferredLayerEnabled: false,
+        graphFilterNarrowed,
       };
     }
   }
 
   const pathSceneIds = sp.pathRoomIds.map((rid) => sceneRoomNodeIdFromRoomId(rid)).filter(Boolean);
   if (pathSceneIds.length !== sp.pathRoomIds.length) {
-    return { ok: false, reason: 'id_map_failed', message: 'Could not map route to scene nodes.' };
+    return {
+      ok: false,
+      reason: 'id_map_failed',
+      message: routeFailureMessage('id_map_failed'),
+      graphFilterNarrowed,
+    };
   }
 
   const hops = Math.max(0, sp.pathRoomIds.length - 1);
@@ -596,6 +608,7 @@ export function computeGraphRoute(opts) {
     inferredLayerEnabled: false,
     usesInferredSegments,
     routingBasis: 'explicit_mcp_only',
+    graphFilterNarrowed,
   };
 }
 

@@ -264,8 +264,7 @@
             rooms (graph) · <kbd>U</kbd> — Prior focus
           </li>
           <li>
-            <strong>Route</strong> — Inspector (Graph, room): set start → “Route to here” or search result <strong>Route</strong>; 3D edges/nodes emphasize the path. By default routes use
-            <strong>MCP tunnel edges only</strong> (from <code>mempalace_find_tunnels</code>). There is no MemPalace MCP write API for arbitrary room-to-room links — see <code>docs/MCP_CONNECTION_CAPABILITIES.md</code>.
+            <strong>Route</strong> — Inspector (Graph, room): set start → “Route to here” or search result <strong>Route</strong>; the scene highlights that path on explicit edges from MCP. Routes never invent links. Stock MemPalace does not expose arbitrary graph persistence — see <code>docs/MCP_CONNECTION_CAPABILITIES.md</code>.
           </li>
           <li><strong>Click</strong> empty canvas — Clear selection (unless pinned); subtle canvas cue</li>
           <li><strong>Breadcrumb</strong> — Navigate: All wings → wing → refocus room</li>

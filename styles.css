@@ -1369,6 +1369,44 @@ kbd {
   background: rgba(15, 20, 25, 0.65);
 }
 
+/* Inspector — collapsible MCP graph guidance (compact; scene stays primary) */
+.graph-guidance-details {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+}
+
+.graph-guidance-details__summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  list-style: none;
+}
+
+.graph-guidance-details__summary::-webkit-details-marker {
+  display: none;
+}
+
+.graph-guidance-details[open] .graph-guidance-details__summary {
+  color: var(--text);
+  margin-bottom: 6px;
+}
+
+.graph-guidance-list {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
+.graph-guidance-list li {
+  margin-bottom: 4px;
+}
+
+.route-fail-guidance .inspect-guidance-line {
+  margin-top: 6px;
+}
+
 .graph-status-pill {
   display: flex;
   flex-direction: column;
