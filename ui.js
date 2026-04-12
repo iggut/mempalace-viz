@@ -1,7 +1,14 @@
 /**
  * MemPalace 3D — app state, navigation, inspector, persistence, scene sync.
  */
-import { loadPalaceData, getApiBase, wingExists, roomExists } from './api.js';
+import {
+  loadPalaceData,
+  getApiBase,
+  wingExists,
+  roomExists,
+  getPalaceCanonicalEdgesForView,
+  getPalaceLegacyGraphEdgesForView,
+} from './api.js';
 import { makeRoomId } from './canonical.js';
 import { createPalaceScene, wingColorFor } from './scene.js';
 import {
@@ -60,9 +67,14 @@ import {
 const LS_KEY = 'mempalace-viz-explorer-v1';
 const ROUTE_MODE_LS_KEY = 'mempalace-viz-route-mode-v1';
 const PANEL_STATE_KEY = 'mempalace-viz-panel-state-v1';
+/** Opt-in: merge inferred same-wing taxonomy_adjacency into graph + routes (off by default). */
+const INFERRED_LAYER_LS_KEY = 'mempalace-viz-inferred-layer-v1';
 
 /** Enabled relationship types for graph view; normalized when palace data loads. */
 let graphRelEnabledTypes = new Set();
+
+/** When true, optional inferred edges are merged into the edge list (still labeled inferred in UI). */
+let graphInferredLayerEnabled = false;
 
 const VIEWS = [
   { id: 'wings', title: 'Wings', hint: 'High-level structure by domain or project.' },
@@ -147,6 +159,30 @@ function persistRouteMode(mode) {
 
 graphRouteMode = loadRouteMode();
 
+function loadInferredLayerPref() {
+  try {
+    const raw = localStorage.getItem(INFERRED_LAYER_LS_KEY);
+    if (raw === 'true') return true;
+    if (raw === 'false') return false;
+    const j = JSON.parse(raw);
+    if (j === true) return true;
+    if (j === false) return false;
+  } catch {
+    /* ignore */
+  }
+  return false;
+}
+
+function persistInferredLayer(on) {
+  try {
+    localStorage.setItem(INFERRED_LAYER_LS_KEY, JSON.stringify(!!on));
+  } catch {
+    /* ignore */
+  }
+}
+
+graphInferredLayerEnabled = loadInferredLayerPref();
+
 const $ = (id) => document.getElementById(id);
 
 function isTypingTarget(el) {
@@ -171,14 +207,14 @@ function graphViewInspectorNotice(ctx) {
   if (appState.view !== 'graph') return '';
   const gs = dataBundle?.graphStats;
   const graph = dataBundle?.graph;
-  const edges = dataBundle?.graphEdges?.length ?? 0;
+  const edges = dataBundle?.graph?.edgesResolved?.length ?? dataBundle?.graphEdges?.length ?? 0;
   const unresolvedApi = Array.isArray(graph?.edgesUnresolved)
     ? graph.edgesUnresolved.length
     : Array.isArray(gs?.edgesUnresolved)
       ? gs.edgesUnresolved.length
       : null;
   if (!edges) {
-    return `<div class="inspect-card inspect-card--hint" role="status"><strong>Graph view</strong><p class="inspect-muted inspect-muted--tight">No graph edges were returned from graph-stats. Wings and rooms may still appear if taxonomy is loaded.</p></div>`;
+    return `<div class="inspect-card inspect-card--hint" role="status"><strong>Graph view</strong><p class="inspect-muted inspect-muted--tight">No explicit MCP tunnel edges were returned from graph-stats. Wings and rooms may still appear if taxonomy is loaded. Optional inferred adjacency is off by default.</p></div>`;
   }
   if (!ctx.ga?.hasResolvableEdges) {
     const unresolved =
@@ -383,15 +419,18 @@ function recomputeGraphRoute() {
     graphRoute.result = { ok: false, reason: 'bad_scene', message: 'Could not resolve route endpoints.' };
     return;
   }
-  const avail = collectRelationshipTypesFromEdges(dataBundle.graphEdges || []);
+  const avail = collectRelationshipTypesFromEdges(
+    getPalaceLegacyGraphEdgesForView(dataBundle.graph, graphInferredLayerEnabled),
+  );
   graphRoute.result = computeGraphRoute({
-    graphEdges: dataBundle.graphEdges || [],
+    graphEdges: getPalaceLegacyGraphEdgesForView(dataBundle.graph, graphInferredLayerEnabled),
     roomsData: dataBundle.roomsData || {},
     enabledRelTypes: graphRelEnabledTypes,
     availableRelTypes: avail,
     startRoomId: a,
     endRoomId: b,
     routeMode: graphRouteMode,
+    inferredLayerEnabled: graphInferredLayerEnabled,
   });
   if (graphRoute.result.ok && graphRoute.result.pathSceneIds?.length) {
     graphRoute.stepIndex = normalizeRouteStepIndex(graphRoute.stepIndex, graphRoute.result.pathSceneIds.length);
@@ -507,7 +546,15 @@ function formatRouteInspectorSummary(res) {
     res.routeMode !== 'shortest' && res.totalCost != null ? ` · weighted cost ${res.totalCost}` : '';
   const mixLine = res.mixSummary ? `${res.mixSummary} ` : '';
   const compare = res.comparisonNote ? ` ${res.comparisonNote}` : '';
-  return `Mode: ${modeLabel}${costBit}. ${res.hops} hop(s) on visible edges. ${mixLine}Types: ${mix}. ${br}${compare}`;
+  const basis =
+    res.routingBasis === 'explicit_plus_inferred'
+      ? 'Structure: explicit MCP + optional inferred layer.'
+      : 'Structure: explicit MCP tunnels only.';
+  const inferredWarn =
+    res.usesInferredSegments && res.routingBasis === 'explicit_plus_inferred'
+      ? ' Inferred-assisted: path includes taxonomy_adjacency segment(s).'
+      : '';
+  return `${basis}${inferredWarn} Mode: ${modeLabel}${costBit}. ${res.hops} hop(s) on visible edges. ${mixLine}Types: ${mix}. ${br}${compare}`;
 }
 
 function formatNum(n) {
@@ -531,10 +578,11 @@ function buildPalaceContext() {
   const st = dataBundle?.status;
   const wingsData = dataBundle?.wingsData || {};
   const roomsData = dataBundle?.roomsData || {};
-  const graphEdges = dataBundle?.graphEdges || [];
   const gs = dataBundle?.graphStats;
   const graph = dataBundle?.graph;
-  const edgesResolved = graph?.edgesResolved?.length ? graph.edgesResolved : gs?.edgesResolved || [];
+  const edgesExplicit = graph?.edgesResolved?.length ? graph.edgesResolved : gs?.edgesResolved || [];
+  const edgesForGraphView = getPalaceCanonicalEdgesForView(graph, graphInferredLayerEnabled);
+  const legacyEdgesForView = getPalaceLegacyGraphEdgesForView(graph, graphInferredLayerEnabled);
   const kg = dataBundle?.kgStats;
   const overviewStats = dataBundle?.overviewStats ?? dataBundle?.overviewBundle?.stats;
   const graphMeta =
@@ -556,27 +604,44 @@ function buildPalaceContext() {
   else if (gs?.tunnels && typeof gs.tunnels === 'object') tunnelNodeCount = Object.keys(gs.tunnels).length;
 
   const graphEdgeCount =
-    typeof summary?.resolvedEdgeCount === 'number' ? summary.resolvedEdgeCount : graphEdges.length;
-  const ga = buildGraphAnalytics(roomsData, {
-    edgesResolved,
-    graphEdges,
+    typeof summary?.resolvedEdgeCount === 'number' ? summary.resolvedEdgeCount : edgesExplicit.length;
+  const inferredEdgeCount =
+    typeof graph?.summaryInferred?.resolvedEdgeCount === 'number'
+      ? graph.summaryInferred.resolvedEdgeCount
+      : Array.isArray(graph?.edgesInferred)
+        ? graph.edgesInferred.length
+        : 0;
+
+  const gaPalace = buildGraphAnalytics(roomsData, {
+    edgesResolved: edgesExplicit,
+    graphEdges: getPalaceLegacyGraphEdgesForView(graph, false),
     graphSummary: summary ?? null,
     overviewStats: overviewStats ?? null,
   });
+  const gaGraph = buildGraphAnalytics(roomsData, {
+    edgesResolved: edgesForGraphView,
+    graphEdges: legacyEdgesForView,
+    graphSummary: null,
+    overviewStats: null,
+  });
+  const ga = appState.view === 'graph' ? gaGraph : gaPalace;
+
   const kgSummary = formatKgSummary(kg);
   const kgAvailable = !!(kg && typeof kg === 'object' && !kg.error);
 
-  const availableRelationshipTypes = collectRelationshipTypesFromEdges(graphEdges);
-  const visibleGraphSummary = summarizeVisibleGraphEdges(edgesResolved, graphRelEnabledTypes);
+  const availableRelationshipTypes = collectRelationshipTypesFromEdges(legacyEdgesForView);
+  const visibleGraphSummary = summarizeVisibleGraphEdges(edgesForGraphView, graphRelEnabledTypes);
   const graphFilterNarrowed = sceneRelationshipFilterArg(graphRelEnabledTypes, availableRelationshipTypes) !== null;
 
   return {
     status: st,
     wingsData,
     roomsData,
-    graphEdges,
+    graphEdges: legacyEdgesForView,
     graphStats: gs,
-    edgesResolved,
+    edgesResolved: edgesForGraphView,
+    edgesExplicit,
+    inferredEdgeCount,
     kgStats: kg,
     totalDrawers,
     wingCount,
@@ -584,6 +649,8 @@ function buildPalaceContext() {
     tunnelNodeCount,
     graphEdgeCount,
     ga,
+    gaPalace,
+    gaGraph,
     kgAvailable,
     kgSummary,
     focusWing: appState.currentWing,
@@ -615,17 +682,39 @@ function persistGraphRelFilters(enabledSet) {
 }
 
 function syncGraphRelationshipFiltersWithData() {
-  const edges = dataBundle?.graphEdges || [];
-  const available = collectRelationshipTypesFromEdges(edges);
+  const legacy = getPalaceLegacyGraphEdgesForView(dataBundle?.graph, graphInferredLayerEnabled);
+  const available = collectRelationshipTypesFromEdges(legacy);
   const blob = loadGraphRelFiltersBlob();
   const saved = blob == null ? undefined : parseSavedGraphRelFilters(blob);
   graphRelEnabledTypes = normalizeVisibleRelationshipTypes(saved, available);
+  if (!graphInferredLayerEnabled) {
+    graphRelEnabledTypes.delete('taxonomy_adjacency');
+  }
   persistGraphRelFilters(graphRelEnabledTypes);
   sceneApi?.setRelationshipFilters(sceneRelationshipFilterArg(graphRelEnabledTypes, available));
 }
 
+function setGraphInferredLayer(enabled) {
+  graphInferredLayerEnabled = !!enabled;
+  persistInferredLayer(graphInferredLayerEnabled);
+  if (!dataBundle || dataBundle.error) return;
+  syncGraphRelationshipFiltersWithData();
+  sceneApi?.setData({
+    wingsData: dataBundle.wingsData,
+    roomsData: dataBundle.roomsData,
+    graphEdges: getPalaceLegacyGraphEdgesForView(dataBundle.graph, graphInferredLayerEnabled),
+  });
+  if (graphRoute.startSceneId && graphRoute.targetSceneId) recomputeGraphRoute();
+  updateGraphViewChrome();
+  updateMetrics();
+  renderInspector();
+  persistState();
+}
+
 function toggleRelationshipType(type) {
-  const available = collectRelationshipTypesFromEdges(dataBundle?.graphEdges || []);
+  const available = collectRelationshipTypesFromEdges(
+    getPalaceLegacyGraphEdgesForView(dataBundle?.graph, graphInferredLayerEnabled),
+  );
   if (!type || !available.includes(type)) return;
   if (graphRelEnabledTypes.has(type)) graphRelEnabledTypes.delete(type);
   else graphRelEnabledTypes.add(type);
@@ -654,6 +743,15 @@ function updateGraphViewChrome() {
   const ctx = buildPalaceContext();
   const avail = ctx.availableRelationshipTypes || [];
 
+  const inferredCb = $('toggle-inferred-graph');
+  if (inferredCb) {
+    inferredCb.checked = graphInferredLayerEnabled;
+    inferredCb.disabled = !ctx.inferredEdgeCount;
+    inferredCb.title = ctx.inferredEdgeCount
+      ? 'Merge heuristic same-wing adjacency (taxonomy name order). Not MCP/API data.'
+      : 'No inferred adjacency edges in this palace payload.';
+  }
+
   const chips = $('graph-rel-chips');
   if (chips) {
     if (!avail.length) {
@@ -678,9 +776,16 @@ function updateGraphViewChrome() {
     const narrowed = ctx.graphFilterNarrowed;
     const vis = ctx.visibleGraphSummary;
     const hint = buildGraphCompletenessHint(ctx.graphMeta, ctx.summary);
+    const explicitLine = `${formatNum(ctx.graphEdgeCount)} explicit MCP (tunnel)`;
+    const inferredBit =
+      graphInferredLayerEnabled && ctx.inferredEdgeCount
+        ? ` · + ${formatNum(ctx.inferredEdgeCount)} inferred`
+        : ctx.inferredEdgeCount
+          ? ` · ${formatNum(ctx.inferredEdgeCount)} inferred available (off)`
+          : '';
     const primary = narrowed
-      ? `Visible edges: ${formatNum(vis.visibleEdgeCount)} (filtered)`
-      : `Edges: ${formatNum(ctx.graphEdgeCount)} (all types)`;
+      ? `Visible: ${formatNum(vis.visibleEdgeCount)} (filtered) · base ${explicitLine}${inferredBit}`
+      : `${explicitLine}${inferredBit}`;
     statusEl.innerHTML = `<span class="graph-status-pill__primary">${escapeHtml(primary)}</span>${
       hint
         ? `<span class="graph-status-pill__hint">${escapeHtml(hint.length > 240 ? `${hint.slice(0, 240)}…` : hint)}</span>`
@@ -879,7 +984,7 @@ function renderWingInspector(ctx, wingName, _mode) {
     .filter(Boolean)
     .join(' ');
 
-  const tunnel = getWingTunnelSlice(wingName, graphEdges, roomsData, ctx.edgesResolved);
+  const tunnel = getWingTunnelSlice(wingName, graphEdges, roomsData, ctx.edgesExplicit);
   const edgesResolved = ctx.edgesResolved || [];
   const filteredForWing = filterEdgesByRelationshipTypes(edgesResolved, graphRelEnabledTypes);
   const wFull = computeWingEdgeTypeSummary(wingName, edgesResolved);
@@ -1456,7 +1561,8 @@ function updateMetrics() {
   const summary = graph?.summary ?? gs?.summary;
   const kg = dataBundle?.kgStats;
   const ctx = buildPalaceContext();
-  const { wingsData, roomsData, totalDrawers, ga, overviewStats } = ctx;
+  const { wingsData, roomsData, totalDrawers, gaPalace, overviewStats } = ctx;
+  const ga = gaPalace;
 
   $('metric-drawers').textContent = formatNum(totalDrawers ?? 0);
   $('metric-wings').textContent = formatNum(
@@ -2253,6 +2359,10 @@ function wirePanelCollapse() {
 function wireControls() {
   $('btn-refresh')?.addEventListener('click', () => loadData(true));
 
+  $('toggle-inferred-graph')?.addEventListener('change', (e) => {
+    setGraphInferredLayer(/** @type {HTMLInputElement} */ (e.target).checked);
+  });
+
   $('btn-reset-cam')?.addEventListener('click', () => sceneApi?.resetCamera());
   $('btn-center')?.addEventListener('click', () => {
     if (appState.selected?.id) sceneApi?.centerOnNodeId(appState.selected.id);
@@ -2565,7 +2675,7 @@ async function loadData(preserveContext) {
   sceneApi?.setData({
     wingsData: dataBundle.wingsData,
     roomsData: dataBundle.roomsData,
-    graphEdges: dataBundle.graphEdges,
+    graphEdges: getPalaceLegacyGraphEdgesForView(dataBundle.graph, graphInferredLayerEnabled),
   });
 
   updateMetrics();

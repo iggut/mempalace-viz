@@ -28,7 +28,7 @@ export const RELATIONSHIP_TYPES = {
     label: 'Taxonomy adjacency',
     shortLabel: 'Adjacency',
     description:
-      'Inferred same-wing neighbor: consecutive rooms when sorted by name (structural chain, not topical similarity).',
+      'Optional inferred layer: same-wing neighbor from sorted room names (heuristic; not MCP/API). Off by default — enable the graph toggle first.',
   },
   unknown: {
     label: 'Other',

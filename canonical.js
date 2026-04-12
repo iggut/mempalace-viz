@@ -404,11 +404,9 @@ export function summarizeCanonicalEdgeList(edgesResolved, edgesUnresolved) {
 
 /**
  * @param {{ truncated?: boolean, limit?: number | null, totalMatching?: number | null, truncationHeuristic?: string | null }} tunnelDiscovery
- * @param {boolean} includesTaxonomyAdjacency
  */
-export function buildGraphProvenanceMeta(tunnelDiscovery, includesTaxonomyAdjacency) {
+export function buildGraphProvenanceMeta(tunnelDiscovery) {
   const sources = ['mempalace_find_tunnels'];
-  if (includesTaxonomyAdjacency) sources.push('taxonomy_adjacency');
 
   /** @type {Array<{ source: string, limit?: number | null, totalMatching?: number | null, truncated?: boolean, inferred?: boolean }>} */
   const truncatedSources = [];
@@ -439,7 +437,8 @@ export function buildGraphProvenanceMeta(tunnelDiscovery, includesTaxonomyAdjace
 }
 
 /**
- * Tunnel edges (from Chroma cross-wing room names) + intra-wing taxonomy adjacency.
+ * Explicit MCP tunnel edges plus optional inferred same-wing taxonomy adjacency (separate arrays).
+ * Default graph/routing should use {@link edgesResolved} only; inferred edges are opt-in in the UI.
  * @param {object} taxonomyRaw — MCP taxonomy payload
  * @param {unknown} tunnelsRaw — MCP find_tunnels array or envelope
  */
@@ -447,25 +446,33 @@ export function buildEnrichedGraphFromTaxonomyAndTunnels(taxonomyRaw, tunnelsRaw
   const disc = parseTunnelDiscoveryResult(tunnelsRaw);
   const { taxonomy, roomsData, rooms } = parseTaxonomyCanonical(taxonomyRaw);
   const tunnelBuilt = buildCanonicalEdgesFromTunnels(disc.tunnels, taxonomy);
-  const intra = buildTaxonomyAdjacencyEdges(roomsData);
-  const edgesResolved = mergeCanonicalGraphEdges(tunnelBuilt.edgesResolved, intra);
+  const edgesInferred = buildTaxonomyAdjacencyEdges(roomsData);
+  const edgesResolved = tunnelBuilt.edgesResolved;
   const summary = summarizeCanonicalEdgeList(edgesResolved, tunnelBuilt.edgesUnresolved);
-  const graphMeta = buildGraphProvenanceMeta(
-    {
-      truncated: disc.truncated,
-      limit: disc.limit,
-      totalMatching: disc.totalMatching,
-      truncationHeuristic: disc.truncationHeuristic,
-    },
-    intra.length > 0,
-  );
+  const summaryInferred = summarizeCanonicalEdgeList(edgesInferred, []);
+  const graphMeta = buildGraphProvenanceMeta({
+    truncated: disc.truncated,
+    limit: disc.limit,
+    totalMatching: disc.totalMatching,
+    truncationHeuristic: disc.truncationHeuristic,
+  });
+  graphMeta.inferredLayer = {
+    relationshipType: 'taxonomy_adjacency',
+    edgeCount: edgesInferred.length,
+    label: 'Inferred taxonomy adjacency',
+    description:
+      'Heuristic same-wing links (consecutive rooms in sorted name order). Not from MCP/API — off by default.',
+    defaultEnabled: false,
+  };
   return {
     taxonomy,
     roomsData,
     rooms,
     edgesResolved,
+    edgesInferred,
     edgesUnresolved: tunnelBuilt.edgesUnresolved,
     summary,
+    summaryInferred,
     graphMeta,
     tunnelDiscovery: disc,
   };
@@ -558,9 +565,10 @@ export function enrichRoomsWithGraphMetrics(rooms, metrics) {
 /**
  * @param {Record<string, number>} wingsData
  * @param {RoomRecord[]} rooms
- * @param {CanonicalEdge[]} edgesResolved
+ * @param {CanonicalEdge[]} edgesResolved — explicit MCP (e.g. tunnel) edges only
  * @param {{ resolvedEdgeCount: number, unresolvedEdgeCount: number, crossWingEdgeCount: number, intraWingEdgeCount: number }} graphSummary
  * @param {{ total_drawers?: number }} [status]
+ * @param {CanonicalEdge[]} [edgesInferred] — optional; used only for `strongestIntraWingByTaxonomy` (inferred stats), not connectivity
  */
 /**
  * Enrich MCP `mempalace_list_rooms` JSON with canonical ids (wing filter required for stable ids).
@@ -590,7 +598,7 @@ export function enrichRoomsListPayload(mcpResult, wingParam) {
   return out;
 }
 
-export function buildOverviewSummary(wingsData, rooms, edgesResolved, graphSummary, status = {}) {
+export function buildOverviewSummary(wingsData, rooms, edgesResolved, graphSummary, status = {}, edgesInferred = []) {
   const totalDrawers =
     typeof status.total_drawers === 'number'
       ? status.total_drawers
@@ -645,7 +653,7 @@ export function buildOverviewSummary(wingsData, rooms, edgesResolved, graphSumma
   bridgeRoomIds.sort();
 
   const intraByWing = new Map();
-  for (const e of edgesResolved) {
+  for (const e of edgesInferred || []) {
     if (e.relationshipType !== 'taxonomy_adjacency' || e.sourceWingId !== e.targetWingId) continue;
     const w = e.sourceWingId;
     intraByWing.set(w, (intraByWing.get(w) || 0) + 1);

@@ -732,20 +732,21 @@ export function buildOverviewModel(ctx, viewId) {
     rooms: ctx.focusWing
       ? `Focused on “${ctx.focusWing}”: rooms orbit the wing. Click another wing in “all rooms” layout or use search.`
       : 'Each cluster is a wing; rooms orbit their wing. Click a room to inspect and center.',
-    graph: 'Force-directed graph. Edges combine tunnel links and same-wing taxonomy adjacency.',
+    graph:
+      'Force-directed graph. Default edges are explicit MCP tunnel links; optional inferred same-wing adjacency is off by default.',
   };
 
   let graphBlurb = '';
   if (!ga.hasResolvableEdges && graphEdgeCount === 0) {
-    graphBlurb = 'No graph edges loaded.';
+    graphBlurb = 'No explicit MCP tunnel edges loaded.';
   } else if (!ga.hasResolvableEdges) {
     graphBlurb =
       'Graph metadata is present but endpoints could not be matched to taxonomy rooms (check naming).';
   } else if (ga.crossFraction != null) {
     graphBlurb =
       ga.crossFraction >= 0.5
-        ? 'Cross-wing tunnel links account for a large share of resolved graph edges.'
-        : 'Resolved edges mix same-wing taxonomy adjacency with cross-wing tunnels.';
+        ? 'Cross-wing tunnel links account for a large share of explicit resolved edges.'
+        : 'Explicit resolved edges mix cross-wing tunnels with same-wing structure (see relationship toggles).';
   }
 
   return {

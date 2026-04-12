@@ -845,7 +845,7 @@ const server = createServer(async (req, res) => {
           callMcp('mempalace_find_tunnels'),
         ]);
         const enriched = buildEnrichedGraphFromTaxonomyAndTunnels(taxonomyRaw, tunnelsResult);
-        const { edgesResolved, edgesUnresolved, summary, graphMeta, rooms: taxonomyRooms } = enriched;
+        const { edgesResolved, edgesInferred, edgesUnresolved, summary, graphMeta, rooms: taxonomyRooms } = enriched;
         const metrics = computeRoomGraphMetrics(edgesResolved);
         const roomsEnriched = enrichRoomsWithGraphMetrics(taxonomyRooms, metrics);
         const legacyGraphEdges = toLegacyGraphEdges(edgesResolved);
@@ -859,8 +859,10 @@ const server = createServer(async (req, res) => {
           graphContractVersion: 2,
           rooms: roomsEnriched,
           edgesResolved,
+          edgesInferred,
           edgesUnresolved,
           summary,
+          summaryInferred: enriched.summaryInferred,
           graphMeta,
           legacyGraphEdges,
           tunnels: tunnelsAdj,
@@ -883,11 +885,12 @@ const server = createServer(async (req, res) => {
           wings,
           roomsData,
           edgesResolved,
+          edgesInferred,
           edgesUnresolved,
           summary,
           graphMeta,
         } = enriched;
-        const stats = buildOverviewSummary(wingsData, rooms, edgesResolved, summary, status);
+        const stats = buildOverviewSummary(wingsData, rooms, edgesResolved, summary, status, edgesInferred);
         result = {
           graphContractVersion: 2,
           status,
@@ -897,8 +900,10 @@ const server = createServer(async (req, res) => {
           wings,
           rooms,
           edgesResolved,
+          edgesInferred,
           edgesUnresolved,
           summary,
+          summaryInferred: enriched.summaryInferred,
           graphMeta,
           stats,
           rawGraphStats,

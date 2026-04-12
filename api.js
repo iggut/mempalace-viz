@@ -3,9 +3,28 @@
  * Uses same-origin relative URLs when served from the Node server.
  */
 
-import { normalizeWingsPayload, parseTaxonomyCanonical, toLegacyGraphEdges } from './canonical.js';
+import { mergeCanonicalGraphEdges, normalizeWingsPayload, parseTaxonomyCanonical, toLegacyGraphEdges } from './canonical.js';
 
 export { normalizeWingsPayload };
+
+/**
+ * Canonical edges for graph/routing: explicit MCP tunnels, optionally merged with inferred taxonomy adjacency.
+ * @param {{ edgesResolved?: unknown[], edgesInferred?: unknown[] }|null|undefined} graph
+ * @param {boolean} inferredLayerEnabled
+ */
+export function getPalaceCanonicalEdgesForView(graph, inferredLayerEnabled) {
+  const ex = Array.isArray(graph?.edgesResolved) ? graph.edgesResolved : [];
+  const inf = Array.isArray(graph?.edgesInferred) ? graph.edgesInferred : [];
+  if (inferredLayerEnabled && inf.length) return mergeCanonicalGraphEdges(ex, inf);
+  return ex;
+}
+
+/**
+ * Legacy-shaped graph edges for the scene and route helpers (same merge rule as {@link getPalaceCanonicalEdgesForView}).
+ */
+export function getPalaceLegacyGraphEdgesForView(graph, inferredLayerEnabled) {
+  return toLegacyGraphEdges(getPalaceCanonicalEdgesForView(graph, inferredLayerEnabled));
+}
 
 export function getApiBase() {
   if (typeof window !== 'undefined' && window.location?.protocol && window.location.protocol !== 'file:') {
@@ -84,8 +103,11 @@ export function normalizePalaceBundle(parts) {
   const { taxonomy, roomsData, rooms, wings } = parseTaxonomyCanonical(taxonomyRaw);
 
   const edgesResolved = Array.isArray(graphStats?.edgesResolved) ? graphStats.edgesResolved : [];
+  const edgesInferred = Array.isArray(graphStats?.edgesInferred) ? graphStats.edgesInferred : [];
   const edgesUnresolved = Array.isArray(graphStats?.edgesUnresolved) ? graphStats.edgesUnresolved : [];
   const summary = graphStats?.summary && typeof graphStats.summary === 'object' ? graphStats.summary : null;
+  const summaryInferred =
+    graphStats?.summaryInferred && typeof graphStats.summaryInferred === 'object' ? graphStats.summaryInferred : null;
 
   /** @type {Array<{ from: string, to: string, wing?: string, sourceRoomId?: string, targetRoomId?: string }>} */
   let graphEdges = [];
@@ -120,8 +142,10 @@ export function normalizePalaceBundle(parts) {
     graphStats,
     graph: {
       edgesResolved,
+      edgesInferred,
       edgesUnresolved,
       summary,
+      summaryInferred,
       graphMeta,
     },
     graphEdges,
@@ -160,7 +184,7 @@ export async function loadPalaceData() {
       rooms: [],
       wings: [],
       graphStats: null,
-      graph: { edgesResolved: [], edgesUnresolved: [], summary: null, graphMeta: null },
+      graph: { edgesResolved: [], edgesInferred: [], edgesUnresolved: [], summary: null, summaryInferred: null, graphMeta: null },
       graphEdges: [],
       overviewBundle: null,
       overviewStats: null,

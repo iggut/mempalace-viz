@@ -111,7 +111,7 @@ test('buildTaxonomyAdjacencyEdges chains sorted room names within a wing', () =>
   assert.equal(edges[0].metadata?.inferred, true);
 });
 
-test('buildEnrichedGraphFromTaxonomyAndTunnels merges tunnels and taxonomy adjacency', () => {
+test('buildEnrichedGraphFromTaxonomyAndTunnels keeps explicit tunnels separate from inferred adjacency', () => {
   const taxonomyRaw = {
     taxonomy: {
       wing_a: { shared: 1, z: 1 },
@@ -121,9 +121,14 @@ test('buildEnrichedGraphFromTaxonomyAndTunnels merges tunnels and taxonomy adjac
   const tunnels = [{ room: 'shared', wings: ['wing_a', 'wing_b'], count: 2 }];
   const g = buildEnrichedGraphFromTaxonomyAndTunnels(taxonomyRaw, tunnels);
   assert.ok(g.summary.byType.tunnel >= 1);
-  assert.ok(g.summary.byType.taxonomy_adjacency >= 1);
-  assert.ok(g.edgesResolved.length >= 2);
+  assert.equal(g.summary.byType.taxonomy_adjacency, undefined);
+  assert.ok(g.summaryInferred.byType.taxonomy_adjacency >= 1);
+  assert.ok(g.edgesResolved.length >= 1);
+  assert.ok(g.edgesInferred.length >= 1);
   assert.ok(g.graphMeta.sources.includes('mempalace_find_tunnels'));
+  assert.ok(!g.graphMeta.sources.includes('taxonomy_adjacency'));
+  assert.equal(g.graphMeta.inferredLayer?.relationshipType, 'taxonomy_adjacency');
+  assert.equal(g.graphMeta.inferredLayer?.defaultEnabled, false);
 });
 
 test('buildOverviewSummary aggregates counts', () => {
