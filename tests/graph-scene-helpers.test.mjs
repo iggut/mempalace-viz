@@ -2,12 +2,22 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   baseLabelScoreForGraphNode,
+  buildGraphRoomLabelCandidateSet,
+  buildGraphRoomNeighborMap,
   computeDensityMetrics,
   computeGraphFocusCameraDistance,
   computeVisibleLabelIds,
   countGraphIncidentsByRoomNodeId,
   edgeEmphasisOpacityMult,
+  effectiveLabelBudgetForCamera,
+  focusNodeDistanceDimMult,
+  focusWingIdFromSceneSelection,
+  framingTargetOffset,
   graphSceneNodeIdForLayoutNode,
+  labelOpacityDistanceFactor,
+  labelSpriteScaleMultiplier,
+  neighborIdsForFocus,
+  normalizeCameraDistanceForLabels,
   hash01,
   maxRadiusFromFocus,
   normalizeLayoutParams,
@@ -133,4 +143,106 @@ test('countGraphIncidentsByRoomNodeId', () => {
 test('graphSceneNodeIdForLayoutNode', () => {
   assert.equal(graphSceneNodeIdForLayoutNode({ type: 'wing', name: 'w' }), 'wing:w');
   assert.equal(graphSceneNodeIdForLayoutNode({ type: 'room', wing: 'w', name: 'r' }), 'room:w:r');
+});
+
+test('normalizeCameraDistanceForLabels is clamped', () => {
+  assert.equal(normalizeCameraDistanceForLabels(10, 40), 0);
+  assert.ok(normalizeCameraDistanceForLabels(120, 40) > 0.5);
+  assert.equal(normalizeCameraDistanceForLabels(500, 40), 1);
+});
+
+test('effectiveLabelBudgetForCamera drops when zoomed out', () => {
+  const b = 130;
+  const zoomedIn = effectiveLabelBudgetForCamera(b, 0.95, 2);
+  const zoomedOut = effectiveLabelBudgetForCamera(b, 0.08, 2);
+  assert.ok(zoomedIn >= zoomedOut);
+  assert.ok(zoomedOut >= 8);
+});
+
+test('computeVisibleLabelIds promotes neighbors and wing context', () => {
+  const entries = [
+    { id: 'room:w:a', baseScore: 100 },
+    { id: 'room:w:b', baseScore: 120 },
+    { id: 'room:x:c', baseScore: 200 },
+  ];
+  const neighbors = new Set(['room:w:b']);
+  const withN = computeVisibleLabelIds(entries, {
+    selectedId: 'room:w:a',
+    hoveredId: null,
+    pinActive: false,
+    budget: 130,
+    neighborIds: neighbors,
+    focusWingId: 'w',
+    cameraDistanceNorm: 0.9,
+    densityTier: 1,
+  });
+  assert.ok(withN.has('room:w:a'));
+  assert.ok(withN.has('room:w:b'));
+});
+
+test('neighborIdsForFocus is immediate edges only', () => {
+  const m = new Map([
+    ['room:w:a', new Set(['room:w:b'])],
+    ['room:w:b', new Set(['room:w:a', 'room:x:c'])],
+  ]);
+  const n = neighborIdsForFocus('room:w:a', m);
+  assert.ok(n.has('room:w:b'));
+  assert.equal(n.size, 1);
+});
+
+test('buildGraphRoomNeighborMap', () => {
+  const nodeList = [
+    { type: 'room', wing: 'w1', name: 'a', x: 0, y: 0, z: 0 },
+    { type: 'room', wing: 'w1', name: 'b', x: 1, y: 0, z: 0 },
+  ];
+  const edges = [{ sourceRoomId: 'w1/a', targetRoomId: 'w1/b', relationshipType: 'taxonomy_adjacency' }];
+  function findRoomNodeForEdge(list, edge, end) {
+    const ref = end === 'from' ? edge.sourceRoomId : edge.targetRoomId;
+    return list.find((n) => n.type === 'room' && `${n.wing}/${n.name}` === ref);
+  }
+  const map = buildGraphRoomNeighborMap(edges, nodeList, findRoomNodeForEdge);
+  assert.ok(map.get('room:w1:a').has('room:w1:b'));
+});
+
+test('buildGraphRoomLabelCandidateSet prefers connected rooms', () => {
+  const metrics = computeDensityMetrics(80, 100, 5);
+  const entries = [
+    { id: 'room:w:a', baseScore: 10, incidentFull: 0 },
+    { id: 'room:w:b', baseScore: 5, incidentFull: 3 },
+  ];
+  const set = buildGraphRoomLabelCandidateSet(entries, metrics);
+  assert.ok(set.has('room:w:b'));
+});
+
+test('focusNodeDistanceDimMult is neutral without focus', () => {
+  assert.equal(focusNodeDistanceDimMult(500, 2, { focusActive: false }), 1);
+});
+
+test('focusNodeDistanceDimMult favors neighbors when focused', () => {
+  const far = focusNodeDistanceDimMult(180, 2, { focusActive: true, isNeighbor: false });
+  const nearN = focusNodeDistanceDimMult(180, 2, { focusActive: true, isNeighbor: true });
+  assert.ok(nearN >= far);
+});
+
+test('labelSpriteScaleMultiplier and labelOpacityDistanceFactor', () => {
+  assert.ok(labelSpriteScaleMultiplier(0.2, { selected: true }) > labelSpriteScaleMultiplier(0.2, {}));
+  assert.ok(labelOpacityDistanceFactor(0.9, { neighbor: true }) >= labelOpacityDistanceFactor(0.2, { neighbor: true }));
+});
+
+test('focusWingIdFromSceneSelection', () => {
+  assert.equal(focusWingIdFromSceneSelection('room:mywing:rname'), 'mywing');
+  assert.equal(focusWingIdFromSceneSelection('wing:projects'), 'projects');
+});
+
+test('framingTargetOffset is stable', () => {
+  const a = framingTargetOffset(100, 2, 0);
+  const b = framingTargetOffset(100, 2, 0);
+  assert.equal(a.x, b.x);
+  assert.ok(Math.abs(a.y) > 0);
+});
+
+test('computeGraphFocusCameraDistance uses neighborCount', () => {
+  const base = computeGraphFocusCameraDistance(30, 58, 2);
+  const wider = computeGraphFocusCameraDistance(30, 58, 2, { neighborCount: 12 });
+  assert.ok(wider >= base);
 });

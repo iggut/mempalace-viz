@@ -7,13 +7,22 @@ import { makeRoomId } from './canonical.js';
 import { getEdgeRelationshipType, getStyleForRelationshipType } from './graph-relationships.js';
 import {
   baseLabelScoreForGraphNode,
+  buildGraphRoomLabelCandidateSet,
+  buildGraphRoomNeighborMap,
   computeDensityMetrics,
   computeGraphFocusCameraDistance,
   computeVisibleLabelIds,
   countGraphIncidentsByRoomNodeId,
   edgeEmphasisOpacityMult,
+  focusNodeDistanceDimMult,
+  focusWingIdFromSceneSelection,
+  framingTargetOffset,
   graphSceneNodeIdForLayoutNode,
+  labelOpacityDistanceFactor,
+  labelSpriteScaleMultiplier,
   maxRadiusFromFocus,
+  neighborIdsForFocus,
+  normalizeCameraDistanceForLabels,
   runGraphForceLayout,
   seedWingClusteredLayout,
   separateGraphNodes,
@@ -114,6 +123,15 @@ export function createPalaceScene(container, options = {}) {
   let graphSceneMetrics = null;
   /** @type {{ position: THREE.Vector3, target: THREE.Vector3 } | null} */
   let graphDefaultCamera = null;
+  /** @type {Map<string, Set<string>>} */
+  let graphNeighborMap = new Map();
+  /** @type {number} graph bbox extent for camera / label normalization */
+  let graphSpatialExtent = 80;
+  /** @type {string|null} */
+  let lastFocusNodeId = null;
+  let focusRepeatIndex = 0;
+  /** @type {string[]} interaction-only labels (FIFO evict) */
+  let dynamicLabelQueue = [];
 
   let currentView = 'wings';
   let roomsFocusWing = null;
@@ -182,6 +200,11 @@ export function createPalaceScene(container, options = {}) {
     graphLabelEntries = [];
     graphSceneMetrics = null;
     graphDefaultCamera = null;
+    graphNeighborMap = new Map();
+    graphSpatialExtent = 80;
+    lastFocusNodeId = null;
+    focusRepeatIndex = 0;
+    dynamicLabelQueue = [];
     if (scene?.fog?.isFogExp2) scene.fog.density = 0.0026;
     if (stars?.material) stars.material.opacity = 0.35;
     nodeRegistry.clear();
@@ -229,6 +252,7 @@ export function createPalaceScene(container, options = {}) {
     const sprite = new THREE.Sprite(mat);
     const scale = 0.022 * w;
     sprite.scale.set(scale, 11, 1);
+    sprite.userData.labelBaseScale = { x: scale, y: 11, z: 1 };
     return sprite;
   }
 
@@ -253,6 +277,102 @@ export function createPalaceScene(container, options = {}) {
     scene.add(sprite);
     labelSprites.push({ sprite, nodeId });
     labelByNodeId.set(nodeId, sprite);
+  }
+
+  const MAX_DYNAMIC_GRAPH_LABELS = 40;
+
+  function removeLabelByNodeId(nodeId) {
+    const idx = labelSprites.findIndex((x) => x.nodeId === nodeId);
+    if (idx === -1) return;
+    const { sprite } = labelSprites[idx];
+    scene.remove(sprite);
+    sprite.material.map?.dispose();
+    sprite.material.dispose();
+    labelSprites.splice(idx, 1);
+    labelByNodeId.delete(nodeId);
+    const qi = dynamicLabelQueue.indexOf(nodeId);
+    if (qi >= 0) dynamicLabelQueue.splice(qi, 1);
+  }
+
+  function evictOneDisposableDynamicLabel() {
+    for (let i = 0; i < dynamicLabelQueue.length; i += 1) {
+      const id = dynamicLabelQueue[i];
+      const prot =
+        id === presentation.selectedId ||
+        id === presentation.hoveredId ||
+        (presentation.selectedId && neighborIdsForFocus(presentation.selectedId, graphNeighborMap).has(id)) ||
+        (!presentation.selectedId &&
+          presentation.hoveredId &&
+          neighborIdsForFocus(presentation.hoveredId, graphNeighborMap).has(id));
+      if (prot) continue;
+      dynamicLabelQueue.splice(i, 1);
+      removeLabelByNodeId(id);
+      return true;
+    }
+    return false;
+  }
+
+  function ensureDynamicRoomLabel(nodeId) {
+    if (labelByNodeId.has(nodeId)) return;
+    const entry = nodeRegistry.get(nodeId);
+    if (!entry?.data || entry.data.type !== 'room') return;
+    while (dynamicLabelQueue.length >= MAX_DYNAMIC_GRAPH_LABELS) {
+      if (!evictOneDisposableDynamicLabel()) break;
+    }
+    if (dynamicLabelQueue.length >= MAX_DYNAMIC_GRAPH_LABELS) return;
+    const { mesh, data } = entry;
+    const p = mesh.position;
+    addLabelForNode(nodeId, data.name, p.x, p.y, p.z, '#94a3b8');
+    dynamicLabelQueue.push(nodeId);
+  }
+
+  function applyGraphLabels() {
+    if (currentView !== 'graph' || !graphLabelEntries.length || !camera) return;
+    const camDist = camera.position.distanceTo(controls.target);
+    const distNorm = normalizeCameraDistanceForLabels(camDist, graphSpatialExtent);
+    const tier = graphSceneMetrics?.tier ?? 0;
+    const budget = graphSceneMetrics?.labelBudget ?? 180;
+    const sid = presentation.selectedId;
+    const hid = presentation.hoveredId;
+    const focusId = sid || hid;
+    const neighborIds = focusId ? neighborIdsForFocus(focusId, graphNeighborMap) : new Set();
+    const focusWingId = focusWingIdFromSceneSelection(sid || hid);
+    const showIds = computeVisibleLabelIds(graphLabelEntries, {
+      selectedId: sid,
+      hoveredId: hid,
+      pinActive: presentation.pinActive,
+      budget,
+      neighborIds,
+      focusWingId,
+      cameraDistanceNorm: distNorm,
+      densityTier: tier,
+    });
+    const q = (presentation.searchQuery || '').trim().toLowerCase();
+    for (const id of showIds) {
+      if (id.startsWith('room:') && !labelByNodeId.has(id)) {
+        ensureDynamicRoomLabel(id);
+      }
+    }
+    labelByNodeId.forEach((sprite, id) => {
+      const data = nodeRegistry.get(id)?.data;
+      if (!data) return;
+      const match = nodeMatchesSearch(data, q);
+      const allow = showIds.has(id);
+      const role = {
+        selected: id === sid,
+        hovered: id === hid,
+        pinned: !!(presentation.pinActive && id === sid),
+        neighbor: neighborIds.has(id),
+      };
+      const scaleM = labelSpriteScaleMultiplier(distNorm, role);
+      const bs = sprite.userData.labelBaseScale;
+      if (bs) {
+        sprite.scale.set(bs.x * scaleM, bs.y * scaleM, bs.z);
+      }
+      const opBase = match ? labelOpacityDistanceFactor(distNorm, role) : 0.12;
+      sprite.material.opacity = opBase;
+      sprite.visible = labelsVisible && allow;
+    });
   }
 
   function createLink(from, to, colorHex, opacity = 0.28, meta = {}) {
@@ -384,11 +504,11 @@ export function createPalaceScene(container, options = {}) {
     const sid = presentation.selectedId;
     const pin = presentation.pinActive;
     const relVis = presentation.relationshipTypesVisible;
+    const gTier = graphSceneMetrics?.tier ?? 0;
 
     /** @type {Map<string, number>} */
     const visibleGraphIncidents = new Map();
 
-    const tier = graphSceneMetrics?.tier ?? 0;
     const gMult = graphSceneMetrics?.globalEdgeOpacityMult ?? 1;
     const adjMult = graphSceneMetrics?.adjacencyOpacityMult ?? 1;
     const tunnelEm = graphSceneMetrics?.tunnelEmphasisMult ?? 1;
@@ -427,7 +547,7 @@ export function createPalaceScene(container, options = {}) {
           fromId,
           toId,
           relationshipType: rt,
-          densityTier: tier,
+          densityTier: gTier,
           isGraphRelationship: true,
         });
       }
@@ -437,6 +557,10 @@ export function createPalaceScene(container, options = {}) {
         if (toId) visibleGraphIncidents.set(toId, (visibleGraphIncidents.get(toId) || 0) + 1);
       }
     });
+
+    const focusN = sid || hid;
+    const nbrFocus =
+      focusN && currentView === 'graph' ? neighborIdsForFocus(focusN, graphNeighborMap) : null;
 
     nodeRegistry.forEach((entry, id) => {
       const { mesh, data, baseOpacity, baseEmissive } = entry;
@@ -454,35 +578,32 @@ export function createPalaceScene(container, options = {}) {
       const fullG = graphRoomIncidentFull.get(id) || 0;
       const visG = visibleGraphIncidents.get(id) || 0;
       if (data.type === 'room' && fullG > 0 && visG === 0 && currentView === 'graph') {
-        opacityMult *= 0.32;
-        emissiveMult *= 0.55;
+        opacityMult *= gTier >= 2 ? 0.28 : gTier >= 1 ? 0.31 : 0.38;
+        emissiveMult *= gTier >= 2 ? 0.48 : 0.54;
+      }
+
+      if (nbrFocus) {
+        if (nbrFocus.has(id)) {
+          opacityMult = Math.max(opacityMult, gTier >= 2 ? 0.55 : 0.66);
+          emissiveMult *= 1.09;
+        }
+        if (id === focusN) {
+          opacityMult = Math.max(opacityMult, pin && id === sid ? 0.93 : 0.87);
+        }
       }
 
       entry.presentationOpacity = Math.min(1, opacityMult);
       mat.opacity = Math.min(1, baseOpacity * opacityMult);
       mat.emissiveIntensity = baseEmissive * emissiveMult;
 
-      const emphasis = id === sid ? (pin ? 1.09 : 1.06) : id === hid ? 1.04 : 1;
+      const emphasis =
+        id === sid ? (pin ? 1.1 : 1.07) : id === hid ? 1.05 : nbrFocus?.has(id) ? 1.025 : 1;
       const dimScale = match ? 1 : 0.88;
       mesh.scale.setScalar(emphasis * dimScale);
     });
 
     if (currentView === 'graph' && graphLabelEntries.length) {
-      const budget = graphSceneMetrics?.labelBudget ?? 180;
-      const showIds = computeVisibleLabelIds(graphLabelEntries, {
-        selectedId: sid,
-        hoveredId: hid,
-        pinActive: pin,
-        budget,
-      });
-      labelByNodeId.forEach((sprite, id) => {
-        const data = nodeRegistry.get(id)?.data;
-        if (!data) return;
-        const match = nodeMatchesSearch(data, q);
-        const allow = showIds.has(id);
-        sprite.visible = labelsVisible && allow;
-        sprite.material.opacity = match ? (id === sid ? 1 : id === hid ? 0.96 : 0.88) : 0.18;
-      });
+      applyGraphLabels();
     } else {
       labelByNodeId.forEach((sprite, id) => {
         const data = nodeRegistry.get(id)?.data;
@@ -641,19 +762,6 @@ export function createPalaceScene(container, options = {}) {
     return [...keys].sort((a, b) => a.localeCompare(b));
   }
 
-  /**
-   * Cap canvas label sprites for very large graphs while keeping high-importance rooms.
-   * @param {Array<{ id: string, baseScore: number }>} entries
-   * @param {ReturnType<typeof computeDensityMetrics>} metrics
-   */
-  function buildRoomLabelCandidateSet(entries, metrics) {
-    const all = entries.filter((e) => e.id.startsWith('room:'));
-    const maxSprites =
-      metrics.nodeCount > 300 ? metrics.labelBudget * 5 : metrics.nodeCount > 160 ? metrics.labelBudget * 4 : all.length;
-    all.sort((a, b) => b.baseScore - a.baseScore);
-    return new Set(all.slice(0, Math.min(all.length, maxSprites)).map((e) => e.id));
-  }
-
   function renderGraphView() {
     const allNodes = new Map();
 
@@ -696,6 +804,7 @@ export function createPalaceScene(container, options = {}) {
 
     const wingNames = sortedWingKeys(Object.keys(wingsData));
     graphRoomIncidentFull = countGraphIncidentsByRoomNodeId(nodeList, graphEdges, findRoomNodeForEdge);
+    graphNeighborMap = buildGraphRoomNeighborMap(graphEdges, nodeList, findRoomNodeForEdge);
 
     graphSceneMetrics = computeDensityMetrics(
       nodeList.length,
@@ -725,6 +834,7 @@ export function createPalaceScene(container, options = {}) {
       const incidentFull = graphRoomIncidentFull.get(id) || 0;
       return {
         id,
+        incidentFull,
         baseScore: baseLabelScoreForGraphNode({
           type: n.type,
           incidentFull,
@@ -733,7 +843,7 @@ export function createPalaceScene(container, options = {}) {
       };
     });
 
-    const roomLabelAllow = buildRoomLabelCandidateSet(graphLabelEntries, graphSceneMetrics);
+    const roomLabelAllow = buildGraphRoomLabelCandidateSet(graphLabelEntries, graphSceneMetrics);
 
     nodeList.forEach((nodeData) => {
       const isWing = nodeData.type === 'wing';
@@ -775,6 +885,7 @@ export function createPalaceScene(container, options = {}) {
     const size = new THREE.Vector3();
     box.getSize(size);
     const extent = Math.max(size.x, size.y, size.z, 12);
+    graphSpatialExtent = extent;
     const dist = computeGraphFocusCameraDistance(extent * 0.48, camera.fov, graphSceneMetrics.tier);
     const dir = new THREE.Vector3(0.35, 0.42, 1).normalize();
     const camPos = center.clone().add(dir.multiplyScalar(dist));
@@ -868,18 +979,27 @@ export function createPalaceScene(container, options = {}) {
     });
 
     const gTier = graphSceneMetrics?.tier ?? 0;
-    if (currentView === 'graph' && gTier >= 1) {
-      const focusPt =
-        presentation.selectedId && nodeRegistry.get(presentation.selectedId)
-          ? nodeRegistry.get(presentation.selectedId).mesh.position
-          : controls.target;
-      nodeRegistry.forEach((entry) => {
+    if (currentView === 'graph') {
+      let focusPt = controls.target;
+      if (presentation.selectedId && nodeRegistry.get(presentation.selectedId)) {
+        focusPt = nodeRegistry.get(presentation.selectedId).mesh.position;
+      } else if (presentation.hoveredId && nodeRegistry.get(presentation.hoveredId)) {
+        focusPt = nodeRegistry.get(presentation.hoveredId).mesh.position;
+      }
+      const fid = presentation.selectedId || presentation.hoveredId;
+      const nbr = fid ? neighborIdsForFocus(fid, graphNeighborMap) : new Set();
+      const focusActive = !!(presentation.selectedId || presentation.hoveredId);
+      nodeRegistry.forEach((entry, id) => {
         const mat = entry.mesh.material;
         if (!mat || mat.type === 'MeshBasicMaterial') return;
         const d = entry.mesh.position.distanceTo(focusPt);
-        const distMult = THREE.MathUtils.clamp(1.04 - (d - 42) / 200, 0.36, 1.06);
+        const distMult = focusNodeDistanceDimMult(d, gTier, {
+          isNeighbor: nbr.has(id),
+          focusActive,
+        });
         mat.opacity = Math.min(1, entry.baseOpacity * (entry.presentationOpacity ?? 1) * distMult);
       });
+      applyGraphLabels();
     }
 
     renderer.render(scene, camera);
@@ -976,12 +1096,23 @@ export function createPalaceScene(container, options = {}) {
         const other = nodeRegistry.get(otherId);
         if (other) neighborPts.push(other.mesh.position.clone());
       });
+      const nc = neighborPts.length;
       const maxR = maxRadiusFromFocus(p, neighborPts.length ? neighborPts : [p.clone()]);
-      const dist = computeGraphFocusCameraDistance(maxR, camera.fov, graphSceneMetrics.tier);
+      const dist = computeGraphFocusCameraDistance(maxR, camera.fov, graphSceneMetrics.tier, {
+        neighborCount: nc,
+      });
       let dir = camera.position.clone().sub(p);
       if (dir.lengthSq() < 4) dir.set(32, 26, 72);
       dir.normalize();
-      tweenCamera(p.clone().add(dir.multiplyScalar(dist)), p);
+      if (lastFocusNodeId === nodeId) focusRepeatIndex += 1;
+      else {
+        lastFocusNodeId = nodeId;
+        focusRepeatIndex = 0;
+      }
+      const ext = Math.max(maxR * 2.4, graphSpatialExtent * 0.42, 28);
+      const off = framingTargetOffset(ext, graphSceneMetrics.tier, focusRepeatIndex);
+      const target = new THREE.Vector3(p.x + off.x, p.y + off.y, p.z + off.z);
+      tweenCamera(p.clone().add(dir.multiplyScalar(dist)), target);
       return;
     }
 
