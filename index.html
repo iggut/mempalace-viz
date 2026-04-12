@@ -50,15 +50,38 @@
             <p id="onboard-hint" class="hint-row" hidden style="margin-bottom: 10px">
               Tip: use <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> to switch views, <kbd>R</kbd> to reset the camera.
             </p>
-            <label class="visually-hidden" for="search-wings">Search wings and rooms</label>
-            <input
-              type="search"
-              id="search-wings"
-              class="search-input"
-              placeholder="Search wings &amp; rooms (dims non-matches in scene)…"
-              autocomplete="off"
-              enterkeyhint="search"
-            />
+            <div class="search-wrap">
+              <label class="visually-hidden" for="search-wings">Search wings and rooms</label>
+              <input
+                type="search"
+                id="search-wings"
+                class="search-input"
+                placeholder="Search wings &amp; rooms · Enter jumps in Graph…"
+                autocomplete="off"
+                enterkeyhint="search"
+                aria-describedby="graph-search-first-hint graph-search-panel"
+                aria-controls="graph-search-panel"
+              />
+              <p id="graph-search-first-hint" class="graph-search-first-hint" hidden>
+                In Graph view, matches list below — <kbd>Enter</kbd> to frame, <kbd>Alt+N</kbd> /
+                <kbd>Alt+P</kbd> to step.
+              </p>
+              <div id="graph-search-panel" class="graph-search-panel" role="listbox" aria-label="Graph search matches" hidden>
+                <div class="graph-search-panel__meta">
+                  <span id="graph-search-meta" class="graph-search-meta" aria-live="polite"></span>
+                  <div id="graph-search-nav" class="graph-search-nav" hidden>
+                    <button type="button" class="btn btn--ghost btn--sm" data-graph-search-step="-1" title="Previous match (Alt+P)">
+                      ◀
+                    </button>
+                    <button type="button" class="btn btn--ghost btn--sm" data-graph-search-step="1" title="Next match (Alt+N)">
+                      ▶
+                    </button>
+                  </div>
+                </div>
+                <p id="graph-search-empty" class="graph-search-empty" hidden>No matching wings or rooms.</p>
+                <ul id="graph-search-list" class="graph-search-list"></ul>
+              </div>
+            </div>
             <div id="view-buttons" class="view-seg" role="tablist" aria-label="Visualization view"></div>
             <p id="view-helper-text" class="hint-row" style="margin-top: 10px" role="status" aria-live="polite"></p>
 
@@ -199,7 +222,8 @@
           </button>
           <span class="hint-row footer-shortcuts-hint" style="margin: 0">
             <kbd>1</kbd>–<kbd>3</kbd> · <kbd>R</kbd> camera · <kbd>/</kbd> search · <kbd>L</kbd> labels · <kbd>Space</kbd> rotate ·
-            <kbd>Esc</kbd> help / unpin / clear · graph: <kbd>[</kbd> <kbd>]</kbd> <kbd>U</kbd>
+            <kbd>Esc</kbd> clear search / help / unpin · graph: <kbd>[</kbd> <kbd>]</kbd> <kbd>U</kbd> · find:
+            <kbd>Alt+N</kbd> <kbd>Alt+P</kbd>
           </span>
         </div>
       </footer>
@@ -230,7 +254,8 @@
           <li><kbd>/</kbd> — Focus search</li>
           <li><kbd>L</kbd> — Toggle labels</li>
           <li><kbd>Space</kbd> — Toggle auto-rotate</li>
-          <li><kbd>Esc</kbd> — Close this dialog; then unpin inspector; then clear selection</li>
+          <li><kbd>Esc</kbd> — Close this dialog; then clear search; then unpin; then clear selection</li>
+          <li><strong>Search</strong> — type a wing or room fragment; <kbd>Enter</kbd> frames in Graph · <kbd>Alt+N</kbd> / <kbd>Alt+P</kbd> next/prev match</li>
           <li><strong>Click</strong> wing (Wings) — Enter that wing’s rooms</li>
           <li><strong>Click</strong> room (Rooms) — Select &amp; center</li>
           <li><strong>Click</strong> node (Graph) — Focus (inspector lock) &amp; frame</li>

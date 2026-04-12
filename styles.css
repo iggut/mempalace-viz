@@ -479,6 +479,14 @@ input[type="range"] {
   accent-color: var(--accent);
 }
 
+.search-wrap {
+  margin-bottom: 0.75rem;
+}
+
+.search-wrap .search-input {
+  margin-bottom: 0;
+}
+
 .search-input {
   width: 100%;
   padding: 8px 10px;
@@ -489,6 +497,110 @@ input[type="range"] {
   font-family: inherit;
   font-size: 0.8rem;
   margin-bottom: 0.75rem;
+}
+
+.graph-search-first-hint {
+  font-size: 0.68rem;
+  color: var(--text-dim);
+  margin: 6px 0 0;
+  line-height: 1.35;
+}
+
+.graph-search-first-hint kbd {
+  font-size: 0.65rem;
+}
+
+.graph-search-panel {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  max-height: 220px;
+  overflow: auto;
+}
+
+.graph-search-panel__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.graph-search-meta {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.graph-search-nav {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.graph-search-empty {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  margin: 0;
+}
+
+.graph-search-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.graph-search-list li {
+  margin: 0;
+}
+
+.graph-search-hit {
+  width: 100%;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  text-align: left;
+  padding: 5px 6px;
+  margin: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 0.76rem;
+  cursor: pointer;
+}
+
+.graph-search-hit:hover {
+  background: var(--bg-muted);
+  color: var(--text);
+}
+
+.graph-search-hit.is-active {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.graph-search-hit__label {
+  font-weight: 500;
+  color: inherit;
+}
+
+.graph-search-hit__sub {
+  font-size: 0.68rem;
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+
+.graph-search-hit.is-active .graph-search-hit__sub {
+  color: var(--text-muted);
+}
+
+.graph-search-more {
+  padding: 4px 6px 0;
+  font-size: 0.68rem;
 }
 
 .search-input::placeholder {

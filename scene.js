@@ -1165,6 +1165,23 @@ export function createPalaceScene(container, options = {}) {
     centerOnNodeId(hoveredMesh.userData.id);
   }
 
+  /**
+   * Brief emissive emphasis on a node (e.g. graph search jump) without simulating a click.
+   * @param {string} nodeId
+   * @param {number} [durationMs]
+   */
+  function pulseNodeEmphasis(nodeId, durationMs = 420) {
+    if (!nodeId || !nodeRegistry.get(nodeId)) return;
+    if (selectionPulseTimer) clearTimeout(selectionPulseTimer);
+    selectionPulse = { id: nodeId, at: performance.now() };
+    syncVisualPresentation();
+    selectionPulseTimer = setTimeout(() => {
+      selectionPulseTimer = 0;
+      selectionPulse = null;
+      syncVisualPresentation();
+    }, durationMs);
+  }
+
   function updatePresentation(patch) {
     const next = { ...presentation, ...patch };
     if (presentationEqual(presentation, next)) return;
@@ -1228,6 +1245,7 @@ export function createPalaceScene(container, options = {}) {
     resetCamera,
     centerOnHovered,
     centerOnNodeId,
+    pulseNodeEmphasis,
     clearPin,
     resize,
     dispose,

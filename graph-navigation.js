@@ -69,3 +69,14 @@ export function parseRoomSceneId(sceneId) {
   if (i <= 0) return null;
   return { wing: rest.slice(0, i), room: rest.slice(i + 1) };
 }
+
+/**
+ * Whether a graph search jump should push focus history before moving to `nextSceneId`.
+ * Used with `firstNavInQuery` from the current search-query session (see ui.js).
+ * @param {string | null | undefined} prevSelectedId
+ * @param {string} nextSceneId
+ * @param {boolean} firstNavInQuery
+ */
+export function shouldPushHistoryOnGraphSearchJump(prevSelectedId, nextSceneId, firstNavInQuery) {
+  return !!(firstNavInQuery && prevSelectedId && nextSceneId && prevSelectedId !== nextSceneId);
+}

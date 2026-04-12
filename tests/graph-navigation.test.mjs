@@ -4,6 +4,7 @@ import {
   parseRoomSceneId,
   popFocusHistory,
   pushFocusHistory,
+  shouldPushHistoryOnGraphSearchJump,
   stepAdjacentRoom,
   stepRing,
 } from '../graph-navigation.js';
@@ -36,4 +37,11 @@ test('stepAdjacentRoom from outside the ring', () => {
   assert.equal(stepAdjacentRoom(nbr, 'room:w:home', 1), 'room:w:a');
   assert.equal(stepAdjacentRoom(nbr, 'room:w:home', -1), 'room:w:b');
   assert.equal(stepAdjacentRoom(nbr, 'room:w:a', 1), 'room:w:b');
+});
+
+test('shouldPushHistoryOnGraphSearchJump', () => {
+  assert.equal(shouldPushHistoryOnGraphSearchJump('room:a:b', 'room:a:c', true), true);
+  assert.equal(shouldPushHistoryOnGraphSearchJump('room:a:b', 'room:a:b', true), false);
+  assert.equal(shouldPushHistoryOnGraphSearchJump(null, 'room:a:c', true), false);
+  assert.equal(shouldPushHistoryOnGraphSearchJump('room:a:b', 'room:a:c', false), false);
 });

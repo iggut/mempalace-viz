@@ -41,8 +41,10 @@ import {
   parseRoomSceneId,
   popFocusHistory,
   pushFocusHistory,
+  shouldPushHistoryOnGraphSearchJump,
   stepAdjacentRoom,
 } from './graph-navigation.js';
+import { buildSearchCatalog, normalizeSearchQuery, rankGraphSearch, stepWrapped } from './graph-search.js';
 
 const LS_KEY = 'mempalace-viz-explorer-v1';
 const PANEL_STATE_KEY = 'mempalace-viz-panel-state-v1';
@@ -78,6 +80,20 @@ let toastClearTimer = null;
 
 /** @type {object[]} Graph focus stack (see `captureGraphFocusSnapshot`) */
 const graphFocusHistory = [];
+
+/**
+ * Graph search (wings + rooms) — catalog rebuilt when palace data loads.
+ * History: the first scene jump after the normalized query changes may push focus history once
+ * (when replacing an existing graph selection). Stepping results (Alt+N/P, or list + Enter) does not
+ * add further stack entries until the query changes. Manual node clicks use the normal graph path.
+ */
+let graphSearchCatalog = [];
+/** @type {Array<{ sceneId: string, kind: string, label: string, sublabel: string, score: number }>} */
+let graphSearchMatches = [];
+let graphSearchResultIndex = 0;
+/** False until the first jump to a result for the current query string (trimmed). */
+let graphSearchFirstApplyDone = false;
+let graphSearchLastQueryKey = '';
 
 const $ = (id) => document.getElementById(id);
 
@@ -1143,6 +1159,207 @@ function filterLegendSearch(text, query) {
   return text.toLowerCase().includes(query.trim().toLowerCase());
 }
 
+function rebuildGraphSearchCatalog() {
+  if (!dataBundle?.roomsData || !dataBundle?.wingsData) {
+    graphSearchCatalog = [];
+    return;
+  }
+  graphSearchCatalog = buildSearchCatalog(dataBundle.roomsData, dataBundle.wingsData);
+}
+
+function graphSearchQueryKey() {
+  return normalizeSearchQuery(appState.searchQuery);
+}
+
+function refreshGraphSearchMatches() {
+  const key = graphSearchQueryKey();
+  if (key !== graphSearchLastQueryKey) {
+    graphSearchLastQueryKey = key;
+    graphSearchFirstApplyDone = false;
+    graphSearchResultIndex = 0;
+  }
+  graphSearchMatches = rankGraphSearch(graphSearchCatalog, appState.searchQuery);
+  if (graphSearchResultIndex >= graphSearchMatches.length) {
+    graphSearchResultIndex = Math.max(0, graphSearchMatches.length - 1);
+  }
+  renderGraphSearchPanel();
+}
+
+function renderGraphSearchPanel() {
+  const panel = $('graph-search-panel');
+  const meta = $('graph-search-meta');
+  const list = $('graph-search-list');
+  const empty = $('graph-search-empty');
+  const nav = $('graph-search-nav');
+  if (!panel || !meta || !list) return;
+
+  const q = appState.searchQuery.trim();
+  if (!q) {
+    panel.hidden = true;
+    return;
+  }
+
+  panel.hidden = false;
+  const n = graphSearchMatches.length;
+  const showNav = n > 1;
+  if (nav) nav.hidden = !showNav;
+
+  if (!n) {
+    empty.hidden = false;
+    list.innerHTML = '';
+    meta.textContent = 'No matches';
+    return;
+  }
+
+  empty.hidden = true;
+  const cur = Math.min(graphSearchResultIndex, n - 1);
+  const totalLabel = n > 12 ? ` · ${n} total` : '';
+  meta.textContent = `Result ${cur + 1} of ${n}${totalLabel}`;
+
+  const maxRows = 12;
+  let start = 0;
+  if (n > maxRows) {
+    start = Math.min(Math.max(0, cur - 5), Math.max(0, n - maxRows));
+  }
+  const slice = graphSearchMatches.slice(start, start + maxRows);
+  list.innerHTML = slice
+    .map((hit, i) => {
+      const ix = start + i;
+      const active = ix === cur;
+      return `<li>
+        <button type="button" class="graph-search-hit ${active ? 'is-active' : ''}" data-graph-hit-ix="${ix}" role="option" aria-selected="${active ? 'true' : 'false'}">
+          <span class="graph-search-hit__label">${escapeHtml(hit.label)}</span>
+          <span class="graph-search-hit__sub">${escapeHtml(hit.sublabel)}</span>
+        </button>
+      </li>`;
+    })
+    .join('');
+
+  if (n > maxRows) {
+    list.insertAdjacentHTML(
+      'beforeend',
+      `<li class="graph-search-more"><span class="inspect-muted">Scroll list with ↑↓ · Alt+N / Alt+P for all ${n} matches</span></li>`,
+    );
+  }
+}
+
+function updateGraphSearchFirstUseHint() {
+  const hint = $('graph-search-first-hint');
+  if (!hint) return;
+  const show =
+    appState.view === 'graph' && !sessionStorage.getItem('mempalace-graph-search-hint') && !!dataBundle && !dataBundle.error;
+  hint.hidden = !show;
+}
+
+function dismissGraphSearchFirstUseHint() {
+  sessionStorage.setItem('mempalace-graph-search-hint', '1');
+  const hint = $('graph-search-first-hint');
+  if (hint) hint.hidden = true;
+}
+
+function clearGraphSearchQuery() {
+  appState.searchQuery = '';
+  const inp = $('search-wings');
+  if (inp) inp.value = '';
+  graphSearchMatches = [];
+  graphSearchResultIndex = 0;
+  graphSearchFirstApplyDone = false;
+  graphSearchLastQueryKey = '';
+  syncScenePresentation();
+  renderLegend();
+  renderGraphSearchPanel();
+  persistState();
+}
+
+/**
+ * Jump the 3D graph to a wing or room by scene id (`wing:` / `room:`).
+ * @param {string} sceneId
+ */
+function applyGraphSearchResult(sceneId) {
+  closeHelpIfOpen();
+  if (!dataBundle || !sceneId) return;
+
+  const firstNavInQuery = !graphSearchFirstApplyDone;
+
+  if (sceneId.startsWith('wing:')) {
+    const wingName = sceneId.slice('wing:'.length);
+    if (!wingExists(dataBundle.wingsData, wingName)) return;
+    if (appState.view !== 'graph') applyView('graph');
+    if (
+      appState.view === 'graph' &&
+      shouldPushHistoryOnGraphSearchJump(appState.selected?.id, sceneId, firstNavInQuery)
+    ) {
+      pushFocusHistory(graphFocusHistory, captureGraphFocusSnapshot());
+    }
+    graphSearchFirstApplyDone = true;
+    appState.currentWing = wingName;
+    appState.currentRoom = null;
+    appState.selected = {
+      id: sceneId,
+      type: 'wing',
+      name: wingName,
+      wing: wingName,
+      wingId: wingName,
+      drawers: dataBundle.wingsData[wingName],
+    };
+    appState.pinned = true;
+    syncScenePresentation();
+    sceneApi?.centerOnNodeId(sceneId);
+    sceneApi?.pulseNodeEmphasis(sceneId);
+    updateMetrics();
+    renderInspector();
+    renderGraphSearchPanel();
+    persistState();
+    dismissGraphSearchFirstUseHint();
+    return;
+  }
+
+  const pr = parseRoomSceneId(sceneId);
+  if (!pr || !roomExists(dataBundle.roomsData, pr.wing, pr.room)) return;
+  const rd = dataBundle.roomsData[pr.wing];
+  const rm = Array.isArray(rd) ? rd.find((r) => r.name === pr.room) : null;
+
+  if (appState.view !== 'graph') applyView('graph');
+  if (
+    appState.view === 'graph' &&
+    shouldPushHistoryOnGraphSearchJump(appState.selected?.id, sceneId, firstNavInQuery)
+  ) {
+    pushFocusHistory(graphFocusHistory, captureGraphFocusSnapshot());
+  }
+  graphSearchFirstApplyDone = true;
+  appState.currentWing = pr.wing;
+  appState.currentRoom = pr.room;
+  appState.selected = {
+    id: sceneId,
+    type: 'room',
+    name: pr.room,
+    wing: pr.wing,
+    wingId: pr.wing,
+    roomId: rm?.roomId || makeRoomId(pr.wing, pr.room),
+    drawers: rm?.drawers,
+  };
+  appState.pinned = true;
+  syncScenePresentation();
+  sceneApi?.centerOnNodeId(sceneId);
+  sceneApi?.pulseNodeEmphasis(sceneId);
+  updateMetrics();
+  renderInspector();
+  renderGraphSearchPanel();
+  persistState();
+  dismissGraphSearchFirstUseHint();
+}
+
+function graphSearchApplyStep(delta) {
+  if (graphSearchMatches.length < 2) return;
+  graphSearchResultIndex = stepWrapped(graphSearchResultIndex, graphSearchMatches.length, delta);
+  applyGraphSearchResult(graphSearchMatches[graphSearchResultIndex].sceneId);
+}
+
+function focusGraphSearchInput() {
+  dismissGraphSearchFirstUseHint();
+  $('search-wings')?.focus();
+}
+
 function renderLegend() {
   const host = $('legend-host');
   if (!host) return;
@@ -1455,6 +1672,8 @@ function applyView(view) {
   updateGraphViewChrome();
   updateMetrics();
   renderInspector();
+  updateGraphSearchFirstUseHint();
+  refreshGraphSearchMatches();
   persistState();
 }
 
@@ -1723,8 +1942,42 @@ function wireControls() {
       appState.searchQuery = e.target.value;
       syncScenePresentation();
       renderLegend();
+      refreshGraphSearchMatches();
       persistState();
     }, 120);
+  });
+
+  $('search-wings')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && graphSearchMatches.length > 0) {
+      e.preventDefault();
+      applyGraphSearchResult(graphSearchMatches[graphSearchResultIndex].sceneId);
+      return;
+    }
+    if (!graphSearchMatches.length) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      graphSearchResultIndex = stepWrapped(graphSearchResultIndex, graphSearchMatches.length, 1);
+      renderGraphSearchPanel();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      graphSearchResultIndex = stepWrapped(graphSearchResultIndex, graphSearchMatches.length, -1);
+      renderGraphSearchPanel();
+    }
+  });
+
+  $('graph-search-panel')?.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-graph-search-step]');
+    if (b) {
+      const d = Number(b.getAttribute('data-graph-search-step'));
+      if (d === 1 || d === -1) graphSearchApplyStep(d);
+      return;
+    }
+    const hit = e.target.closest('[data-graph-hit-ix]');
+    if (!hit) return;
+    const ix = Number(hit.getAttribute('data-graph-hit-ix'));
+    if (Number.isNaN(ix) || !graphSearchMatches[ix]) return;
+    graphSearchResultIndex = ix;
+    applyGraphSearchResult(graphSearchMatches[ix].sceneId);
   });
 
   $('btn-help')?.addEventListener('click', () => {
@@ -1750,11 +2003,23 @@ function wireControls() {
   });
 
   window.addEventListener('keydown', (e) => {
+    if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === 'n' || e.key === 'N' || e.key === 'p' || e.key === 'P')) {
+      if (appState.view === 'graph' && graphSearchMatches.length > 1) {
+        e.preventDefault();
+        graphSearchApplyStep(e.key === 'n' || e.key === 'N' ? 1 : -1);
+        return;
+      }
+    }
     if (isTypingTarget(e.target) && e.key !== 'Escape') return;
     if (e.key === 'Escape') {
       const ho = $('help-overlay');
       if (ho?.classList.contains('is-open')) {
         closeHelpDialog();
+        return;
+      }
+      if (appState.searchQuery.trim()) {
+        e.preventDefault();
+        clearGraphSearchQuery();
         return;
       }
       if (appState.pinned) {
@@ -1788,7 +2053,7 @@ function wireControls() {
     }
     if (e.key === '/' && !e.ctrlKey && !e.metaKey) {
       e.preventDefault();
-      $('search-wings')?.focus();
+      focusGraphSearchInput();
     }
     if (e.key === 'l' || e.key === 'L') {
       const cb = $('toggle-labels');
@@ -1963,6 +2228,10 @@ async function loadData(preserveContext) {
   }
 
   updateGraphViewChrome();
+  rebuildGraphSearchCatalog();
+  graphSearchLastQueryKey = '';
+  refreshGraphSearchMatches();
+  updateGraphSearchFirstUseHint();
   renderInspector();
   persistState();
 
