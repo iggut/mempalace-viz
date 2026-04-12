@@ -176,28 +176,35 @@ content = replace_function_block(content, 'selectNode', """function selectNode(n
   if (options.pin) pinnedIds.add(node.id);
   if (node.kind === 'wing') {
     selectedScopeWings.clear(); selectedScopeWings.add(node.wing);
-    loadGraph(); updateSceneBanner('Wing focus', node.wing); setOrbitDistance(120);
+    loadGraph().then(() => {
+      updateSceneBanner('Wing focus', node.wing);
+      setOrbitDistance(120, node.mesh.position.clone());
+    });
   } else if (node.kind === 'room') {
     selectedScopeWings.clear(); selectedScopeWings.add(node.wing);
     selectedScopeRooms.clear(); selectedScopeRooms.add(node.room);
-    loadGraph(); updateSceneBanner('Room focus', node.wing + ' • ' + node.room); setOrbitDistance(60);
+    loadGraph().then(() => {
+      updateSceneBanner('Room focus', node.wing + ' • ' + node.room);
+      setOrbitDistance(60, node.mesh.position.clone());
+    });
   } else {
     focusedIds = computeNeighborhood(node.id, expansionDepth);
     pinnedIds.forEach(id => focusedIds.add(id));
     renderInspector(node);
     updateSceneBanner(node.kind === 'crystal' ? 'Crystal focus' : 'Entity focus', trimLabel(node.label, 56) + ' • ' + expansionDepth + ' hop');
-    if (node.kind === 'entity') setOrbitDistance(34);
-    else setOrbitDistance(isolateFocus ? 18 : 28);
+    if (node.kind === 'entity') setOrbitDistance(34, node.mesh.position.clone());
+    else setOrbitDistance(isolateFocus ? 18 : 28, node.mesh.position.clone());
   }
   controls.target.copy(node.mesh.position);
   applyVisibilityMode();
 }""")
 
 # 5. setOrbitDistance
-content = replace_function_block(content, 'setOrbitDistance', """function setOrbitDistance(distance) {
-  const dir = camera.position.clone().sub(controls.target).normalize();
-  const targetPos = controls.target.clone().add(dir.multiplyScalar(distance));
-  tweenCamera(targetPos, controls.target.clone());
+content = replace_function_block(content, 'setOrbitDistance', """function setOrbitDistance(distance, focusPoint) {
+  const focus = focusPoint || controls.target;
+  const dir = camera.position.clone().sub(focus).normalize();
+  const targetPos = focus.clone().add(dir.multiplyScalar(distance));
+  tweenCamera(targetPos, focus.clone());
 }""")
 
 # 6. renderInspector
