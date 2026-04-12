@@ -42,6 +42,23 @@ export function resolveTunnelEndpoint(ref, roomsData, hintWing = null) {
 }
 
 /**
+ * Count graph edges where at least one endpoint does not resolve to taxonomy (for diagnostics).
+ * @param {Array<{ from: string, to: string, wing?: string }>} graphEdges
+ * @param {Record<string, unknown>} roomsData
+ */
+export function countEdgesWithUnresolvedEndpoints(graphEdges, roomsData) {
+  const edges = Array.isArray(graphEdges) ? graphEdges : [];
+  const roomData = roomsData && typeof roomsData === 'object' ? roomsData : {};
+  let n = 0;
+  for (const e of edges) {
+    const fromR = resolveTunnelEndpoint(e.from, roomData, null);
+    const toR = resolveTunnelEndpoint(e.to, roomData, e.wing || null);
+    if (!fromR || !toR) n += 1;
+  }
+  return n;
+}
+
+/**
  * @param {Array<{ from: string, to: string, wing?: string }>} graphEdges
  * @param {Record<string, unknown>} roomsData
  */

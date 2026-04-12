@@ -4,89 +4,173 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MemPalace 3D Visualization</title>
-    <script type="module" crossorigin src="/assets/index-C6VD8fxh.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-B_vCKeMJ.css">
+    <script type="module" crossorigin src="/assets/index-CIm8qfkq.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-C88MJAcM.css">
   </head>
   <body>
+    <a href="#main-canvas-wrap" class="skip-link">Skip to 3D view</a>
     <div class="app">
-      <header class="app-header">
+      <header class="app-header" role="banner">
         <div class="brand">
           <h1>MemPalace 3D Visualization</h1>
           <p class="tagline">Spatial view of wings, rooms, tunnels, and knowledge structure</p>
         </div>
         <div class="header-actions">
-          <div id="conn-status" class="status-pill" data-state="loading">Connecting…</div>
-          <button type="button" id="btn-refresh" class="btn btn--ghost" title="Reload data from API">Refresh</button>
+          <div
+            id="conn-status"
+            class="status-pill"
+            data-state="loading"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+          >
+            Connecting…
+          </div>
+          <button type="button" id="btn-refresh" class="btn btn--ghost" aria-label="Reload palace data from the API">
+            Refresh
+          </button>
         </div>
       </header>
 
-      <div class="app-main">
-        <aside class="panel panel--left" id="panel-left">
-          <div class="panel-header">Explore</div>
-          <div class="panel-body">
+      <div class="app-main" id="app-main-grid">
+        <nav class="panel panel--left" id="panel-left" aria-label="Explore and scene controls">
+          <div class="panel-header">
+            <span id="panel-left-title">Explore</span>
+            <button
+              type="button"
+              id="btn-collapse-left"
+              class="panel-header__collapse"
+              aria-expanded="true"
+              aria-controls="panel-left-body"
+              title="Collapse or expand explore panel"
+            >
+              ‹
+            </button>
+          </div>
+          <div class="panel-body" id="panel-left-body">
             <p id="onboard-hint" class="hint-row" hidden style="margin-bottom: 10px">
               Tip: use <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> to switch views, <kbd>R</kbd> to reset the camera.
             </p>
+            <label class="visually-hidden" for="search-wings">Search wings and rooms</label>
             <input
               type="search"
               id="search-wings"
               class="search-input"
               placeholder="Search wings &amp; rooms (dims non-matches in scene)…"
               autocomplete="off"
+              enterkeyhint="search"
             />
-            <div id="view-buttons" class="view-seg"></div>
-            <p id="view-helper-text" class="hint-row" style="margin-top: 10px"></p>
+            <div id="view-buttons" class="view-seg" role="tablist" aria-label="Visualization view"></div>
+            <p id="view-helper-text" class="hint-row" style="margin-top: 10px" role="status" aria-live="polite"></p>
 
             <div class="control-row" style="margin-top: 14px">
-              <label><input type="checkbox" id="toggle-rotate" checked /> Auto-rotate</label>
+              <label for="toggle-rotate"><input type="checkbox" id="toggle-rotate" checked /> Auto-rotate scene</label>
             </div>
             <div class="control-row">
-              <label><input type="checkbox" id="toggle-labels" checked /> Labels</label>
+              <label for="toggle-labels"><input type="checkbox" id="toggle-labels" checked /> Show node labels</label>
             </div>
             <div class="control-row" style="flex-wrap: wrap">
-              <span>Motion</span>
-              <input type="range" id="motion-range" min="0" max="2" step="0.1" value="1" style="max-width: 140px" />
+              <label for="motion-range">Motion intensity</label>
+              <input
+                type="range"
+                id="motion-range"
+                min="0"
+                max="2"
+                step="0.1"
+                value="1"
+                aria-valuemin="0"
+                aria-valuemax="2"
+                aria-valuenow="1"
+                style="max-width: 140px"
+              />
             </div>
 
             <div class="legend-block">
               <div class="legend-title">Wings &amp; scale</div>
-              <p class="hint-row" style="margin-bottom: 6px">Sphere size reflects drawer count within a view.</p>
+              <p class="hint-row legend-screen-hint" style="margin-bottom: 6px">
+                Sphere size reflects drawer count within a view.
+              </p>
               <div id="legend-host"></div>
             </div>
 
             <div class="btn-row" style="margin-top: 14px">
-              <button type="button" id="btn-reset-cam" class="btn btn--ghost">Reset camera</button>
-              <button type="button" id="btn-center" class="btn btn--ghost" title="Frame selection, or hovered node">Center</button>
+              <button type="button" id="btn-reset-cam" class="btn btn--ghost" title="Reset camera (shortcut R)">
+                Reset camera
+              </button>
+              <button
+                type="button"
+                id="btn-center"
+                class="btn btn--ghost"
+                title="Frame selection, or hovered node"
+              >
+                Center
+              </button>
             </div>
           </div>
-        </aside>
+        </nav>
 
-        <section class="canvas-column">
+        <main class="canvas-column" id="main-canvas-wrap">
           <div id="loading-overlay" class="overlay-state">
-            <div class="spinner"></div>
+            <div class="spinner" aria-hidden="true"></div>
             <p style="color: #94a3b8; font-size: 0.85rem">Loading palace data…</p>
           </div>
-          <div id="canvas-container" class="canvas-container" role="application" aria-label="MemPalace three-dimensional view"></div>
+          <div
+            id="canvas-container"
+            class="canvas-container"
+            role="application"
+            aria-label="MemPalace three-dimensional view. Use mouse to orbit; keyboard shortcuts in footer."
+            tabindex="0"
+          ></div>
           <div id="hover-card" class="hover-card" aria-hidden="true"></div>
-        </section>
+        </main>
 
-        <aside class="panel panel--right" id="panel-right">
-          <div class="panel-header">Inspector</div>
-          <div class="panel-body">
+        <aside class="panel panel--right" id="panel-right" aria-label="Inspector">
+          <div class="panel-header">
+            <span>Inspector</span>
+            <button
+              type="button"
+              id="btn-collapse-right"
+              class="panel-header__collapse"
+              aria-expanded="true"
+              aria-controls="panel-right-body"
+              title="Collapse or expand inspector panel"
+            >
+              ›
+            </button>
+          </div>
+          <div class="panel-body" id="panel-right-body">
             <div class="inspector-toolbar">
-              <span id="inspect-mode-badge" class="inspect-mode-badge" data-mode="empty">Nothing selected</span>
+              <span
+                id="inspect-mode-badge"
+                class="inspect-mode-badge"
+                data-mode="empty"
+                role="status"
+                aria-live="polite"
+                aria-atomic="true"
+              >
+                Nothing selected
+              </span>
               <div class="inspector-toolbar__actions">
-                <button type="button" id="btn-pin" class="btn btn--ghost btn--sm" title="Pin inspector (ignore hover)">Pin</button>
-                <button type="button" id="btn-clear-sel" class="btn btn--ghost btn--sm" title="Clear selection">Clear</button>
+                <button
+                  type="button"
+                  id="btn-pin"
+                  class="btn btn--ghost btn--sm"
+                  title="Pin inspector (ignore hover)"
+                >
+                  Pin
+                </button>
+                <button type="button" id="btn-clear-sel" class="btn btn--ghost btn--sm" title="Clear selection">
+                  Clear
+                </button>
               </div>
             </div>
             <div id="breadcrumb" class="breadcrumb"></div>
-            <div id="inspect-body"></div>
+            <div id="inspect-body" role="region" aria-label="Inspector details" tabindex="-1"></div>
           </div>
         </aside>
       </div>
 
-      <footer class="app-footer">
+      <footer class="app-footer" role="contentinfo">
         <div class="footer-metrics-block">
           <div class="metrics metrics--primary" aria-live="polite">
             <span class="metric"><span class="metric__k">Drawers</span> <span id="metric-drawers" class="metric__v">—</span></span>
@@ -102,24 +186,43 @@
           <p class="metric-footnote" id="metric-footnote"></p>
         </div>
         <div class="footer-actions">
-          <button type="button" id="btn-help" class="btn btn--ghost btn--sm" title="Shortcuts">Shortcuts</button>
-          <span class="hint-row" style="margin: 0">
-            <kbd>1</kbd>–<kbd>3</kbd> · <kbd>R</kbd> camera · <kbd>L</kbd> labels · <kbd>Space</kbd> rotate · <kbd>Esc</kbd> unpin/clear
+          <button type="button" id="btn-help" class="btn btn--ghost btn--sm" aria-haspopup="dialog" title="Keyboard shortcuts">
+            Shortcuts
+          </button>
+          <span class="hint-row footer-shortcuts-hint" style="margin: 0">
+            <kbd>1</kbd>–<kbd>3</kbd> · <kbd>R</kbd> camera · <kbd>/</kbd> search · <kbd>L</kbd> labels · <kbd>Space</kbd> rotate ·
+            <kbd>Esc</kbd> help / unpin / clear
           </span>
         </div>
       </footer>
     </div>
 
-    <div id="help-overlay" class="help-overlay" aria-hidden="true" role="presentation">
-      <div class="help-modal" role="dialog" aria-labelledby="help-title">
+    <div
+      id="help-overlay"
+      class="help-overlay"
+      aria-hidden="true"
+      role="presentation"
+    >
+      <div
+        class="help-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="help-title"
+        id="help-dialog"
+        tabindex="-1"
+        aria-describedby="help-shortcut-list"
+      >
         <h2 id="help-title" class="help-modal__title">Shortcuts &amp; interaction</h2>
-        <button type="button" id="help-close" class="help-modal__close" aria-label="Close">×</button>
-        <ul class="help-list">
+        <button type="button" id="help-close" class="help-modal__close" aria-label="Close shortcuts dialog">
+          ×
+        </button>
+        <ul class="help-list" id="help-shortcut-list">
           <li><kbd>1</kbd> / <kbd>2</kbd> / <kbd>3</kbd> — Switch Wings / Rooms / Graph view</li>
           <li><kbd>R</kbd> — Reset camera</li>
+          <li><kbd>/</kbd> — Focus search</li>
           <li><kbd>L</kbd> — Toggle labels</li>
           <li><kbd>Space</kbd> — Toggle auto-rotate</li>
-          <li><kbd>Esc</kbd> — Unpin inspector, or clear selection</li>
+          <li><kbd>Esc</kbd> — Close this dialog; then unpin inspector; then clear selection</li>
           <li><strong>Click</strong> wing (Wings) — Enter that wing’s rooms</li>
           <li><strong>Click</strong> room (Rooms) — Select &amp; center</li>
           <li><strong>Click</strong> node (Graph) — Select &amp; pin</li>
@@ -128,6 +231,8 @@
         </ul>
       </div>
     </div>
+
+    <div id="toast-host" class="toast-host" aria-live="polite" aria-relevant="additions text"></div>
 
   </body>
 </html>

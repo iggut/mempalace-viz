@@ -92,6 +92,8 @@ export function createPalaceScene(container, options = {}) {
     selectedId: null,
     pinActive: false,
   };
+  let prefersReducedMotion =
+    typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
   const nodeRegistry = new Map();
   const labelByNodeId = new Map();
@@ -309,6 +311,15 @@ export function createPalaceScene(container, options = {}) {
       .join(' ')
       .toLowerCase();
     return parts.includes(q) || q.split(/\s+/).every((t) => t.length < 2 || parts.includes(t));
+  }
+
+  function presentationEqual(a, b) {
+    return (
+      a.searchQuery === b.searchQuery &&
+      a.hoveredId === b.hoveredId &&
+      a.selectedId === b.selectedId &&
+      a.pinActive === b.pinActive
+    );
   }
 
   function syncVisualPresentation() {
@@ -563,17 +574,46 @@ export function createPalaceScene(container, options = {}) {
     });
 
     const nodeList = Array.from(allNodes.values());
+    if (!nodeList.length) {
+      const centerGeometry = new THREE.SphereGeometry(1.1, 16, 16);
+      const centerMaterial = new THREE.MeshStandardMaterial({
+        color: CONFIG.accent.center,
+        emissive: 0x334155,
+        emissiveIntensity: 0.25,
+        metalness: 0.2,
+        roughness: 0.5,
+        transparent: true,
+        opacity: 0.35,
+      });
+      const centerNode = new THREE.Mesh(centerGeometry, centerMaterial);
+      scene.add(centerNode);
+      nodes.push({ mesh: centerNode, data: { name: 'No graph data', type: 'center' } });
+      tweenCamera(new THREE.Vector3(0, 28, 72), new THREE.Vector3(0, 0, 0));
+      return;
+    }
+
+    const labelBudget = prefersReducedMotion ? 120 : 220;
+    const hideLabels = nodeList.length > labelBudget;
+
     simulateForceLayout(nodeList, graphEdges);
 
-    nodeList.forEach((nodeData, nodeId) => {
+    nodeList.forEach((nodeData) => {
       const isWing = nodeData.type === 'wing';
       const size = isWing ? CONFIG.nodeSizes.wingMin + 0.4 : CONFIG.nodeSizes.roomMin + 0.2;
       if (isWing) {
-        createWingNode(nodeId, nodeData.x, nodeData.y, nodeData.z, size);
-        addLabelForNode(`wing:${nodeId}`, nodeId, nodeData.x, nodeData.y, nodeData.z, '#cbd5e1');
+        createWingNode(nodeData.name, nodeData.x, nodeData.y, nodeData.z, size);
+        if (!hideLabels) addLabelForNode(`wing:${nodeData.name}`, nodeData.name, nodeData.x, nodeData.y, nodeData.z, '#cbd5e1');
       } else {
         createRoomNode(nodeData.name, nodeData.wing, nodeData.x, nodeData.y, nodeData.z, size);
-        addLabelForNode(`room:${nodeData.wing}:${nodeData.name}`, nodeData.name, nodeData.x, nodeData.y, nodeData.z, '#94a3b8');
+        if (!hideLabels)
+          addLabelForNode(
+            `room:${nodeData.wing}:${nodeData.name}`,
+            nodeData.name,
+            nodeData.x,
+            nodeData.y,
+            nodeData.z,
+            '#94a3b8',
+          );
       }
     });
 
@@ -600,8 +640,9 @@ export function createPalaceScene(container, options = {}) {
 
   function applyViewSettings() {
     const isGraph = currentView === 'graph';
-    controls.autoRotate = autoRotateUser && !isGraph;
-    controls.autoRotateSpeed = 0.35 * (autoRotateUser ? 1 : 0);
+    const allowSpin = autoRotateUser && !isGraph && !prefersReducedMotion;
+    controls.autoRotate = allowSpin;
+    controls.autoRotateSpeed = 0.35 * (allowSpin ? 1 : 0);
   }
 
   function setView(view, focusWing = null) {
@@ -639,18 +680,21 @@ export function createPalaceScene(container, options = {}) {
       let obj = intersects[i].object;
       while (obj && !obj.userData?.type) obj = obj.parent;
       if (obj && obj.userData?.type && obj.userData.type !== 'center') {
+        const hid = obj.userData.id || null;
+        const hoverChanged = hoveredMesh !== obj || presentation.hoveredId !== hid;
         hoveredMesh = obj;
-        presentation.hoveredId = obj.userData.id || null;
+        presentation.hoveredId = hid;
         renderer.domElement.style.cursor = 'pointer';
-        syncVisualPresentation();
+        if (hoverChanged) syncVisualPresentation();
         callbacks.onHover({ ...obj.userData }, { x: event.clientX, y: event.clientY });
         return;
       }
     }
+    const wasHovering = presentation.hoveredId != null;
     hoveredMesh = null;
     presentation.hoveredId = null;
     renderer.domElement.style.cursor = 'default';
-    syncVisualPresentation();
+    if (wasHovering) syncVisualPresentation();
     callbacks.onHover(null, { x: event.clientX, y: event.clientY });
   }
 
@@ -668,14 +712,15 @@ export function createPalaceScene(container, options = {}) {
     controls.update();
 
     const t = Date.now() * 0.001;
-    const bob = 0.42 * motionIntensity;
+    const bob = prefersReducedMotion ? 0 : 0.42 * motionIntensity;
+    const rot = prefersReducedMotion ? 0 : 0.006 * motionIntensity;
 
     nodes.forEach((node, i) => {
       if (!node.data || node.data.type === 'center') return;
       const offset = i * 0.37;
       const base = node.mesh.userData._baseY ?? 0;
       node.mesh.position.y = base + Math.sin(t * 0.9 + offset) * bob;
-      node.mesh.rotation.y += 0.006 * motionIntensity;
+      node.mesh.rotation.y += rot;
     });
 
     renderer.render(scene, camera);
@@ -714,6 +759,15 @@ export function createPalaceScene(container, options = {}) {
     scene.add(fill);
 
     createStars();
+
+    if (typeof window !== 'undefined' && window.matchMedia) {
+      const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+      prefersReducedMotion = mq.matches;
+      mq.addEventListener('change', (e) => {
+        prefersReducedMotion = e.matches;
+        applyViewSettings();
+      });
+    }
 
     renderer.domElement.addEventListener('pointermove', onPointerMove);
     renderer.domElement.addEventListener('click', onPointerClick);
@@ -758,7 +812,9 @@ export function createPalaceScene(container, options = {}) {
   }
 
   function updatePresentation(patch) {
-    presentation = { ...presentation, ...patch };
+    const next = { ...presentation, ...patch };
+    if (presentationEqual(presentation, next)) return;
+    presentation = next;
     syncVisualPresentation();
   }
 

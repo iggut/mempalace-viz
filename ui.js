@@ -7,6 +7,7 @@ import {
   buildGraphAnalytics,
   buildOverviewModel,
   characterizeRoom,
+  countEdgesWithUnresolvedEndpoints,
   countTotalRooms,
   formatPct,
   getRoomGraphSlice,
@@ -18,8 +19,11 @@ import {
   sumDrawerCountsInWing,
   totalDrawersAcrossWings,
 } from './insights.js';
+import { assertValidState, normalizePersistedNavigation, sanitizeNavigationAgainstData } from './state-utils.js';
+import { devWarn, isDev } from './debug.js';
 
 const LS_KEY = 'mempalace-viz-explorer-v1';
+const PANEL_STATE_KEY = 'mempalace-viz-panel-state-v1';
 
 const VIEWS = [
   { id: 'wings', title: 'Wings', hint: 'High-level structure by domain or project.' },
@@ -43,8 +47,46 @@ let sceneApi = null;
 let dataBundle = null;
 let searchDebounce = null;
 let pendingPersist = null;
+/** @type {HTMLElement | null} */
+let helpFocusBefore = null;
+let toastClearTimer = null;
 
 const $ = (id) => document.getElementById(id);
+
+function isTypingTarget(el) {
+  if (!el || !(el instanceof HTMLElement)) return false;
+  const tag = el.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+  if (el.isContentEditable) return true;
+  return false;
+}
+
+function showToast(message, ms = 5200) {
+  const host = $('toast-host');
+  if (!host) return;
+  clearTimeout(toastClearTimer);
+  host.innerHTML = `<div class="toast" role="status">${escapeHtml(message)}</div>`;
+  toastClearTimer = setTimeout(() => {
+    host.innerHTML = '';
+  }, ms);
+}
+
+function graphViewInspectorNotice(ctx) {
+  if (appState.view !== 'graph') return '';
+  const edges = dataBundle?.graphEdges?.length ?? 0;
+  if (!edges) {
+    return `<div class="inspect-card inspect-card--hint" role="status"><strong>Graph view</strong><p class="inspect-muted inspect-muted--tight">No tunnel edges were returned from graph-stats. Wings and rooms may still appear if taxonomy is loaded.</p></div>`;
+  }
+  if (!ctx.ga?.hasResolvableEdges) {
+    const unresolved = countEdgesWithUnresolvedEndpoints(dataBundle?.graphEdges, dataBundle?.roomsData);
+    return `<div class="inspect-card inspect-card--hint" role="status"><strong>Graph view</strong><p class="inspect-muted inspect-muted--tight">Loaded ${edges} tunnel edge${edges === 1 ? '' : 's'}, but endpoints could not be fully matched to taxonomy rooms${unresolved ? ` (${unresolved} edge${unresolved === 1 ? '' : 's'} unresolved).` : '.'} Layout may be sparse.</p></div>`;
+  }
+  return '';
+}
+
+function shouldIgnoreHover() {
+  return !!(appState.pinned && appState.selected);
+}
 
 function escapeHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, (m) =>
@@ -527,6 +569,7 @@ function onInspectorClick(e) {
 }
 
 function selectRoomFromInspector(wing, room) {
+  closeHelpIfOpen();
   if (!dataBundle || !wingExists(dataBundle.wingsData, wing) || !roomExists(dataBundle.roomsData, wing, room)) {
     return;
   }
@@ -548,7 +591,6 @@ function selectRoomFromInspector(wing, room) {
   sceneApi?.centerOnNodeId(`room:${wing}:${room}`);
   setActiveViewButtons();
   $('view-helper-text').textContent = VIEWS.find((v) => v.id === 'rooms')?.hint || '';
-  renderBreadcrumb();
   renderInspector();
   persistState();
 }
@@ -597,35 +639,8 @@ function persistState() {
 }
 
 function validateStateAgainstData() {
-  const wd = dataBundle?.wingsData || {};
-  const rd = dataBundle?.roomsData || {};
-
-  if (appState.currentWing && !wingExists(wd, appState.currentWing)) {
-    appState.currentWing = null;
-    appState.currentRoom = null;
-    appState.selected = null;
-    appState.pinned = false;
-  }
-  if (appState.currentRoom && appState.currentWing) {
-    if (!roomExists(rd, appState.currentWing, appState.currentRoom)) {
-      appState.currentRoom = null;
-      if (appState.selected?.type === 'room') {
-        appState.selected = null;
-        appState.pinned = false;
-      }
-    }
-  }
-  if (appState.selected?.id) {
-    const s = appState.selected;
-    if (s.type === 'wing' && !wingExists(wd, s.name)) {
-      appState.selected = null;
-      appState.pinned = false;
-    }
-    if (s.type === 'room' && (!s.wing || !roomExists(rd, s.wing, s.name))) {
-      appState.selected = null;
-      appState.pinned = false;
-    }
-  }
+  if (!dataBundle) return;
+  sanitizeNavigationAgainstData(appState, dataBundle);
 }
 
 function applyPersistedToControls(p) {
@@ -637,13 +652,14 @@ function applyPersistedToControls(p) {
 }
 
 function mergePersistedNavigation(p) {
-  if (!p) return;
-  if (p.view === 'wings' || p.view === 'rooms' || p.view === 'graph') appState.view = p.view;
-  if (p.currentWing !== undefined) appState.currentWing = p.currentWing;
-  if (p.currentRoom !== undefined) appState.currentRoom = p.currentRoom;
-  if (p.selected && typeof p.selected === 'object') appState.selected = p.selected;
-  if (p.pinned !== undefined) appState.pinned = !!p.pinned;
-  if (p.searchQuery !== undefined) appState.searchQuery = p.searchQuery;
+  if (p == null) return;
+  const n = normalizePersistedNavigation(p);
+  appState.view = n.view;
+  appState.currentWing = n.currentWing;
+  appState.currentRoom = n.currentRoom;
+  appState.selected = n.selected;
+  appState.pinned = n.pinned;
+  appState.searchQuery = n.searchQuery;
 }
 
 function syncScenePresentation() {
@@ -785,6 +801,53 @@ function renderLegend() {
     .join('');
 }
 
+function wireBreadcrumbRoving(container) {
+  const nav = container.querySelector('.breadcrumb-nav');
+  if (!nav) return;
+  const buttons = [...nav.querySelectorAll('.crumb')];
+  if (!buttons.length) return;
+  buttons.forEach((b, i) => {
+    b.setAttribute('aria-posinset', String(i + 1));
+    b.setAttribute('aria-setsize', String(buttons.length));
+    b.tabIndex = i === 0 ? 0 : -1;
+  });
+  const prev = nav._bcKey;
+  if (prev) nav.removeEventListener('keydown', prev);
+  nav._bcKey = (e) => {
+    const ix = buttons.indexOf(document.activeElement);
+    if (ix < 0) return;
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      const n = (ix + 1) % buttons.length;
+      buttons.forEach((x, j) => {
+        x.tabIndex = j === n ? 0 : -1;
+      });
+      buttons[n].focus();
+    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      const n = (ix - 1 + buttons.length) % buttons.length;
+      buttons.forEach((x, j) => {
+        x.tabIndex = j === n ? 0 : -1;
+      });
+      buttons[n].focus();
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      buttons.forEach((x, j) => {
+        x.tabIndex = j === 0 ? 0 : -1;
+      });
+      buttons[0].focus();
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      const last = buttons.length - 1;
+      buttons.forEach((x, j) => {
+        x.tabIndex = j === last ? 0 : -1;
+      });
+      buttons[last].focus();
+    }
+  };
+  nav.addEventListener('keydown', nav._bcKey);
+}
+
 function renderBreadcrumb() {
   const el = $('breadcrumb');
   if (!el) return;
@@ -819,9 +882,11 @@ function renderBreadcrumb() {
       sceneApi?.centerOnNodeId(id);
     }
   });
+  wireBreadcrumbRoving(el);
 }
 
 function goAllWings() {
+  closeHelpIfOpen();
   appState.view = 'wings';
   appState.currentWing = null;
   appState.currentRoom = null;
@@ -831,12 +896,12 @@ function goAllWings() {
   syncScenePresentation();
   setActiveViewButtons();
   $('view-helper-text').textContent = VIEWS.find((v) => v.id === 'wings')?.hint || '';
-  renderBreadcrumb();
   renderInspector();
   persistState();
 }
 
 function navigateToWing(wing) {
+  closeHelpIfOpen();
   if (!dataBundle || !wingExists(dataBundle.wingsData, wing)) return;
   appState.currentWing = wing;
   appState.currentRoom = null;
@@ -847,7 +912,6 @@ function navigateToWing(wing) {
   syncScenePresentation();
   setActiveViewButtons();
   $('view-helper-text').textContent = VIEWS.find((v) => v.id === 'rooms')?.hint || '';
-  renderBreadcrumb();
   renderInspector();
   persistState();
 }
@@ -888,12 +952,15 @@ function renderInspector() {
   renderBreadcrumb();
 
   const ctx = buildPalaceContext();
+  const graphNote = graphViewInspectorNotice(ctx);
 
   if (!subject || subject.type === 'center') {
     if (mode === 'empty') {
-      body.innerHTML = renderOverviewInspector(ctx);
+      body.innerHTML = graphNote + renderOverviewInspector(ctx);
     } else {
-      body.innerHTML = `
+      body.innerHTML =
+        graphNote +
+        `
         <div class="empty-state">
           <strong>Hover a node</strong>
           <p>Move the pointer over the scene for a quick preview, or select a wing or room.</p>
@@ -906,11 +973,11 @@ function renderInspector() {
 
   const t = subject;
   if (t.type === 'wing') {
-    body.innerHTML = renderWingInspector(ctx, t.name, mode);
+    body.innerHTML = graphNote + renderWingInspector(ctx, t.name, mode);
   } else if (t.type === 'room') {
-    body.innerHTML = renderRoomInspector(ctx, t.wing, t.name, mode);
+    body.innerHTML = graphNote + renderRoomInspector(ctx, t.wing, t.name, mode);
   } else {
-    body.innerHTML = `<div class="inspect-card"><p class="inspect-muted">Unknown node type.</p></div>`;
+    body.innerHTML = graphNote + `<div class="inspect-card"><p class="inspect-muted">Unknown node type.</p></div>`;
   }
   updateFooterContextLine(t, ctx);
   updatePinButton();
@@ -955,11 +1022,41 @@ function fillHoverCard(data) {
 
 function setActiveViewButtons() {
   document.querySelectorAll('[data-view]').forEach((btn) => {
-    btn.classList.toggle('is-active', btn.getAttribute('data-view') === appState.view);
+    const active = btn.getAttribute('data-view') === appState.view;
+    btn.classList.toggle('is-active', active);
+    btn.setAttribute('aria-selected', active ? 'true' : 'false');
+    btn.tabIndex = active ? 0 : -1;
   });
 }
 
+function closeHelpDialog() {
+  const o = $('help-overlay');
+  if (!o) return;
+  o.classList.remove('is-open');
+  o.setAttribute('aria-hidden', 'true');
+  helpFocusBefore?.focus?.();
+  helpFocusBefore = null;
+}
+
+function openHelpDialog() {
+  const o = $('help-overlay');
+  const dlg = $('help-dialog');
+  if (!o || !dlg) return;
+  helpFocusBefore = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  o.classList.add('is-open');
+  o.setAttribute('aria-hidden', 'false');
+  requestAnimationFrame(() => {
+    $('help-close')?.focus();
+  });
+}
+
+function closeHelpIfOpen() {
+  const o = $('help-overlay');
+  if (o?.classList.contains('is-open')) closeHelpDialog();
+}
+
 function applyView(view) {
+  closeHelpIfOpen();
   appState.view = view;
   if (view === 'wings') {
     appState.currentWing = null;
@@ -970,7 +1067,6 @@ function applyView(view) {
   syncScenePresentation();
   setActiveViewButtons();
   $('view-helper-text').textContent = VIEWS.find((v) => v.id === view)?.hint || '';
-  renderBreadcrumb();
   renderInspector();
   persistState();
 }
@@ -1018,7 +1114,6 @@ function handleSceneClick(ud) {
     syncScenePresentation();
     setActiveViewButtons();
     $('view-helper-text').textContent = VIEWS.find((v) => v.id === 'rooms')?.hint || '';
-    renderBreadcrumb();
     renderInspector();
     persistState();
     return;
@@ -1037,7 +1132,6 @@ function handleSceneClick(ud) {
       sceneApi?.setView('rooms', ud.name);
       syncScenePresentation();
     }
-    renderBreadcrumb();
     renderInspector();
     persistState();
     return;
@@ -1051,13 +1145,13 @@ function handleSceneClick(ud) {
     sceneApi?.setView('rooms', appState.currentWing);
     syncScenePresentation();
     sceneApi?.centerOnNodeId(ud.id);
-    renderBreadcrumb();
     renderInspector();
     persistState();
     return;
   }
 
   if (appState.view === 'graph') {
+    if (!sel) return;
     appState.selected = sel;
     appState.pinned = true;
     syncScenePresentation();
@@ -1077,6 +1171,11 @@ function setupScene() {
   const container = $('canvas-container');
   sceneApi = createPalaceScene(container, {
     onHover: (data, pos) => {
+      if (shouldIgnoreHover()) {
+        fillHoverCard(null);
+        positionHoverCard(0, 0, false);
+        return;
+      }
       appState.hovered = data && data.type !== 'center' ? { ...data } : null;
       renderInspector();
       fillHoverCard(data);
@@ -1085,6 +1184,85 @@ function setupScene() {
     onClick: (data) => handleSceneClick(data),
   });
   sceneApi.init();
+}
+
+function wireHelpFocusTrap() {
+  const o = $('help-overlay');
+  if (!o || o._trapWired) return;
+  o._trapWired = true;
+  o.addEventListener('keydown', (e) => {
+    if (!o.classList.contains('is-open') || e.key !== 'Tab') return;
+    const focusables = [...o.querySelectorAll('button, [href], input, select, textarea')].filter(
+      (el) => !el.hasAttribute('disabled'),
+    );
+    if (focusables.length === 0) return;
+    const first = focusables[0];
+    const last = focusables[focusables.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  });
+}
+
+function applyPanelLayoutFromStorage() {
+  let leftCollapsed = false;
+  let rightCollapsed = false;
+  try {
+    const raw = localStorage.getItem(PANEL_STATE_KEY);
+    if (raw) {
+      const p = JSON.parse(raw);
+      leftCollapsed = !!p.leftCollapsed;
+      rightCollapsed = !!p.rightCollapsed;
+    }
+  } catch {
+    /* ignore */
+  }
+  const main = $('app-main-grid');
+  const pl = $('panel-left');
+  const pr = $('panel-right');
+  main?.classList.toggle('has-left-collapsed', leftCollapsed);
+  main?.classList.toggle('has-right-collapsed', rightCollapsed);
+  pl?.classList.toggle('panel--collapsed', leftCollapsed);
+  pr?.classList.toggle('panel--collapsed', rightCollapsed);
+  $('btn-collapse-left')?.setAttribute('aria-expanded', String(!leftCollapsed));
+  $('btn-collapse-right')?.setAttribute('aria-expanded', String(!rightCollapsed));
+}
+
+function persistPanelLayout() {
+  const main = $('app-main-grid');
+  try {
+    localStorage.setItem(
+      PANEL_STATE_KEY,
+      JSON.stringify({
+        leftCollapsed: main?.classList.contains('has-left-collapsed') ?? false,
+        rightCollapsed: main?.classList.contains('has-right-collapsed') ?? false,
+      }),
+    );
+  } catch {
+    /* ignore */
+  }
+}
+
+function wirePanelCollapse() {
+  const main = $('app-main-grid');
+  $('btn-collapse-left')?.addEventListener('click', () => {
+    main?.classList.toggle('has-left-collapsed');
+    $('panel-left')?.classList.toggle('panel--collapsed');
+    const collapsed = main?.classList.contains('has-left-collapsed');
+    $('btn-collapse-left')?.setAttribute('aria-expanded', String(!collapsed));
+    persistPanelLayout();
+  });
+  $('btn-collapse-right')?.addEventListener('click', () => {
+    main?.classList.toggle('has-right-collapsed');
+    $('panel-right')?.classList.toggle('panel--collapsed');
+    const collapsed = main?.classList.contains('has-right-collapsed');
+    $('btn-collapse-right')?.setAttribute('aria-expanded', String(!collapsed));
+    persistPanelLayout();
+  });
 }
 
 function wireControls() {
@@ -1107,13 +1285,31 @@ function wireControls() {
     sceneApi?.setLabelsVisible(e.target.checked);
     persistState();
   });
-  $('motion-range')?.addEventListener('input', (e) => {
-    sceneApi?.setMotionIntensity(Number(e.target.value));
+  const motionEl = $('motion-range');
+  motionEl?.addEventListener('input', (e) => {
+    const v = Number(e.target.value);
+    sceneApi?.setMotionIntensity(v);
+    e.target.setAttribute('aria-valuenow', String(v));
     persistState();
   });
+  if (motionEl) motionEl.setAttribute('aria-valuenow', motionEl.value);
 
   VIEWS.forEach((v) => {
     document.querySelector(`[data-view="${v.id}"]`)?.addEventListener('click', () => applyView(v.id));
+  });
+
+  const viewHost = $('view-buttons');
+  viewHost?.addEventListener('keydown', (e) => {
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+    const tabs = [...document.querySelectorAll('[data-view]')];
+    if (!tabs.length) return;
+    const ix = tabs.findIndex((b) => b.getAttribute('data-view') === appState.view);
+    if (ix < 0) return;
+    e.preventDefault();
+    const delta = e.key === 'ArrowDown' || e.key === 'ArrowRight' ? 1 : -1;
+    const n = (ix + delta + tabs.length) % tabs.length;
+    applyView(tabs[n].getAttribute('data-view'));
+    tabs[n].focus();
   });
 
   $('search-wings')?.addEventListener('input', (e) => {
@@ -1128,29 +1324,25 @@ function wireControls() {
 
   $('btn-help')?.addEventListener('click', () => {
     const o = $('help-overlay');
-    o?.classList.toggle('is-open');
-    if (o) o.setAttribute('aria-hidden', o.classList.contains('is-open') ? 'false' : 'true');
+    if (o?.classList.contains('is-open')) closeHelpDialog();
+    else openHelpDialog();
   });
-  $('help-close')?.addEventListener('click', () => {
-    const o = $('help-overlay');
-    o?.classList.remove('is-open');
-    o?.setAttribute('aria-hidden', 'true');
-  });
+  $('help-close')?.addEventListener('click', () => closeHelpDialog());
   $('help-overlay')?.addEventListener('click', (e) => {
     const o = $('help-overlay');
-    if (e.target === o) {
-      o?.classList.remove('is-open');
-      o?.setAttribute('aria-hidden', 'true');
-    }
+    if (e.target === o) closeHelpDialog();
   });
 
+  wireHelpFocusTrap();
+  applyPanelLayoutFromStorage();
+  wirePanelCollapse();
+
   window.addEventListener('keydown', (e) => {
-    if (e.target.matches('input, textarea') && e.key !== 'Escape') return;
+    if (isTypingTarget(e.target) && e.key !== 'Escape') return;
     if (e.key === 'Escape') {
       const ho = $('help-overlay');
       if (ho?.classList.contains('is-open')) {
-        ho.classList.remove('is-open');
-        ho.setAttribute('aria-hidden', 'true');
+        closeHelpDialog();
         return;
       }
       if (appState.pinned) {
@@ -1163,11 +1355,15 @@ function wireControls() {
       }
       return;
     }
-    if (e.target.matches('input, textarea')) return;
+    if (isTypingTarget(e.target)) return;
     if (e.key === '1') applyView('wings');
     if (e.key === '2') applyView('rooms');
     if (e.key === '3') applyView('graph');
     if (e.key === 'r' || e.key === 'R') sceneApi?.resetCamera();
+    if (e.key === '/' && !e.ctrlKey && !e.metaKey) {
+      e.preventDefault();
+      $('search-wings')?.focus();
+    }
     if (e.key === 'l' || e.key === 'L') {
       const cb = $('toggle-labels');
       if (cb) {
@@ -1189,6 +1385,22 @@ function wireControls() {
     $('onboard-hint').hidden = false;
     localStorage.setItem('mempalace-viz-onboarded', '1');
   }
+
+  if (
+    window.matchMedia?.('(prefers-reduced-motion: reduce)').matches &&
+    !localStorage.getItem(LS_KEY)
+  ) {
+    const tr = $('toggle-rotate');
+    if (tr) {
+      tr.checked = false;
+      tr.dispatchEvent(new Event('change'));
+    }
+    if (motionEl) {
+      motionEl.value = '0';
+      motionEl.setAttribute('aria-valuenow', '0');
+      sceneApi?.setMotionIntensity(0);
+    }
+  }
 }
 
 function buildViewButtons() {
@@ -1196,7 +1408,9 @@ function buildViewButtons() {
   if (!host) return;
   host.innerHTML = VIEWS.map(
     (v) => `
-    <button type="button" class="view-seg__btn" data-view="${v.id}">
+    <button type="button" class="view-seg__btn" data-view="${v.id}" role="tab" aria-selected="${
+      v.id === appState.view ? 'true' : 'false'
+    }" tabindex="${v.id === appState.view ? 0 : -1}">
       <strong>${escapeHtml(v.title)}</strong>
       <span class="view-seg__hint">${escapeHtml(v.hint)}</span>
     </button>`,
@@ -1215,6 +1429,8 @@ async function loadData(preserveContext) {
       }
     : null;
 
+  const previousBundle = dataBundle;
+
   showLoading(true);
   setConnState('loading', 'Connecting…');
   const ov = $('loading-overlay');
@@ -1225,6 +1441,14 @@ async function loadData(preserveContext) {
   dataBundle = await loadPalaceData();
 
   if (dataBundle.error) {
+    if (preserveContext && previousBundle && !previousBundle.error) {
+      dataBundle = previousBundle;
+      setConnState('stale', 'Offline (cached)');
+      showToast('Refresh failed — showing last loaded data. Check the API and try again.');
+      showLoading(false);
+      renderInspector();
+      return;
+    }
     setConnState('error', 'Disconnected');
     showError(dataBundle.error.message || String(dataBundle.error), getApiBase() || '(same origin)');
     return;
@@ -1302,9 +1526,25 @@ async function loadData(preserveContext) {
     $('view-helper-text').textContent += ' · No rooms in taxonomy yet.';
   }
 
-  renderBreadcrumb();
+  if (isDev() && dataBundle.graphEdges?.length) {
+    const u = countEdgesWithUnresolvedEndpoints(dataBundle.graphEdges, dataBundle.roomsData);
+    if (u) devWarn(`${u} tunnel edge(s) have unresolved endpoints vs taxonomy`);
+  }
+
   renderInspector();
   persistState();
+
+  if (isDev()) {
+    try {
+      assertValidState(appState, dataBundle, {
+        assert(cond, msg) {
+          if (!cond) devWarn('assertValidState:', msg);
+        },
+      });
+    } catch {
+      /* ignore */
+    }
+  }
 }
 
 function wireInspectorDelegation() {
