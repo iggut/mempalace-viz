@@ -22,6 +22,7 @@ import {
   maxRadiusFromFocus,
   normalizeLayoutParams,
   separateGraphNodes,
+  splitGraphFocusIds,
 } from '../graph-scene-helpers.js';
 
 test('computeDensityMetrics tiers and monotonicity', () => {
@@ -91,6 +92,44 @@ test('edgeEmphasisOpacityMult', () => {
     isGraphRelationship: true,
   });
   assert.ok(hi > dim);
+});
+
+test('splitGraphFocusIds secondary hover', () => {
+  assert.deepEqual(splitGraphFocusIds('a', 'b'), { primaryId: 'a', secondaryHoverId: 'b' });
+  assert.deepEqual(splitGraphFocusIds(null, 'b'), { primaryId: 'b', secondaryHoverId: null });
+  assert.deepEqual(splitGraphFocusIds('a', 'a'), { primaryId: 'a', secondaryHoverId: null });
+});
+
+test('edgeEmphasisOpacityMult secondary hover preview', () => {
+  const primary = edgeEmphasisOpacityMult({
+    selectedId: 'sel',
+    hoveredId: 'hov',
+    fromId: 'sel',
+    toId: 'b',
+    relationshipType: 'tunnel',
+    densityTier: 1,
+    isGraphRelationship: true,
+  });
+  const secondary = edgeEmphasisOpacityMult({
+    selectedId: 'sel',
+    hoveredId: 'hov',
+    fromId: 'hov',
+    toId: 'c',
+    relationshipType: 'tunnel',
+    densityTier: 1,
+    isGraphRelationship: true,
+  });
+  const dim = edgeEmphasisOpacityMult({
+    selectedId: 'sel',
+    hoveredId: 'hov',
+    fromId: 'z',
+    toId: 'q',
+    relationshipType: 'tunnel',
+    densityTier: 1,
+    isGraphRelationship: true,
+  });
+  assert.ok(secondary > dim);
+  assert.ok(primary > secondary);
 });
 
 test('maxRadiusFromFocus', () => {

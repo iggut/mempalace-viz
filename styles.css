@@ -269,6 +269,37 @@ a {
   display: block;
 }
 
+.canvas-container.canvas-bg-dismiss {
+  outline: 2px solid rgba(124, 156, 255, 0.22);
+  outline-offset: -2px;
+  transition: outline-color 0.12s ease;
+}
+
+.graph-explore-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: rgba(15, 23, 42, 0.45);
+  font-size: 0.74rem;
+}
+
+.graph-explore-strip__nav {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.graph-explore-strip__meta {
+  margin-left: auto;
+  color: var(--text-dim);
+  font-size: 0.68rem;
+  letter-spacing: 0.02em;
+}
+
 /* Panels */
 .panel {
   display: flex;
@@ -542,6 +573,11 @@ input[type="range"] {
 .inspect-mode-badge[data-mode='pinned'] {
   color: #fbbf24;
   border-color: rgba(251, 191, 36, 0.35);
+}
+
+.inspect-mode-badge[data-mode='graphFocus'] {
+  color: #7dd3fc;
+  border-color: rgba(125, 211, 252, 0.38);
 }
 
 .btn--sm {

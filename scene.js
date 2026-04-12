@@ -26,6 +26,7 @@ import {
   runGraphForceLayout,
   seedWingClusteredLayout,
   separateGraphNodes,
+  splitGraphFocusIds,
 } from './graph-scene-helpers.js';
 
 /** @param {Array<{ type: string, wing?: string, name?: string }>} nodeList @param {object} edge @param {'from'|'to'} end */
@@ -132,6 +133,9 @@ export function createPalaceScene(container, options = {}) {
   let focusRepeatIndex = 0;
   /** @type {string[]} interaction-only labels (FIFO evict) */
   let dynamicLabelQueue = [];
+  /** @type {{ id: string, at: number } | null} brief emissive pulse on successful pick */
+  let selectionPulse = null;
+  let selectionPulseTimer = 0;
 
   let currentView = 'wings';
   let roomsFocusWing = null;
@@ -157,6 +161,7 @@ export function createPalaceScene(container, options = {}) {
   const callbacks = {
     onHover: options.onHover || (() => {}),
     onClick: options.onClick || (() => {}),
+    onBackgroundClick: options.onBackgroundClick || (() => {}),
   };
 
   const raycaster = new THREE.Raycaster();
@@ -205,6 +210,9 @@ export function createPalaceScene(container, options = {}) {
     lastFocusNodeId = null;
     focusRepeatIndex = 0;
     dynamicLabelQueue = [];
+    selectionPulse = null;
+    if (selectionPulseTimer) clearTimeout(selectionPulseTimer);
+    selectionPulseTimer = 0;
     if (scene?.fog?.isFogExp2) scene.fog.density = 0.0026;
     if (stars?.material) stars.material.opacity = 0.35;
     nodeRegistry.clear();
@@ -334,8 +342,8 @@ export function createPalaceScene(container, options = {}) {
     const budget = graphSceneMetrics?.labelBudget ?? 180;
     const sid = presentation.selectedId;
     const hid = presentation.hoveredId;
-    const focusId = sid || hid;
-    const neighborIds = focusId ? neighborIdsForFocus(focusId, graphNeighborMap) : new Set();
+    const { primaryId } = splitGraphFocusIds(sid, hid);
+    const neighborIds = primaryId ? neighborIdsForFocus(primaryId, graphNeighborMap) : new Set();
     const focusWingId = focusWingIdFromSceneSelection(sid || hid);
     const showIds = computeVisibleLabelIds(graphLabelEntries, {
       selectedId: sid,
@@ -558,9 +566,9 @@ export function createPalaceScene(container, options = {}) {
       }
     });
 
-    const focusN = sid || hid;
+    const { primaryId } = splitGraphFocusIds(sid, hid);
     const nbrFocus =
-      focusN && currentView === 'graph' ? neighborIdsForFocus(focusN, graphNeighborMap) : null;
+      primaryId && currentView === 'graph' ? neighborIdsForFocus(primaryId, graphNeighborMap) : null;
 
     nodeRegistry.forEach((entry, id) => {
       const { mesh, data, baseOpacity, baseEmissive } = entry;
@@ -571,9 +579,17 @@ export function createPalaceScene(container, options = {}) {
       let opacityMult = match ? 1 : 0.14;
       let emissiveMult = 1;
 
-      if (id === hid) emissiveMult *= 1.45;
-      if (id === sid) emissiveMult *= pin ? 1.85 : 1.65;
-      if (id === sid && pin) opacityMult = Math.max(opacityMult, 0.85);
+      if (selectionPulse && id === selectionPulse.id) {
+        emissiveMult *= 1.22;
+      }
+
+      if (id === sid) {
+        emissiveMult *= pin ? 1.88 : 1.68;
+      } else if (id === hid) {
+        emissiveMult *= sid ? 1.36 : 1.48;
+      }
+      if (id === sid && pin) opacityMult = Math.max(opacityMult, 0.88);
+      else if (id === sid) opacityMult = Math.max(opacityMult, 0.82);
 
       const fullG = graphRoomIncidentFull.get(id) || 0;
       const visG = visibleGraphIncidents.get(id) || 0;
@@ -587,8 +603,8 @@ export function createPalaceScene(container, options = {}) {
           opacityMult = Math.max(opacityMult, gTier >= 2 ? 0.55 : 0.66);
           emissiveMult *= 1.09;
         }
-        if (id === focusN) {
-          opacityMult = Math.max(opacityMult, pin && id === sid ? 0.93 : 0.87);
+        if (id === primaryId) {
+          opacityMult = Math.max(opacityMult, pin && id === sid ? 0.94 : 0.88);
         }
       }
 
@@ -597,7 +613,17 @@ export function createPalaceScene(container, options = {}) {
       mat.emissiveIntensity = baseEmissive * emissiveMult;
 
       const emphasis =
-        id === sid ? (pin ? 1.1 : 1.07) : id === hid ? 1.05 : nbrFocus?.has(id) ? 1.025 : 1;
+        id === sid
+          ? pin
+            ? 1.12
+            : 1.08
+          : id === hid
+            ? sid && id !== sid
+              ? 1.04
+              : 1.06
+            : nbrFocus?.has(id)
+              ? 1.028
+              : 1;
       const dimScale = match ? 1 : 0.88;
       mesh.scale.setScalar(emphasis * dimScale);
     });
@@ -955,10 +981,22 @@ export function createPalaceScene(container, options = {}) {
 
   function onPointerClick() {
     if (!hoveredMesh) {
+      selectionPulse = null;
+      callbacks.onBackgroundClick();
       callbacks.onClick(null);
       return;
     }
     const data = { ...hoveredMesh.userData };
+    if (data.id && data.type !== 'center') {
+      if (selectionPulseTimer) clearTimeout(selectionPulseTimer);
+      selectionPulse = { id: data.id, at: performance.now() };
+      syncVisualPresentation();
+      selectionPulseTimer = setTimeout(() => {
+        selectionPulseTimer = 0;
+        selectionPulse = null;
+        syncVisualPresentation();
+      }, 190);
+    }
     callbacks.onClick(data);
   }
 
@@ -1112,7 +1150,8 @@ export function createPalaceScene(container, options = {}) {
       const ext = Math.max(maxR * 2.4, graphSpatialExtent * 0.42, 28);
       const off = framingTargetOffset(ext, graphSceneMetrics.tier, focusRepeatIndex);
       const target = new THREE.Vector3(p.x + off.x, p.y + off.y, p.z + off.z);
-      tweenCamera(p.clone().add(dir.multiplyScalar(dist)), target);
+      const dur = focusRepeatIndex > 0 ? 1020 : 880;
+      tweenCamera(p.clone().add(dir.multiplyScalar(dist)), target, dur);
       return;
     }
 
@@ -1153,6 +1192,8 @@ export function createPalaceScene(container, options = {}) {
       renderer.domElement.removeEventListener('pointerleave', onPointerLeave);
     }
     clearSceneContent();
+    if (selectionPulseTimer) clearTimeout(selectionPulseTimer);
+    selectionPulseTimer = 0;
     if (stars) {
       scene.remove(stars);
       stars.geometry.dispose();
@@ -1197,5 +1238,11 @@ export function createPalaceScene(container, options = {}) {
       Object.assign(callbacks, c);
     },
     setRelationshipFilters,
+    /** Sorted room graph neighbors for stepping UI (graph view). */
+    getGraphNeighbors(nodeId) {
+      if (currentView !== 'graph' || !nodeId) return [];
+      const set = neighborIdsForFocus(nodeId, graphNeighborMap);
+      return [...set].sort((a, b) => a.localeCompare(b));
+    },
   };
 }

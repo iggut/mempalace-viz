@@ -37,6 +37,12 @@ import {
 } from './graph-relationships.js';
 import { assertValidState, normalizePersistedNavigation, sanitizeNavigationAgainstData } from './state-utils.js';
 import { devWarn, isDev } from './debug.js';
+import {
+  parseRoomSceneId,
+  popFocusHistory,
+  pushFocusHistory,
+  stepAdjacentRoom,
+} from './graph-navigation.js';
 
 const LS_KEY = 'mempalace-viz-explorer-v1';
 const PANEL_STATE_KEY = 'mempalace-viz-panel-state-v1';
@@ -69,6 +75,9 @@ let pendingPersist = null;
 /** @type {HTMLElement | null} */
 let helpFocusBefore = null;
 let toastClearTimer = null;
+
+/** @type {object[]} Graph focus stack (see `captureGraphFocusSnapshot`) */
+const graphFocusHistory = [];
 
 const $ = (id) => document.getElementById(id);
 
@@ -119,6 +128,86 @@ function graphViewInspectorNotice(ctx) {
 
 function shouldIgnoreHover() {
   return !!(appState.pinned && appState.selected);
+}
+
+function captureGraphFocusSnapshot() {
+  return {
+    view: 'graph',
+    selected: appState.selected,
+    pinned: appState.pinned,
+    currentWing: appState.currentWing,
+    currentRoom: appState.currentRoom,
+  };
+}
+
+function graphExploreStripHtml() {
+  if (appState.view !== 'graph' || !appState.selected || appState.selected.type === 'center') return '';
+  const id = appState.selected.id;
+  const n = sceneApi?.getGraphNeighbors?.(id)?.length ?? 0;
+  const hasNbr = n > 0;
+  return `<div class="graph-explore-strip" role="group" aria-label="Graph exploration">
+    <button type="button" class="btn btn--ghost btn--sm" data-graph-action="frame-nbr" title="Re-frame camera on selection and its neighbors">Frame neighborhood</button>
+    <span class="graph-explore-strip__nav">
+      <button type="button" class="btn btn--ghost btn--sm" data-graph-action="prev" ${hasNbr ? '' : 'disabled'} title="Previous connected room ([)">◀</button>
+      <button type="button" class="btn btn--ghost btn--sm" data-graph-action="next" ${hasNbr ? '' : 'disabled'} title="Next connected room (])">▶</button>
+    </span>
+    <button type="button" class="btn btn--ghost btn--sm" data-graph-action="back" title="Prior graph focus (U)">Back</button>
+    <span class="graph-explore-strip__meta" aria-hidden="true">${n} link${n === 1 ? '' : 's'}</span>
+  </div>`;
+}
+
+function graphFrameNeighborhood() {
+  if (appState.view !== 'graph' || !appState.selected?.id) return;
+  sceneApi?.centerOnNodeId(appState.selected.id);
+}
+
+function graphStepNeighbor(delta) {
+  if (appState.view !== 'graph' || !appState.selected?.id || !sceneApi?.getGraphNeighbors) return;
+  const cur = appState.selected.id;
+  const nbr = sceneApi.getGraphNeighbors(cur);
+  const next = stepAdjacentRoom(nbr, cur, delta);
+  if (!next) {
+    showToast('No connected rooms in this graph slice.');
+    return;
+  }
+  if (next === cur) return;
+  const pr = parseRoomSceneId(next);
+  if (!pr || !dataBundle) return;
+  if (!roomExists(dataBundle.roomsData, pr.wing, pr.room)) return;
+  pushFocusHistory(graphFocusHistory, captureGraphFocusSnapshot());
+  const rm = (dataBundle.roomsData[pr.wing] || []).find((r) => r.name === pr.room);
+  appState.currentWing = pr.wing;
+  appState.currentRoom = pr.room;
+  appState.selected = {
+    id: next,
+    type: 'room',
+    name: pr.room,
+    wing: pr.wing,
+    wingId: pr.wing,
+    roomId: rm?.roomId || makeRoomId(pr.wing, pr.room),
+    drawers: rm?.drawers,
+  };
+  appState.pinned = true;
+  syncScenePresentation();
+  sceneApi?.centerOnNodeId(next);
+  renderInspector();
+  persistState();
+}
+
+function graphFocusBack() {
+  const prev = popFocusHistory(graphFocusHistory);
+  if (!prev || prev.view !== 'graph' || !prev.selected?.id) {
+    showToast('No prior focus in history.');
+    return;
+  }
+  appState.selected = prev.selected;
+  appState.pinned = prev.pinned;
+  appState.currentWing = prev.currentWing;
+  appState.currentRoom = prev.currentRoom;
+  syncScenePresentation();
+  sceneApi?.centerOnNodeId(prev.selected.id);
+  renderInspector();
+  persistState();
 }
 
 function escapeHtml(s) {
@@ -776,6 +865,15 @@ function renderRoomInspector(ctx, wingName, roomName, _mode) {
 }
 
 function onInspectorClick(e) {
+  const g = e.target.closest('[data-graph-action]');
+  if (g) {
+    const act = g.getAttribute('data-graph-action');
+    if (act === 'frame-nbr') graphFrameNeighborhood();
+    else if (act === 'next') graphStepNeighbor(1);
+    else if (act === 'prev') graphStepNeighbor(-1);
+    else if (act === 'back') graphFocusBack();
+    return;
+  }
   const btn = e.target.closest('[data-inspect-action]');
   if (!btn) return;
   const action = btn.getAttribute('data-inspect-action');
@@ -797,10 +895,36 @@ function selectRoomFromInspector(wing, room) {
   }
   const rd = dataBundle.roomsData[wing];
   const rm = Array.isArray(rd) ? rd.find((r) => r.name === room) : null;
+  const id = `room:${wing}:${room}`;
+
+  if (appState.view === 'graph') {
+    if (appState.selected?.id && appState.selected.id !== id) {
+      pushFocusHistory(graphFocusHistory, captureGraphFocusSnapshot());
+    }
+    appState.currentWing = wing;
+    appState.currentRoom = room;
+    appState.selected = {
+      id,
+      type: 'room',
+      name: room,
+      wing,
+      wingId: wing,
+      roomId: rm?.roomId || makeRoomId(wing, room),
+      drawers: rm?.drawers,
+    };
+    appState.pinned = true;
+    syncScenePresentation();
+    sceneApi?.centerOnNodeId(id);
+    updateMetrics();
+    renderInspector();
+    persistState();
+    return;
+  }
+
   appState.currentWing = wing;
   appState.currentRoom = room;
   appState.selected = {
-    id: `room:${wing}:${room}`,
+    id,
     type: 'room',
     name: room,
     wing,
@@ -812,7 +936,7 @@ function selectRoomFromInspector(wing, room) {
   appState.view = 'rooms';
   sceneApi?.setView('rooms', wing);
   syncScenePresentation();
-  sceneApi?.centerOnNodeId(`room:${wing}:${room}`);
+  sceneApi?.centerOnNodeId(id);
   setActiveViewButtons();
   $('view-helper-text').textContent = VIEWS.find((v) => v.id === 'rooms')?.hint || '';
   updateGraphViewChrome();
@@ -1130,6 +1254,7 @@ function renderBreadcrumb() {
 
 function goAllWings() {
   closeHelpIfOpen();
+  graphFocusHistory.length = 0;
   appState.view = 'wings';
   appState.currentWing = null;
   appState.currentRoom = null;
@@ -1164,7 +1289,10 @@ function navigateToWing(wing) {
 }
 
 function inspectorMode() {
-  if (appState.pinned && appState.selected) return 'pinned';
+  if (appState.pinned && appState.selected) {
+    if (appState.view === 'graph') return 'graphFocus';
+    return 'pinned';
+  }
   if (appState.selected) return 'selected';
   if (appState.hovered) return 'live';
   return 'empty';
@@ -1187,6 +1315,7 @@ function renderInspector() {
       live: 'Live preview',
       selected: 'Selected',
       pinned: 'Pinned',
+      graphFocus: 'Graph focus',
     };
     badge.textContent = labels[mode];
     badge.dataset.mode = mode;
@@ -1203,9 +1332,10 @@ function renderInspector() {
 
   if (!subject || subject.type === 'center') {
     if (mode === 'empty') {
-      body.innerHTML = graphNote + renderOverviewInspector(ctx);
+      body.innerHTML = graphExploreStripHtml() + graphNote + renderOverviewInspector(ctx);
     } else {
       body.innerHTML =
+        graphExploreStripHtml() +
         graphNote +
         `
         <div class="empty-state">
@@ -1219,12 +1349,13 @@ function renderInspector() {
   }
 
   const t = subject;
+  const strip = graphExploreStripHtml();
   if (t.type === 'wing') {
-    body.innerHTML = graphNote + renderWingInspector(ctx, t.name, mode);
+    body.innerHTML = strip + graphNote + renderWingInspector(ctx, t.name, mode);
   } else if (t.type === 'room') {
-    body.innerHTML = graphNote + renderRoomInspector(ctx, t.wing, t.name, mode);
+    body.innerHTML = strip + graphNote + renderRoomInspector(ctx, t.wing, t.name, mode);
   } else {
-    body.innerHTML = graphNote + `<div class="inspect-card"><p class="inspect-muted">Unknown node type.</p></div>`;
+    body.innerHTML = strip + graphNote + `<div class="inspect-card"><p class="inspect-muted">Unknown node type.</p></div>`;
   }
   updateFooterContextLine(t, ctx);
   updatePinButton();
@@ -1304,10 +1435,17 @@ function closeHelpIfOpen() {
 
 function applyView(view) {
   closeHelpIfOpen();
+  if (appState.view === 'graph' && view !== 'graph') {
+    graphFocusHistory.length = 0;
+  }
   appState.view = view;
   if (view === 'wings') {
     appState.currentWing = null;
     appState.currentRoom = null;
+  }
+  if (view === 'graph' && !sessionStorage.getItem('mempalace-graph-enter-hint')) {
+    sessionStorage.setItem('mempalace-graph-enter-hint', '1');
+    showToast('Graph: drag to orbit · click spheres to focus · [ ] step links · U prior focus', 7000);
   }
   const focusWing = view === 'rooms' ? appState.currentWing : null;
   sceneApi?.setView(view, focusWing);
@@ -1403,9 +1541,20 @@ function handleSceneClick(ud) {
 
   if (appState.view === 'graph') {
     if (!sel) return;
+    if (sel.id && appState.selected?.id && appState.selected.id !== sel.id) {
+      pushFocusHistory(graphFocusHistory, captureGraphFocusSnapshot());
+    }
     appState.selected = sel;
+    if (sel.type === 'room') {
+      appState.currentWing = sel.wing;
+      appState.currentRoom = sel.name;
+    } else if (sel.type === 'wing') {
+      appState.currentWing = sel.name;
+      appState.currentRoom = null;
+    }
     appState.pinned = true;
     syncScenePresentation();
+    sceneApi?.centerOnNodeId(sel.id);
     renderInspector();
     persistState();
     return;
@@ -1433,6 +1582,11 @@ function setupScene() {
       positionHoverCard(pos.x, pos.y, !!data && data.type !== 'center');
     },
     onClick: (data) => handleSceneClick(data),
+    onBackgroundClick: () => {
+      const wrap = $('canvas-container');
+      wrap?.classList.add('canvas-bg-dismiss');
+      setTimeout(() => wrap?.classList.remove('canvas-bg-dismiss'), 160);
+    },
   });
   sceneApi.init();
 }
@@ -1618,6 +1772,20 @@ function wireControls() {
     if (e.key === '2') applyView('rooms');
     if (e.key === '3') applyView('graph');
     if (e.key === 'r' || e.key === 'R') sceneApi?.resetCamera();
+    if (appState.view === 'graph' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (e.key === '[') {
+        e.preventDefault();
+        graphStepNeighbor(-1);
+      }
+      if (e.key === ']') {
+        e.preventDefault();
+        graphStepNeighbor(1);
+      }
+      if (e.key === 'u' || e.key === 'U') {
+        e.preventDefault();
+        graphFocusBack();
+      }
+    }
     if (e.key === '/' && !e.ctrlKey && !e.metaKey) {
       e.preventDefault();
       $('search-wings')?.focus();

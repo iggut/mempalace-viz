@@ -369,6 +369,20 @@ export function neighborIdsForFocus(focusId, neighborMap) {
 }
 
 /**
+ * Split selection vs secondary hover so graph emphasis stays anchored on the selection
+ * while still previewing another node (incident edges + label priority use this).
+ * @param {string | null | undefined} selectedId
+ * @param {string | null | undefined} hoveredId
+ * @returns {{ primaryId: string | null, secondaryHoverId: string | null }}
+ */
+export function splitGraphFocusIds(selectedId, hoveredId) {
+  const primary = selectedId || hoveredId || null;
+  const secondary =
+    selectedId && hoveredId && hoveredId !== selectedId ? hoveredId : null;
+  return { primaryId: primary, secondaryHoverId: secondary };
+}
+
+/**
  * Which rooms should receive label sprites: wings always labeled separately; rooms capped by score
  * with guaranteed coverage for connected (incident) rooms so bridges are not silently unlabeled.
  * @param {Array<{ id: string, baseScore: number, incidentFull?: number }>} entries
@@ -477,14 +491,20 @@ export function edgeEmphasisOpacityMult(p) {
   const { selectedId, hoveredId, fromId, toId, relationshipType, densityTier, isGraphRelationship } = p;
   if (!isGraphRelationship) return 1;
 
-  const focusId = selectedId || hoveredId;
-  const incident = focusId && (fromId === focusId || toId === focusId);
+  const { primaryId, secondaryHoverId } = splitGraphFocusIds(selectedId, hoveredId);
+  const incidentPrimary = primaryId && (fromId === primaryId || toId === primaryId);
+  const incidentSecondary =
+    secondaryHoverId && (fromId === secondaryHoverId || toId === secondaryHoverId);
   const tunnel = relationshipType === 'tunnel';
   const tier = Math.max(0, Math.min(3, densityTier));
 
-  if (focusId) {
-    if (incident) return tunnel ? 1.24 : 1.06;
-    // Sparse graphs: keep more context visible; dense: stronger fade
+  if (primaryId) {
+    if (incidentPrimary) return tunnel ? 1.24 : 1.06;
+    // Preview edges for a different hovered node while a selection is pinned
+    if (incidentSecondary) {
+      const sec = tunnel ? 0.88 : 0.78;
+      return sec * (tier >= 2 ? 0.92 : 1);
+    }
     const nonIncident = tier >= 3 ? 0.36 : tier >= 2 ? 0.4 : tier >= 1 ? 0.52 : 0.68;
     return nonIncident;
   }
