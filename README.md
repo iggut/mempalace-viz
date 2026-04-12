@@ -60,9 +60,12 @@ open index.html      # macOS
 - `GET /api/status` — Palace overview (total drawers, wings, rooms)
 - `GET /api/wings` — List all wings with drawer counts
 - `GET /api/rooms?wing=xxx` — List rooms in a wing
-- `GET /api/taxonomy` — Full hierarchy: wing → room → drawer count
-- `GET /api/graph-stats` — Tunnel connections between rooms
+- `GET /api/taxonomy` — Full hierarchy: wing → room → drawer count (enriched with `wingId` / `roomId` fields)
+- `GET /api/graph-stats` — Graph stats plus **canonical** tunnel edges (`edgesResolved` / `edgesUnresolved` / `summary`) and legacy-compatible `tunnels` adjacency
+- `GET /api/overview` — Aggregated palace + graph summary in one payload (see `docs/API_CONTRACT.md`)
 - `GET /api/kg-stats` — Knowledge graph statistics
+
+Canonical ID semantics, resolved vs unresolved edges, and migration notes: **`docs/API_CONTRACT.md`**.
 
 ## Configuration
 

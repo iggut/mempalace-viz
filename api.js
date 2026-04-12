@@ -3,6 +3,10 @@
  * Uses same-origin relative URLs when served from the Node server.
  */
 
+import { normalizeWingsPayload, parseTaxonomyCanonical, toLegacyGraphEdges } from './canonical.js';
+
+export { normalizeWingsPayload };
+
 export function getApiBase() {
   if (typeof window !== 'undefined' && window.location?.protocol && window.location.protocol !== 'file:') {
     return '';
@@ -19,43 +23,12 @@ async function fetchJson(url) {
   return res.json();
 }
 
-/** Normalize /api/wings payload to { wingName: drawerCount } */
-export function normalizeWingsPayload(raw) {
-  if (!raw || typeof raw !== 'object') return {};
-  if (raw.wings && typeof raw.wings === 'object' && !Array.isArray(raw.wings)) {
-    return { ...raw.wings };
-  }
-  const skip = new Set(['error', 'message', 'ok']);
-  const out = {};
-  for (const [k, v] of Object.entries(raw)) {
-    if (skip.has(k)) continue;
-    if (typeof v === 'number') out[k] = v;
-  }
-  return Object.keys(out).length ? out : {};
-}
-
+/**
+ * Parse taxonomy payload into wing → rooms with canonical `roomId` / `wingId` on each row.
+ * @returns {{ taxonomy: object, roomsData: object, rooms: Array, wings: Array }}
+ */
 export function parseTaxonomy(taxonomyRaw) {
-  let taxonomy = taxonomyRaw;
-  if (typeof taxonomy === 'string') {
-    try {
-      taxonomy = JSON.parse(taxonomy);
-    } catch {
-      taxonomy = {};
-    }
-  }
-  const roomsData = {};
-  Object.entries(taxonomy || {}).forEach(([wing, rooms]) => {
-    if (!roomsData[wing]) roomsData[wing] = [];
-    if (rooms && typeof rooms === 'object' && !Array.isArray(rooms)) {
-      Object.entries(rooms).forEach(([room, count]) => {
-        roomsData[wing].push({
-          name: room,
-          drawers: typeof count === 'number' ? count : 1,
-        });
-      });
-    }
-  });
-  return { taxonomy: taxonomy || {}, roomsData };
+  return parseTaxonomyCanonical(taxonomyRaw);
 }
 
 /** Optional: fetch room list for a wing from `/api/rooms?wing=`. */
@@ -82,26 +55,31 @@ export function roomExists(roomsData, wing, room) {
 }
 
 /**
- * Load all viz endpoints in parallel. kg-stats is optional.
+ * Load all viz endpoints in parallel. kg-stats is optional; overview is optional.
  * @returns {Promise<object>}
  */
 export async function loadPalaceData() {
   const base = getApiBase();
   const prefix = `${base}/api`;
   try {
-    const [status, wingsRaw, taxonomyRaw, graphStats, kgResult] = await Promise.all([
+    const [status, wingsRaw, taxonomyRaw, graphStats, kgResult, overviewBundle] = await Promise.all([
       fetchJson(`${prefix}/status`),
       fetchJson(`${prefix}/wings`),
       fetchJson(`${prefix}/taxonomy`),
       fetchJson(`${prefix}/graph-stats`),
       fetchJson(`${prefix}/kg-stats`).catch(() => null),
+      fetchJson(`${prefix}/overview`).catch(() => null),
     ]);
 
     const wingsData = normalizeWingsPayload(wingsRaw);
-    const { taxonomy, roomsData } = parseTaxonomy(taxonomyRaw);
+    const { taxonomy, roomsData, rooms, wings } = parseTaxonomyCanonical(taxonomyRaw);
 
     let graphEdges = [];
-    if (graphStats?.tunnels && typeof graphStats.tunnels === 'object') {
+    if (graphStats?.edgesResolved?.length) {
+      graphEdges = toLegacyGraphEdges(graphStats.edgesResolved);
+    } else if (graphStats?.legacyGraphEdges?.length) {
+      graphEdges = graphStats.legacyGraphEdges;
+    } else if (graphStats?.tunnels && typeof graphStats.tunnels === 'object') {
       graphEdges = Object.entries(graphStats.tunnels).flatMap(([room, connections]) =>
         Object.entries(connections || {}).map(([connectedRoom, wing]) => ({
           from: room,
@@ -116,9 +94,12 @@ export async function loadPalaceData() {
       wingsData,
       roomsData,
       taxonomy,
+      rooms,
+      wings,
       graphStats,
       kgStats: kgResult && !kgResult.error ? kgResult : null,
       graphEdges,
+      overviewBundle,
       error: null,
     };
   } catch (error) {
@@ -127,9 +108,12 @@ export async function loadPalaceData() {
       wingsData: {},
       roomsData: {},
       taxonomy: {},
+      rooms: [],
+      wings: [],
       graphStats: null,
       kgStats: null,
       graphEdges: [],
+      overviewBundle: null,
       error,
     };
   }

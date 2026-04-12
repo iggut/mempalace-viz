@@ -2,6 +2,7 @@
  * MemPalace 3D — app state, navigation, inspector, persistence, scene sync.
  */
 import { loadPalaceData, getApiBase, wingExists, roomExists } from './api.js';
+import { makeRoomId } from './canonical.js';
 import { createPalaceScene, wingColorFor } from './scene.js';
 import {
   buildGraphAnalytics,
@@ -73,12 +74,17 @@ function showToast(message, ms = 5200) {
 
 function graphViewInspectorNotice(ctx) {
   if (appState.view !== 'graph') return '';
+  const gs = dataBundle?.graphStats;
   const edges = dataBundle?.graphEdges?.length ?? 0;
+  const unresolvedApi = Array.isArray(gs?.edgesUnresolved) ? gs.edgesUnresolved.length : null;
   if (!edges) {
     return `<div class="inspect-card inspect-card--hint" role="status"><strong>Graph view</strong><p class="inspect-muted inspect-muted--tight">No tunnel edges were returned from graph-stats. Wings and rooms may still appear if taxonomy is loaded.</p></div>`;
   }
   if (!ctx.ga?.hasResolvableEdges) {
-    const unresolved = countEdgesWithUnresolvedEndpoints(dataBundle?.graphEdges, dataBundle?.roomsData);
+    const unresolved =
+      unresolvedApi != null
+        ? unresolvedApi
+        : countEdgesWithUnresolvedEndpoints(dataBundle?.graphEdges, dataBundle?.roomsData);
     return `<div class="inspect-card inspect-card--hint" role="status"><strong>Graph view</strong><p class="inspect-muted inspect-muted--tight">Loaded ${edges} tunnel edge${edges === 1 ? '' : 's'}, but endpoints could not be fully matched to taxonomy rooms${unresolved ? ` (${unresolved} edge${unresolved === 1 ? '' : 's'} unresolved).` : '.'} Layout may be sparse.</p></div>`;
   }
   return '';
@@ -118,15 +124,24 @@ function buildPalaceContext() {
   const graphEdges = dataBundle?.graphEdges || [];
   const gs = dataBundle?.graphStats;
   const kg = dataBundle?.kgStats;
+  const overviewStats = dataBundle?.overviewBundle?.stats;
 
   const totalDrawers =
-    typeof st?.total_drawers === 'number' ? st.total_drawers : totalDrawersAcrossWings(wingsData);
-  const wingCount = Object.keys(wingsData).length;
-  const roomCount = countTotalRooms(roomsData);
+    typeof st?.total_drawers === 'number'
+      ? st.total_drawers
+      : typeof overviewStats?.totalDrawers === 'number'
+        ? overviewStats.totalDrawers
+        : totalDrawersAcrossWings(wingsData);
+  const wingCount =
+    typeof overviewStats?.totalWings === 'number' ? overviewStats.totalWings : Object.keys(wingsData).length;
+  const roomCount =
+    typeof overviewStats?.totalRooms === 'number' ? overviewStats.totalRooms : countTotalRooms(roomsData);
   let tunnelNodeCount = 0;
-  if (gs?.tunnels && typeof gs.tunnels === 'object') tunnelNodeCount = Object.keys(gs.tunnels).length;
+  if (gs?.summary?.resolvedEdgeCount != null) tunnelNodeCount = gs.summary.resolvedEdgeCount;
+  else if (gs?.tunnels && typeof gs.tunnels === 'object') tunnelNodeCount = Object.keys(gs.tunnels).length;
 
-  const graphEdgeCount = graphEdges.length;
+  const graphEdgeCount =
+    typeof gs?.summary?.resolvedEdgeCount === 'number' ? gs.summary.resolvedEdgeCount : graphEdges.length;
   const ga = buildGraphAnalytics(graphEdges, roomsData);
   const kgSummary = formatKgSummary(kg);
   const kgAvailable = !!(kg && typeof kg === 'object' && !kg.error);
@@ -147,6 +162,7 @@ function buildPalaceContext() {
     kgAvailable,
     kgSummary,
     focusWing: appState.currentWing,
+    overviewStats,
   };
 }
 
@@ -440,7 +456,7 @@ function renderRoomInspector(ctx, wingName, roomName, _mode) {
     .filter(Boolean)
     .join(' ');
 
-  const roomKey = `${wingName}/${roomName}`;
+  const roomKey = makeRoomId(wingName, roomName);
   const slice = getRoomGraphSlice(roomKey, ga);
   const graphAvailable = ga.hasResolvableEdges;
 
@@ -735,7 +751,8 @@ function updateMetrics() {
   $('metric-rooms').textContent = formatNum(countTotalRooms(roomsData));
 
   let tunnels = 0;
-  if (gs?.tunnels && typeof gs.tunnels === 'object') tunnels = Object.keys(gs.tunnels).length;
+  if (typeof gs?.summary?.resolvedEdgeCount === 'number') tunnels = gs.summary.resolvedEdgeCount;
+  else if (gs?.tunnels && typeof gs.tunnels === 'object') tunnels = Object.keys(gs.tunnels).length;
   $('metric-tunnels').textContent = tunnels ? formatNum(tunnels) : '—';
 
   const crossEl = $('metric-cross');

@@ -3,6 +3,7 @@
  */
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { makeRoomId } from './canonical.js';
 
 const CONFIG = {
   wingColors: {
@@ -527,10 +528,18 @@ export function createPalaceScene(container, options = {}) {
       }
 
       edges.forEach((edge) => {
+        const fromId = edge.sourceRoomId || edge.from;
+        const toId = edge.targetRoomId || edge.to;
         const from = nodeList.find(
-          (n) => n.name === edge.from || `${n.wing}/${n.name}` === edge.from,
+          (n) =>
+            n.type === 'room' &&
+            (makeRoomId(n.wing, n.name) === fromId || n.name === edge.from || `${n.wing}/${n.name}` === edge.from),
         );
-        const to = nodeList.find((n) => n.name === edge.to || `${n.wing}/${n.name}` === edge.to);
+        const to = nodeList.find(
+          (n) =>
+            n.type === 'room' &&
+            (makeRoomId(n.wing, n.name) === toId || n.name === edge.to || `${n.wing}/${n.name}` === edge.to),
+        );
         if (from && to) {
           const dx = to.x - from.x;
           const dy = to.y - from.y;
@@ -561,7 +570,7 @@ export function createPalaceScene(container, options = {}) {
 
     Object.entries(roomsData).forEach(([wing, rooms]) => {
       rooms.forEach((room) => {
-        allNodes.set(`${wing}/${room.name}`, {
+        allNodes.set(makeRoomId(wing, room.name), {
           name: room.name,
           type: 'room',
           wing,
@@ -618,10 +627,18 @@ export function createPalaceScene(container, options = {}) {
     });
 
     graphEdges.forEach((edge) => {
+      const fromId = edge.sourceRoomId || edge.from;
+      const toId = edge.targetRoomId || edge.to;
       const fromNode = nodeList.find(
-        (n) => n.name === edge.from || `${n.wing}/${n.name}` === edge.from,
+        (n) =>
+          n.type === 'room' &&
+          (makeRoomId(n.wing, n.name) === fromId || n.name === edge.from || `${n.wing}/${n.name}` === edge.from),
       );
-      const toNode = nodeList.find((n) => n.name === edge.to || `${n.wing}/${n.name}` === edge.to);
+      const toNode = nodeList.find(
+        (n) =>
+          n.type === 'room' &&
+          (makeRoomId(n.wing, n.name) === toId || n.name === edge.to || `${n.wing}/${n.name}` === edge.to),
+      );
       if (fromNode && toNode) {
         const fid = fromNode.type === 'wing' ? `wing:${fromNode.name}` : `room:${fromNode.wing}:${fromNode.name}`;
         const tid = toNode.type === 'wing' ? `wing:${toNode.name}` : `room:${toNode.wing}:${toNode.name}`;

@@ -3,6 +3,8 @@
  * Pure functions; deterministic given the same inputs.
  */
 
+import { makeRoomId, parseRoomId } from './canonical.js';
+
 /** @typedef {{ wing: string, room: string, key: string }} ResolvedRoom */
 
 /**
@@ -16,12 +18,20 @@ export function resolveTunnelEndpoint(ref, roomsData, hintWing = null) {
   const s = ref.trim();
   if (!s) return null;
 
+  const canonical = parseRoomId(s);
+  if (canonical) {
+    const { wingId, roomName } = canonical;
+    if (roomsData[wingId]?.some((r) => r.name === roomName)) {
+      return { wing: wingId, room: roomName, key: makeRoomId(wingId, roomName) };
+    }
+  }
+
   if (s.includes('/')) {
     const slash = s.indexOf('/');
     const wing = s.slice(0, slash);
     const room = s.slice(slash + 1);
     if (roomsData[wing]?.some((r) => r.name === room)) {
-      return { wing, room, key: `${wing}/${room}` };
+      return { wing, room, key: makeRoomId(wing, room) };
     }
     return null;
   }
@@ -34,11 +44,16 @@ export function resolveTunnelEndpoint(ref, roomsData, hintWing = null) {
     }
   }
   if (matches.length === 0) return null;
-  if (matches.length === 1) return matches[0];
-  if (hintWing && matches.some((m) => m.wing === hintWing)) {
-    return matches.find((m) => m.wing === hintWing) || matches[0];
+  if (matches.length === 1) {
+    const m = matches[0];
+    return { ...m, key: makeRoomId(m.wing, m.room) };
   }
-  return matches[0];
+  if (hintWing && matches.some((m) => m.wing === hintWing)) {
+    const m = matches.find((x) => x.wing === hintWing) || matches[0];
+    return { ...m, key: makeRoomId(m.wing, m.room) };
+  }
+  const m = matches[0];
+  return { ...m, key: makeRoomId(m.wing, m.room) };
 }
 
 /**
@@ -117,7 +132,7 @@ export function buildGraphAnalytics(graphEdges, roomsData) {
   for (const [w, rooms] of Object.entries(roomData)) {
     if (!Array.isArray(rooms)) continue;
     for (const r of rooms) {
-      roomKeysAll.add(`${w}/${r.name}`);
+      roomKeysAll.add(makeRoomId(w, r.name));
     }
   }
 
@@ -142,8 +157,13 @@ export function buildGraphAnalytics(graphEdges, roomsData) {
 
   const byDegree = [...degreeByKey.entries()].sort((x, y) => y[1] - x[1]);
   const topConnectedRooms = byDegree.slice(0, 8).map(([key, deg]) => {
-    const [w, room] = key.split('/');
-    return { wing: w, room, key, degree: deg };
+    const pr = parseRoomId(key);
+    return {
+      wing: pr?.wingId ?? key.split('/')[0],
+      room: pr?.roomName ?? key.slice(key.indexOf('/') + 1),
+      key,
+      degree: deg,
+    };
   });
 
   const wingExternalTally = new Map();
@@ -199,15 +219,20 @@ export function getRoomGraphSlice(roomKey, ga) {
   const nbrs = ga.neighborsByKey.get(roomKey);
   const neighborKeys = nbrs ? [...nbrs] : [];
   const relatedRooms = neighborKeys.slice(0, 12).map((k) => {
-    const [w, room] = k.split('/');
+    const pr = parseRoomId(k);
     const od = ga.degreeByKey.get(k) ?? 0;
-    return { wing: w, room, key: k, degree: od };
+    return {
+      wing: pr?.wingId ?? k.split('/')[0],
+      room: pr?.roomName ?? k.slice(k.indexOf('/') + 1),
+      key: k,
+      degree: od,
+    };
   });
   relatedRooms.sort((a, b) => b.degree - a.degree);
 
   const neighborWings = new Map();
   for (const k of neighborKeys) {
-    const [w] = k.split('/');
+    const w = parseRoomId(k)?.wingId;
     if (!w) continue;
     neighborWings.set(w, (neighborWings.get(w) || 0) + 1);
   }
@@ -270,8 +295,13 @@ export function getWingTunnelSlice(wing, graphEdges, roomsData) {
     .sort((a, b) => b[1] - a[1])
     .slice(0, 5)
     .map(([key, n]) => {
-      const [w, room] = key.split('/');
-      return { wing: w, room, key, crossEdges: n };
+      const pr = parseRoomId(key);
+      return {
+        wing: pr?.wingId ?? key.split('/')[0],
+        room: pr?.roomName ?? key.slice(key.indexOf('/') + 1),
+        key,
+        crossEdges: n,
+      };
     });
 
   return {

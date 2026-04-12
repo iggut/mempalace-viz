@@ -3,6 +3,17 @@ import { createServer } from 'http';
 import { fileURLToPath } from 'url';
 import { dirname, join, extname } from 'path';
 import { promises as fs } from 'fs';
+import {
+  parseTaxonomyCanonical,
+  buildCanonicalEdgesFromTunnels,
+  toLegacyGraphEdges,
+  normalizeWingsPayload,
+  buildOverviewSummary,
+  enrichRoomsWithGraphMetrics,
+  computeRoomGraphMetrics,
+  enrichRoomsListPayload,
+  makeRoomId,
+} from './canonical.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const WORKSPACE = '/home/iggut/.openclaw/workspace';
@@ -634,8 +645,13 @@ async function buildScopeOverview() {
   const entries = [];
   for (const [wing, count] of Object.entries(wings)) {
     const roomsData = await callMcp('mempalace_list_rooms', { wing });
-    const rooms = Object.entries(roomsData?.rooms || {}).map(([room, roomCount]) => ({ room, count: roomCount }));
-    entries.push({ wing, count, rooms });
+    const rooms = Object.entries(roomsData?.rooms || {}).map(([room, roomCount]) => ({
+      room,
+      count: roomCount,
+      wingId: wing,
+      roomId: makeRoomId(wing, room),
+    }));
+    entries.push({ wing, wingId: wing, count, rooms });
   }
   return { total_crystals: Object.values(wings).reduce((a, b) => a + b, 0), wings: entries, actors: [] };
 }
@@ -806,14 +822,86 @@ const server = createServer(async (req, res) => {
       case '/api/rooms': {
         const wingParam = requestUrl.searchParams.get('wing');
         result = await callMcp('mempalace_list_rooms', wingParam ? { wing: wingParam } : {});
+        result = enrichRoomsListPayload(result, wingParam);
         break;
       }
-      case '/api/taxonomy':
-        result = await callMcp('mempalace_get_taxonomy');
+      case '/api/taxonomy': {
+        const raw = await callMcp('mempalace_get_taxonomy');
+        const enriched = parseTaxonomyCanonical(raw);
+        result = {
+          ...raw,
+          graphContractVersion: 1,
+          taxonomy: enriched.taxonomy,
+          wings: enriched.wings,
+          rooms: enriched.rooms,
+          roomsData: enriched.roomsData,
+        };
         break;
-      case '/api/graph-stats':
-        result = await callMcp('mempalace_graph_stats');
+      }
+      case '/api/graph-stats': {
+        const [rawStats, taxonomyRaw, tunnelsResult] = await Promise.all([
+          callMcp('mempalace_graph_stats'),
+          callMcp('mempalace_get_taxonomy'),
+          callMcp('mempalace_find_tunnels'),
+        ]);
+        const { taxonomy, rooms: taxonomyRooms } = parseTaxonomyCanonical(taxonomyRaw);
+        const tunnelList = Array.isArray(tunnelsResult) ? tunnelsResult : [];
+        const { edgesResolved, edgesUnresolved, summary } = buildCanonicalEdgesFromTunnels(
+          tunnelList,
+          taxonomy,
+        );
+        const metrics = computeRoomGraphMetrics(edgesResolved);
+        const roomsEnriched = enrichRoomsWithGraphMetrics(taxonomyRooms, metrics);
+        const legacyGraphEdges = toLegacyGraphEdges(edgesResolved);
+        const tunnelsAdj = {};
+        for (const e of legacyGraphEdges) {
+          if (!tunnelsAdj[e.from]) tunnelsAdj[e.from] = {};
+          tunnelsAdj[e.from][e.to] = e.targetWingId;
+        }
+        result = {
+          ...rawStats,
+          graphContractVersion: 1,
+          rooms: roomsEnriched,
+          edgesResolved,
+          edgesUnresolved,
+          summary,
+          legacyGraphEdges,
+          tunnels: tunnelsAdj,
+        };
         break;
+      }
+      case '/api/overview': {
+        const [status, wingsRaw, taxonomyRaw, tunnelsResult, rawGraphStats] = await Promise.all([
+          callMcp('mempalace_status'),
+          callMcp('mempalace_list_wings'),
+          callMcp('mempalace_get_taxonomy'),
+          callMcp('mempalace_find_tunnels'),
+          callMcp('mempalace_graph_stats'),
+        ]);
+        const wingsData = normalizeWingsPayload(wingsRaw);
+        const { taxonomy, rooms, wings, roomsData } = parseTaxonomyCanonical(taxonomyRaw);
+        const tunnelList = Array.isArray(tunnelsResult) ? tunnelsResult : [];
+        const { edgesResolved, edgesUnresolved, summary } = buildCanonicalEdgesFromTunnels(
+          tunnelList,
+          taxonomy,
+        );
+        const stats = buildOverviewSummary(wingsData, rooms, edgesResolved, summary, status);
+        result = {
+          graphContractVersion: 1,
+          status,
+          wingsData,
+          taxonomy,
+          roomsData,
+          wings,
+          rooms,
+          edgesResolved,
+          edgesUnresolved,
+          summary,
+          stats,
+          rawGraphStats,
+        };
+        break;
+      }
       case '/api/kg-stats':
         result = await callMcp('mempalace_kg_stats');
         break;
@@ -961,7 +1049,9 @@ const AUTO_EXIT_MS = Number(process.env.AUTO_EXIT_MS || 0);
 
 server.listen(PORT, HOST, () => {
   console.log(`🏰 MemPalace Viz API running at http://${HOST}:${PORT}`);
-  console.log('   Endpoints: /api/status, /api/wings, /api/rooms, /api/taxonomy, /api/graph, /api/search, /api/chat');
+  console.log(
+    '   Endpoints: /api/status, /api/wings, /api/rooms, /api/taxonomy, /api/graph-stats, /api/overview, /api/graph, /api/search, /api/chat',
+  );
   console.log('   Set HOST=127.0.0.1 to restrict to local-only access.');
   if (AUTO_EXIT_MS > 0) {
     console.log(`   Auto-exit enabled after ${AUTO_EXIT_MS}ms (dev restart mode).`);
