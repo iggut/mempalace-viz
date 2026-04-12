@@ -5,6 +5,19 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { makeRoomId } from './canonical.js';
 import { getEdgeRelationshipType, getStyleForRelationshipType } from './graph-relationships.js';
+import {
+  baseLabelScoreForGraphNode,
+  computeDensityMetrics,
+  computeGraphFocusCameraDistance,
+  computeVisibleLabelIds,
+  countGraphIncidentsByRoomNodeId,
+  edgeEmphasisOpacityMult,
+  graphSceneNodeIdForLayoutNode,
+  maxRadiusFromFocus,
+  runGraphForceLayout,
+  seedWingClusteredLayout,
+  separateGraphNodes,
+} from './graph-scene-helpers.js';
 
 /** @param {Array<{ type: string, wing?: string, name?: string }>} nodeList @param {object} edge @param {'from'|'to'} end */
 function findRoomNodeForEdge(nodeList, edge, end) {
@@ -95,6 +108,12 @@ export function createPalaceScene(container, options = {}) {
   let labelSprites = [];
   /** @type {Map<string, number>} room scene node id → incident graph edge count (full graph) */
   let graphRoomIncidentFull = new Map();
+  /** @type {Array<{ id: string, baseScore: number }>} */
+  let graphLabelEntries = [];
+  /** @type {ReturnType<typeof computeDensityMetrics> | null} */
+  let graphSceneMetrics = null;
+  /** @type {{ position: THREE.Vector3, target: THREE.Vector3 } | null} */
+  let graphDefaultCamera = null;
 
   let currentView = 'wings';
   let roomsFocusWing = null;
@@ -160,6 +179,11 @@ export function createPalaceScene(container, options = {}) {
     linkObjects = [];
     labelSprites = [];
     graphRoomIncidentFull = new Map();
+    graphLabelEntries = [];
+    graphSceneMetrics = null;
+    graphDefaultCamera = null;
+    if (scene?.fog?.isFogExp2) scene.fog.density = 0.0026;
+    if (stars?.material) stars.material.opacity = 0.35;
     nodeRegistry.clear();
     labelByNodeId.clear();
   }
@@ -217,6 +241,7 @@ export function createPalaceScene(container, options = {}) {
       baseOpacity: mainMat.opacity,
       baseEmissive: mainMat.emissiveIntensity,
       baseScale: 1,
+      presentationOpacity: 1,
     });
     mesh.userData.nodeId = id;
   }
@@ -363,6 +388,11 @@ export function createPalaceScene(container, options = {}) {
     /** @type {Map<string, number>} */
     const visibleGraphIncidents = new Map();
 
+    const tier = graphSceneMetrics?.tier ?? 0;
+    const gMult = graphSceneMetrics?.globalEdgeOpacityMult ?? 1;
+    const adjMult = graphSceneMetrics?.adjacencyOpacityMult ?? 1;
+    const tunnelEm = graphSceneMetrics?.tunnelEmphasisMult ?? 1;
+
     linkObjects.forEach((lo) => {
       const { line, fromId, toId, baseOpacity = 0.28, isGraphRelationship, relationshipType } = lo;
       const mf = fromId ? nodeMatchesSearch(nodeRegistry.get(fromId)?.data || {}, q) : true;
@@ -385,7 +415,23 @@ export function createPalaceScene(container, options = {}) {
         return;
       }
       line.visible = true;
-      line.material.opacity = baseOpacity;
+      let op = baseOpacity;
+      if (isGraphRelationship) {
+        const rt = relationshipType || 'tunnel';
+        if (rt === 'taxonomy_adjacency') op *= adjMult;
+        if (rt === 'tunnel') op *= tunnelEm;
+        op *= gMult;
+        op *= edgeEmphasisOpacityMult({
+          selectedId: sid,
+          hoveredId: hid,
+          fromId,
+          toId,
+          relationshipType: rt,
+          densityTier: tier,
+          isGraphRelationship: true,
+        });
+      }
+      line.material.opacity = op;
       if (isGraphRelationship) {
         if (fromId) visibleGraphIncidents.set(fromId, (visibleGraphIncidents.get(fromId) || 0) + 1);
         if (toId) visibleGraphIncidents.set(toId, (visibleGraphIncidents.get(toId) || 0) + 1);
@@ -412,6 +458,7 @@ export function createPalaceScene(container, options = {}) {
         emissiveMult *= 0.55;
       }
 
+      entry.presentationOpacity = Math.min(1, opacityMult);
       mat.opacity = Math.min(1, baseOpacity * opacityMult);
       mat.emissiveIntensity = baseEmissive * emissiveMult;
 
@@ -420,12 +467,31 @@ export function createPalaceScene(container, options = {}) {
       mesh.scale.setScalar(emphasis * dimScale);
     });
 
-    labelByNodeId.forEach((sprite, id) => {
-      const data = nodeRegistry.get(id)?.data;
-      if (!data) return;
-      const match = nodeMatchesSearch(data, q);
-      sprite.material.opacity = match ? (id === sid ? 1 : 0.92) : 0.2;
-    });
+    if (currentView === 'graph' && graphLabelEntries.length) {
+      const budget = graphSceneMetrics?.labelBudget ?? 180;
+      const showIds = computeVisibleLabelIds(graphLabelEntries, {
+        selectedId: sid,
+        hoveredId: hid,
+        pinActive: pin,
+        budget,
+      });
+      labelByNodeId.forEach((sprite, id) => {
+        const data = nodeRegistry.get(id)?.data;
+        if (!data) return;
+        const match = nodeMatchesSearch(data, q);
+        const allow = showIds.has(id);
+        sprite.visible = labelsVisible && allow;
+        sprite.material.opacity = match ? (id === sid ? 1 : id === hid ? 0.96 : 0.88) : 0.18;
+      });
+    } else {
+      labelByNodeId.forEach((sprite, id) => {
+        const data = nodeRegistry.get(id)?.data;
+        if (!data) return;
+        const match = nodeMatchesSearch(data, q);
+        sprite.visible = labelsVisible;
+        sprite.material.opacity = match ? (id === sid ? 1 : 0.92) : 0.2;
+      });
+    }
   }
 
   function renderWingsView() {
@@ -567,51 +633,25 @@ export function createPalaceScene(container, options = {}) {
     }
   }
 
-  function simulateForceLayout(nodeList, edges, iterations = 55) {
-    const repelStrength = 95;
-    const attractStrength = 0.012;
-    const centerStrength = 0.006;
+  /**
+   * Stable wing ordering for layout seeds.
+   * @param {string[]} keys
+   */
+  function sortedWingKeys(keys) {
+    return [...keys].sort((a, b) => a.localeCompare(b));
+  }
 
-    for (let iter = 0; iter < iterations; iter += 1) {
-      for (let i = 0; i < nodeList.length; i += 1) {
-        for (let j = i + 1; j < nodeList.length; j += 1) {
-          const dx = nodeList[i].x - nodeList[j].x;
-          const dy = nodeList[i].y - nodeList[j].y;
-          const dz = nodeList[i].z - nodeList[j].z;
-          const dist = Math.sqrt(dx * dx + dy * dy + dz * dz) + 0.1;
-          const force = repelStrength / (dist * dist);
-
-          nodeList[i].x += dx * force;
-          nodeList[i].y += dy * force;
-          nodeList[i].z += dz * force;
-          nodeList[j].x -= dx * force;
-          nodeList[j].y -= dy * force;
-          nodeList[j].z -= dz * force;
-        }
-      }
-
-      edges.forEach((edge) => {
-        const from = findRoomNodeForEdge(nodeList, edge, 'from');
-        const to = findRoomNodeForEdge(nodeList, edge, 'to');
-        if (from && to) {
-          const dx = to.x - from.x;
-          const dy = to.y - from.y;
-          const dz = to.z - from.z;
-          from.x += dx * attractStrength;
-          from.y += dy * attractStrength;
-          from.z += dz * attractStrength;
-          to.x -= dx * attractStrength;
-          to.y -= dy * attractStrength;
-          to.z -= dz * attractStrength;
-        }
-      });
-
-      nodeList.forEach((node) => {
-        node.x *= 1 - centerStrength;
-        node.y *= 1 - centerStrength;
-        node.z *= 1 - centerStrength;
-      });
-    }
+  /**
+   * Cap canvas label sprites for very large graphs while keeping high-importance rooms.
+   * @param {Array<{ id: string, baseScore: number }>} entries
+   * @param {ReturnType<typeof computeDensityMetrics>} metrics
+   */
+  function buildRoomLabelCandidateSet(entries, metrics) {
+    const all = entries.filter((e) => e.id.startsWith('room:'));
+    const maxSprites =
+      metrics.nodeCount > 300 ? metrics.labelBudget * 5 : metrics.nodeCount > 160 ? metrics.labelBudget * 4 : all.length;
+    all.sort((a, b) => b.baseScore - a.baseScore);
+    return new Set(all.slice(0, Math.min(all.length, maxSprites)).map((e) => e.id));
   }
 
   function renderGraphView() {
@@ -654,30 +694,59 @@ export function createPalaceScene(container, options = {}) {
       return;
     }
 
-    const labelBudget = prefersReducedMotion ? 120 : 220;
-    const hideLabels = nodeList.length > labelBudget;
+    const wingNames = sortedWingKeys(Object.keys(wingsData));
+    graphRoomIncidentFull = countGraphIncidentsByRoomNodeId(nodeList, graphEdges, findRoomNodeForEdge);
 
-    graphRoomIncidentFull = new Map();
+    graphSceneMetrics = computeDensityMetrics(
+      nodeList.length,
+      graphEdges.length,
+      wingNames.length,
+    );
+    if (prefersReducedMotion) {
+      graphSceneMetrics = {
+        ...graphSceneMetrics,
+        labelBudget: Math.min(graphSceneMetrics.labelBudget, 95),
+      };
+    }
 
-    simulateForceLayout(nodeList, graphEdges);
+    seedWingClusteredLayout(nodeList, wingNames, graphSceneMetrics);
+    runGraphForceLayout(nodeList, graphEdges, graphSceneMetrics, findRoomNodeForEdge);
+    separateGraphNodes(nodeList, graphSceneMetrics.collisionMinDist, 12);
+
+    if (scene.fog && scene.fog.isFogExp2) {
+      scene.fog.density = graphSceneMetrics.fogDensity;
+    }
+    if (stars?.material) {
+      stars.material.opacity = Math.max(0.12, 0.34 - graphSceneMetrics.tier * 0.055);
+    }
+
+    graphLabelEntries = nodeList.map((n) => {
+      const id = n.type === 'wing' ? `wing:${n.name}` : `room:${n.wing}:${n.name}`;
+      const incidentFull = graphRoomIncidentFull.get(id) || 0;
+      return {
+        id,
+        baseScore: baseLabelScoreForGraphNode({
+          type: n.type,
+          incidentFull,
+          drawers: n.drawers,
+        }),
+      };
+    });
+
+    const roomLabelAllow = buildRoomLabelCandidateSet(graphLabelEntries, graphSceneMetrics);
 
     nodeList.forEach((nodeData) => {
       const isWing = nodeData.type === 'wing';
       const size = isWing ? CONFIG.nodeSizes.wingMin + 0.4 : CONFIG.nodeSizes.roomMin + 0.2;
       if (isWing) {
         createWingNode(nodeData.name, nodeData.x, nodeData.y, nodeData.z, size);
-        if (!hideLabels) addLabelForNode(`wing:${nodeData.name}`, nodeData.name, nodeData.x, nodeData.y, nodeData.z, '#cbd5e1');
+        addLabelForNode(`wing:${nodeData.name}`, nodeData.name, nodeData.x, nodeData.y, nodeData.z, '#cbd5e1');
       } else {
+        const rid = `room:${nodeData.wing}:${nodeData.name}`;
         createRoomNode(nodeData.name, nodeData.wing, nodeData.x, nodeData.y, nodeData.z, size);
-        if (!hideLabels)
-          addLabelForNode(
-            `room:${nodeData.wing}:${nodeData.name}`,
-            nodeData.name,
-            nodeData.x,
-            nodeData.y,
-            nodeData.z,
-            '#94a3b8',
-          );
+        if (roomLabelAllow.has(rid)) {
+          addLabelForNode(rid, nodeData.name, nodeData.x, nodeData.y, nodeData.z, '#94a3b8');
+        }
       }
     });
 
@@ -685,16 +754,10 @@ export function createPalaceScene(container, options = {}) {
       const fromNode = findRoomNodeForEdge(nodeList, edge, 'from');
       const toNode = findRoomNodeForEdge(nodeList, edge, 'to');
       if (fromNode && toNode) {
-        const fid = fromNode.type === 'wing' ? `wing:${fromNode.name}` : `room:${fromNode.wing}:${fromNode.name}`;
-        const tid = toNode.type === 'wing' ? `wing:${toNode.name}` : `room:${toNode.wing}:${toNode.name}`;
+        const fid = graphSceneNodeIdForLayoutNode(fromNode);
+        const tid = graphSceneNodeIdForLayoutNode(toNode);
         const rt = getEdgeRelationshipType(edge);
         const st = getStyleForRelationshipType(rt);
-        if (fid.startsWith('room:')) {
-          graphRoomIncidentFull.set(fid, (graphRoomIncidentFull.get(fid) || 0) + 1);
-        }
-        if (tid.startsWith('room:')) {
-          graphRoomIncidentFull.set(tid, (graphRoomIncidentFull.get(tid) || 0) + 1);
-        }
         createLink([fromNode.x, fromNode.y, fromNode.z], [toNode.x, toNode.y, toNode.z], st.color, st.opacity, {
           fromId: fid,
           toId: tid,
@@ -705,7 +768,18 @@ export function createPalaceScene(container, options = {}) {
       }
     });
 
-    tweenCamera(new THREE.Vector3(28, 42, 76), new THREE.Vector3(0, 0, 0));
+    const box = new THREE.Box3();
+    nodeList.forEach((n) => box.expandByPoint(new THREE.Vector3(n.x, n.y, n.z)));
+    const center = new THREE.Vector3();
+    box.getCenter(center);
+    const size = new THREE.Vector3();
+    box.getSize(size);
+    const extent = Math.max(size.x, size.y, size.z, 12);
+    const dist = computeGraphFocusCameraDistance(extent * 0.48, camera.fov, graphSceneMetrics.tier);
+    const dir = new THREE.Vector3(0.35, 0.42, 1).normalize();
+    const camPos = center.clone().add(dir.multiplyScalar(dist));
+    graphDefaultCamera = { position: camPos.clone(), target: center.clone() };
+    tweenCamera(camPos, center);
   }
 
   function applyViewSettings() {
@@ -793,6 +867,21 @@ export function createPalaceScene(container, options = {}) {
       node.mesh.rotation.y += rot;
     });
 
+    const gTier = graphSceneMetrics?.tier ?? 0;
+    if (currentView === 'graph' && gTier >= 1) {
+      const focusPt =
+        presentation.selectedId && nodeRegistry.get(presentation.selectedId)
+          ? nodeRegistry.get(presentation.selectedId).mesh.position
+          : controls.target;
+      nodeRegistry.forEach((entry) => {
+        const mat = entry.mesh.material;
+        if (!mat || mat.type === 'MeshBasicMaterial') return;
+        const d = entry.mesh.position.distanceTo(focusPt);
+        const distMult = THREE.MathUtils.clamp(1.04 - (d - 42) / 200, 0.36, 1.06);
+        mat.opacity = Math.min(1, entry.baseOpacity * (entry.presentationOpacity ?? 1) * distMult);
+      });
+    }
+
     renderer.render(scene, camera);
   }
 
@@ -863,6 +952,10 @@ export function createPalaceScene(container, options = {}) {
   }
 
   function resetCamera() {
+    if (currentView === 'graph' && graphDefaultCamera) {
+      tweenCamera(graphDefaultCamera.position.clone(), graphDefaultCamera.target.clone());
+      return;
+    }
     tweenCamera(new THREE.Vector3(0, 34, 90), new THREE.Vector3(0, 0, 0));
   }
 
@@ -871,9 +964,30 @@ export function createPalaceScene(container, options = {}) {
     if (!entry) return;
     const p = new THREE.Vector3();
     entry.mesh.getWorldPosition(p);
+
+    if (currentView === 'graph' && graphSceneMetrics) {
+      const neighborPts = [];
+      linkObjects.forEach((lo) => {
+        if (!lo.isGraphRelationship) return;
+        let otherId = null;
+        if (lo.fromId === nodeId) otherId = lo.toId;
+        else if (lo.toId === nodeId) otherId = lo.fromId;
+        if (!otherId) return;
+        const other = nodeRegistry.get(otherId);
+        if (other) neighborPts.push(other.mesh.position.clone());
+      });
+      const maxR = maxRadiusFromFocus(p, neighborPts.length ? neighborPts : [p.clone()]);
+      const dist = computeGraphFocusCameraDistance(maxR, camera.fov, graphSceneMetrics.tier);
+      let dir = camera.position.clone().sub(p);
+      if (dir.lengthSq() < 4) dir.set(32, 26, 72);
+      dir.normalize();
+      tweenCamera(p.clone().add(dir.multiplyScalar(dist)), p);
+      return;
+    }
+
     const dir = camera.position.clone().sub(p).normalize();
-    const dist = currentView === 'rooms' && roomsFocusWing ? 26 : 30;
-    tweenCamera(p.clone().add(dir.multiplyScalar(dist)), p);
+    const d0 = currentView === 'rooms' && roomsFocusWing ? 26 : 30;
+    tweenCamera(p.clone().add(dir.multiplyScalar(d0)), p);
   }
 
   function centerOnHovered() {
