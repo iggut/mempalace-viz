@@ -28,6 +28,7 @@ import {
   separateGraphNodes,
   splitGraphFocusIds,
 } from './graph-scene-helpers.js';
+import { normalizeRouteStepIndex } from './graph-route.js';
 
 /** @param {Array<{ type: string, wing?: string, name?: string }>} nodeList @param {object} edge @param {'from'|'to'} end */
 function findRoomNodeForEdge(nodeList, edge, end) {
@@ -144,6 +145,14 @@ export function createPalaceScene(container, options = {}) {
   let autoRotateUser = true;
 
   let hoveredMesh = null;
+  /** @type {{ active: boolean, pathSceneIds: string[], stepIndex: number, segmentTypes: string[] }} */
+  const defaultRoutePresentation = () => ({
+    active: false,
+    pathSceneIds: [],
+    stepIndex: 0,
+    segmentTypes: [],
+  });
+
   let presentation = {
     searchQuery: '',
     hoveredId: null,
@@ -151,6 +160,7 @@ export function createPalaceScene(container, options = {}) {
     pinActive: false,
     /** @type {Set<string>|null} when null, all relationship types are shown */
     relationshipTypesVisible: null,
+    route: defaultRoutePresentation(),
   };
   let prefersReducedMotion =
     typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
@@ -496,13 +506,30 @@ export function createPalaceScene(container, options = {}) {
     return [...s].sort().join('\0');
   }
 
+  function routePresentationEqual(ra, rb) {
+    const a = ra || defaultRoutePresentation();
+    const b = rb || defaultRoutePresentation();
+    if (!!a.active !== !!b.active) return false;
+    if (!a.active) return true;
+    if (a.stepIndex !== b.stepIndex) return false;
+    const pa = (a.pathSceneIds || []).join('\0');
+    const pb = (b.pathSceneIds || []).join('\0');
+    return pa === pb;
+  }
+
+  function undirectedPairKey(a, b) {
+    if (!a || !b) return '';
+    return a < b ? `${a}\0${b}` : `${b}\0${a}`;
+  }
+
   function presentationEqual(a, b) {
     return (
       a.searchQuery === b.searchQuery &&
       a.hoveredId === b.hoveredId &&
       a.selectedId === b.selectedId &&
       a.pinActive === b.pinActive &&
-      relationshipSetKey(a.relationshipTypesVisible) === relationshipSetKey(b.relationshipTypesVisible)
+      relationshipSetKey(a.relationshipTypesVisible) === relationshipSetKey(b.relationshipTypesVisible) &&
+      routePresentationEqual(a.route, b.route)
     );
   }
 
@@ -514,6 +541,22 @@ export function createPalaceScene(container, options = {}) {
     const relVis = presentation.relationshipTypesVisible;
     const gTier = graphSceneMetrics?.tier ?? 0;
 
+    const route = presentation.route || defaultRoutePresentation();
+    const routeActive =
+      currentView === 'graph' && route.active && Array.isArray(route.pathSceneIds) && route.pathSceneIds.length > 0;
+    /** @type {Set<string>} */
+    const routePairKeys = new Set();
+    if (routeActive) {
+      const ids = route.pathSceneIds;
+      for (let i = 0; i < ids.length - 1; i += 1) {
+        routePairKeys.add(undirectedPairKey(ids[i], ids[i + 1]));
+      }
+    }
+    const stepSceneId =
+      routeActive && route.pathSceneIds.length > 0
+        ? route.pathSceneIds[normalizeRouteStepIndex(route.stepIndex, route.pathSceneIds.length)]
+        : null;
+
     /** @type {Map<string, number>} */
     const visibleGraphIncidents = new Map();
 
@@ -522,7 +565,15 @@ export function createPalaceScene(container, options = {}) {
     const tunnelEm = graphSceneMetrics?.tunnelEmphasisMult ?? 1;
 
     linkObjects.forEach((lo) => {
-      const { line, fromId, toId, baseOpacity = 0.28, isGraphRelationship, relationshipType } = lo;
+      const {
+        line,
+        fromId,
+        toId,
+        baseOpacity = 0.28,
+        isGraphRelationship,
+        relationshipType,
+        styleColorHex,
+      } = lo;
       const mf = fromId ? nodeMatchesSearch(nodeRegistry.get(fromId)?.data || {}, q) : true;
       const mt = toId ? nodeMatchesSearch(nodeRegistry.get(toId)?.data || {}, q) : true;
       const searchOk = !q || (mf && mt);
@@ -558,6 +609,22 @@ export function createPalaceScene(container, options = {}) {
           densityTier: gTier,
           isGraphRelationship: true,
         });
+      }
+      if (routeActive && isGraphRelationship && fromId && toId) {
+        const pk = undirectedPairKey(fromId, toId);
+        const onRoute = routePairKeys.has(pk);
+        const hex = styleColorHex ?? getStyleForRelationshipType(relationshipType || 'tunnel').color;
+        const baseC = new THREE.Color(hex);
+        if (onRoute) {
+          op = Math.min(1, op * 1.52);
+          baseC.lerp(new THREE.Color(0xffffff), 0.11);
+        } else {
+          op *= 0.32;
+          baseC.multiplyScalar(0.72);
+        }
+        line.material.color.copy(baseC);
+      } else if (isGraphRelationship && styleColorHex != null) {
+        line.material.color.setHex(styleColorHex);
       }
       line.material.opacity = op;
       if (isGraphRelationship) {
@@ -608,6 +675,24 @@ export function createPalaceScene(container, options = {}) {
         }
       }
 
+      let routeScale = 1;
+      if (routeActive && data.type === 'room') {
+        const pathSet = new Set(route.pathSceneIds);
+        if (!pathSet.has(id)) {
+          opacityMult *= 0.4;
+          emissiveMult *= 0.75;
+        } else {
+          const p0 = route.pathSceneIds[0];
+          const pLast = route.pathSceneIds[route.pathSceneIds.length - 1];
+          if (id === p0) emissiveMult *= 1.1;
+          if (id === pLast) emissiveMult *= 1.08;
+          if (stepSceneId && id === stepSceneId) {
+            emissiveMult *= 1.18;
+            routeScale = 1.05;
+          }
+        }
+      }
+
       entry.presentationOpacity = Math.min(1, opacityMult);
       mat.opacity = Math.min(1, baseOpacity * opacityMult);
       mat.emissiveIntensity = baseEmissive * emissiveMult;
@@ -625,8 +710,14 @@ export function createPalaceScene(container, options = {}) {
               ? 1.028
               : 1;
       const dimScale = match ? 1 : 0.88;
-      mesh.scale.setScalar(emphasis * dimScale);
+      mesh.scale.setScalar(emphasis * dimScale * routeScale);
     });
+
+    if (routeActive && route.pathSceneIds.length) {
+      route.pathSceneIds.forEach((rid) => {
+        if (rid && rid.startsWith('room:')) ensureDynamicRoomLabel(rid);
+      });
+    }
 
     if (currentView === 'graph' && graphLabelEntries.length) {
       applyGraphLabels();
@@ -900,6 +991,7 @@ export function createPalaceScene(container, options = {}) {
           baseOpacity: st.opacity,
           isGraphRelationship: true,
           relationshipType: rt,
+          styleColorHex: st.color,
         });
       }
     });
@@ -1184,6 +1276,9 @@ export function createPalaceScene(container, options = {}) {
 
   function updatePresentation(patch) {
     const next = { ...presentation, ...patch };
+    if (patch.route !== undefined) {
+      next.route = { ...defaultRoutePresentation(), ...patch.route };
+    }
     if (presentationEqual(presentation, next)) return;
     presentation = next;
     syncVisualPresentation();

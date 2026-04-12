@@ -45,6 +45,12 @@ import {
   stepAdjacentRoom,
 } from './graph-navigation.js';
 import { buildSearchCatalog, normalizeSearchQuery, rankGraphSearch, stepWrapped } from './graph-search.js';
+import {
+  computeGraphRoute,
+  normalizeRouteStepIndex,
+  roomIdFromSceneRoomId,
+  stepRouteIndex,
+} from './graph-route.js';
 
 const LS_KEY = 'mempalace-viz-explorer-v1';
 const PANEL_STATE_KEY = 'mempalace-viz-panel-state-v1';
@@ -94,6 +100,21 @@ let graphSearchResultIndex = 0;
 /** False until the first jump to a result for the current query string (trimmed). */
 let graphSearchFirstApplyDone = false;
 let graphSearchLastQueryKey = '';
+
+/**
+ * Graph route (room → room) — 3D path highlight + inspector context.
+ * History: route stepping does not push graph focus history (same rule as search result stepping).
+ * Changing route start/target does not pop history.
+ */
+let graphRoute = {
+  /** @type {string | null} */
+  startSceneId: null,
+  /** @type {string | null} */
+  targetSceneId: null,
+  /** @type {ReturnType<typeof computeGraphRoute> | null} */
+  result: null,
+  stepIndex: 0,
+};
 
 const $ = (id) => document.getElementById(id);
 
@@ -161,11 +182,27 @@ function graphExploreStripHtml() {
   const id = appState.selected.id;
   const n = sceneApi?.getGraphNeighbors?.(id)?.length ?? 0;
   const hasNbr = n > 0;
-  return `<div class="graph-explore-strip" role="group" aria-label="Graph exploration">
+  const rr = graphRoute.result;
+  const routeOk = rr?.ok && rr.pathSceneIds?.length;
+  const pathN = routeOk ? rr.pathSceneIds.length : 0;
+  const hopLabel = routeOk ? `Hop ${normalizeRouteStepIndex(graphRoute.stepIndex, pathN) + 1} / ${pathN}` : '';
+  const routeStrip = routeOk
+    ? `<div class="graph-route-strip" role="group" aria-label="Route along highlighted path">
+    <span class="graph-route-strip__meta">${escapeHtml(hopLabel)} · ${rr.hops} edge${rr.hops === 1 ? '' : 's'}</span>
+    <span class="graph-route-strip__nav">
+      <button type="button" class="btn btn--ghost btn--sm" data-graph-action="route-start" title="Jump to route start">Start</button>
+      <button type="button" class="btn btn--ghost btn--sm" data-graph-action="route-prev" ${pathN > 1 ? '' : 'disabled'} title="Previous hop ([ when route active)">◀</button>
+      <button type="button" class="btn btn--ghost btn--sm" data-graph-action="route-next" ${pathN > 1 ? '' : 'disabled'} title="Next hop (] when route active)">▶</button>
+      <button type="button" class="btn btn--ghost btn--sm" data-graph-action="route-end" title="Jump to route end">End</button>
+      <button type="button" class="btn btn--ghost btn--sm" data-graph-action="route-clear" title="Clear route highlight">Clear route</button>
+    </span>
+  </div>`
+    : '';
+  return `${routeStrip}<div class="graph-explore-strip" role="group" aria-label="Graph exploration">
     <button type="button" class="btn btn--ghost btn--sm" data-graph-action="frame-nbr" title="Re-frame camera on selection and its neighbors">Frame neighborhood</button>
     <span class="graph-explore-strip__nav">
-      <button type="button" class="btn btn--ghost btn--sm" data-graph-action="prev" ${hasNbr ? '' : 'disabled'} title="Previous connected room ([)">◀</button>
-      <button type="button" class="btn btn--ghost btn--sm" data-graph-action="next" ${hasNbr ? '' : 'disabled'} title="Next connected room (])">▶</button>
+      <button type="button" class="btn btn--ghost btn--sm" data-graph-action="prev" ${hasNbr && !routeOk ? '' : 'disabled'} title="Previous connected room ([)">◀</button>
+      <button type="button" class="btn btn--ghost btn--sm" data-graph-action="next" ${hasNbr && !routeOk ? '' : 'disabled'} title="Next connected room (])">▶</button>
     </span>
     <button type="button" class="btn btn--ghost btn--sm" data-graph-action="back" title="Prior graph focus (U)">Back</button>
     <span class="graph-explore-strip__meta" aria-hidden="true">${n} link${n === 1 ? '' : 's'}</span>
@@ -226,10 +263,162 @@ function graphFocusBack() {
   persistState();
 }
 
+function clearGraphRoute() {
+  graphRoute = { startSceneId: null, targetSceneId: null, result: null, stepIndex: 0 };
+  syncScenePresentation();
+  renderInspector();
+  persistState();
+}
+
+function routePresentationPayload() {
+  const r = graphRoute.result;
+  if (r && r.ok && Array.isArray(r.pathSceneIds) && r.pathSceneIds.length) {
+    const n = r.pathSceneIds.length;
+    const step = normalizeRouteStepIndex(graphRoute.stepIndex, n);
+    return {
+      active: true,
+      pathSceneIds: r.pathSceneIds,
+      stepIndex: step,
+      segmentTypes: r.segmentTypes || [],
+    };
+  }
+  return { active: false, pathSceneIds: [], stepIndex: 0, segmentTypes: [] };
+}
+
+function recomputeGraphRoute() {
+  if (!dataBundle || appState.view !== 'graph') {
+    graphRoute.result = null;
+    return;
+  }
+  const start = graphRoute.startSceneId;
+  const target = graphRoute.targetSceneId;
+  if (!start || !target || !start.startsWith('room:') || !target.startsWith('room:')) {
+    graphRoute.result = null;
+    return;
+  }
+  const a = roomIdFromSceneRoomId(start);
+  const b = roomIdFromSceneRoomId(target);
+  if (!a || !b) {
+    graphRoute.result = { ok: false, reason: 'bad_scene', message: 'Could not resolve route endpoints.' };
+    return;
+  }
+  const avail = collectRelationshipTypesFromEdges(dataBundle.graphEdges || []);
+  graphRoute.result = computeGraphRoute({
+    graphEdges: dataBundle.graphEdges || [],
+    roomsData: dataBundle.roomsData || {},
+    enabledRelTypes: graphRelEnabledTypes,
+    availableRelTypes: avail,
+    startRoomId: a,
+    endRoomId: b,
+  });
+  if (graphRoute.result.ok && graphRoute.result.pathSceneIds?.length) {
+    graphRoute.stepIndex = normalizeRouteStepIndex(graphRoute.stepIndex, graphRoute.result.pathSceneIds.length);
+  } else {
+    graphRoute.stepIndex = 0;
+  }
+}
+
+function applyGraphRouteToSceneSelection() {
+  const r = graphRoute.result;
+  if (!r?.ok || !r.pathSceneIds?.length) return;
+  const ix = normalizeRouteStepIndex(graphRoute.stepIndex, r.pathSceneIds.length);
+  const sceneId = r.pathSceneIds[ix];
+  const pr = parseRoomSceneId(sceneId);
+  if (!pr || !dataBundle) return;
+  const rm = (dataBundle.roomsData[pr.wing] || []).find((x) => x.name === pr.room);
+  appState.currentWing = pr.wing;
+  appState.currentRoom = pr.room;
+  appState.selected = {
+    id: sceneId,
+    type: 'room',
+    name: pr.room,
+    wing: pr.wing,
+    wingId: pr.wing,
+    roomId: rm?.roomId || makeRoomId(pr.wing, pr.room),
+    drawers: rm?.drawers,
+  };
+  appState.pinned = true;
+}
+
+function graphRouteSetStartFromSelection() {
+  if (appState.view !== 'graph' || appState.selected?.type !== 'room' || !appState.selected?.id) {
+    showToast('Select a room in Graph view first.');
+    return;
+  }
+  graphRoute.startSceneId = appState.selected.id;
+  if (graphRoute.targetSceneId) recomputeGraphRoute();
+  else graphRoute.result = null;
+  syncScenePresentation();
+  renderInspector();
+  persistState();
+  showToast('Route start set — pick a target room or use search “Route”.');
+}
+
+function graphRouteSetTarget(sceneId) {
+  if (appState.view !== 'graph') applyView('graph');
+  if (!sceneId || !sceneId.startsWith('room:')) {
+    showToast('Route target must be a room.');
+    return;
+  }
+  if (!graphRoute.startSceneId) {
+    showToast('Set a route start first (inspector: “Set as route start”).');
+    return;
+  }
+  graphRoute.targetSceneId = sceneId;
+  recomputeGraphRoute();
+  const res = graphRoute.result;
+  if (res && !res.ok) {
+    showToast(res.message || 'No route found.');
+  } else if (res?.ok) {
+    graphRoute.stepIndex = 0;
+    applyGraphRouteToSceneSelection();
+    sceneApi?.centerOnNodeId(appState.selected?.id);
+    showToast(`Route · ${res.hops} hop${res.hops === 1 ? '' : 's'}`);
+  }
+  syncScenePresentation();
+  renderInspector();
+  persistState();
+}
+
+function graphRouteStepHop(delta) {
+  const r = graphRoute.result;
+  if (!r?.ok || !r.pathSceneIds?.length) return;
+  const n = r.pathSceneIds.length;
+  graphRoute.stepIndex = stepRouteIndex(graphRoute.stepIndex, delta, n);
+  applyGraphRouteToSceneSelection();
+  syncScenePresentation();
+  sceneApi?.centerOnNodeId(appState.selected?.id);
+  renderInspector();
+  persistState();
+}
+
+function graphRouteJumpEndpoint(which) {
+  const r = graphRoute.result;
+  if (!r?.ok || !r.pathSceneIds?.length) return;
+  const n = r.pathSceneIds.length;
+  graphRoute.stepIndex = which === 'end' ? n - 1 : 0;
+  applyGraphRouteToSceneSelection();
+  syncScenePresentation();
+  sceneApi?.centerOnNodeId(appState.selected?.id);
+  renderInspector();
+  persistState();
+}
+
 function escapeHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, (m) =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]),
   );
+}
+
+function formatRouteInspectorSummary(res) {
+  if (!res?.ok) return '';
+  const mix = formatRelationshipTypeCounts(res.typeCounts) || '—';
+  const bridges = res.bridges || [];
+  const br =
+    bridges.length > 0
+      ? `Bridge rooms (cross-wing connectors): ${bridges.map((id) => id.split('/').pop()).join(', ')}.`
+      : 'No interior cross-wing bridge hops — path is short or stays within-wing.';
+  return `${res.hops} hop(s) on visible edges · ${mix}. ${br}`;
 }
 
 function formatNum(n) {
@@ -353,9 +542,17 @@ function toggleRelationshipType(type) {
   else graphRelEnabledTypes.add(type);
   persistGraphRelFilters(graphRelEnabledTypes);
   sceneApi?.setRelationshipFilters(sceneRelationshipFilterArg(graphRelEnabledTypes, available));
+  if (graphRoute.startSceneId && graphRoute.targetSceneId) {
+    recomputeGraphRoute();
+    const res = graphRoute.result;
+    if (res && !res.ok) {
+      showToast(res.message || 'Route no longer exists with these filters — adjust or clear route.');
+    }
+  }
   renderInspector();
   updateMetrics();
   updateGraphViewChrome();
+  syncScenePresentation();
 }
 
 function updateGraphViewChrome() {
@@ -822,9 +1019,55 @@ function renderRoomInspector(ctx, wingName, roomName, _mode) {
       ? '<p class="inspect-muted inspect-muted--tight">Graph view: layout is force-directed; tunnel metrics match the same resolved edges as Rooms/Wings.</p>'
       : '';
 
+  const sceneRoomId = `room:${wingName}:${roomName}`;
+  const startPr = graphRoute.startSceneId ? parseRoomSceneId(graphRoute.startSceneId) : null;
+  const startLabel = startPr ? `${startPr.room} · ${startPr.wing}` : '—';
+  const canRouteHere =
+    graphAvailable && graphRoute.startSceneId && graphRoute.startSceneId !== sceneRoomId;
+  const routeBlock =
+    appState.view === 'graph' && graphAvailable
+      ? inspectSection(
+          'Route',
+          `<div class="meta-block">
+            ${metaRow('Route start', escapeHtml(startLabel))}
+            ${metaRow(
+              'Route target',
+              graphRoute.targetSceneId
+                ? escapeHtml(
+                    (() => {
+                      const t = parseRoomSceneId(graphRoute.targetSceneId);
+                      return t ? `${t.room} · ${t.wing}` : graphRoute.targetSceneId;
+                    })(),
+                  )
+                : '—',
+            )}
+          </div>
+          <div class="btn-row" style="margin-top:8px;flex-wrap:wrap;gap:6px">
+            <button type="button" class="btn btn--ghost btn--sm" data-route-action="set-start">Set as route start</button>
+            <button type="button" class="btn btn--ghost btn--sm" data-route-action="route-here" data-wing="${escapeHtml(
+              wingName,
+            )}" data-room="${escapeHtml(roomName)}" ${canRouteHere ? '' : 'disabled'} title="Shortest path along visible edges">Route to here</button>
+            <button type="button" class="btn btn--ghost btn--sm" data-route-action="clear-route" ${
+              graphRoute.startSceneId || graphRoute.targetSceneId ? '' : 'disabled'
+            }>Clear route</button>
+          </div>
+          ${
+            graphRoute.result?.ok
+              ? `<p class="inspect-muted inspect-muted--tight" role="status">${escapeHtml(formatRouteInspectorSummary(graphRoute.result))}</p>`
+              : ''
+          }
+          ${
+            graphRoute.result && !graphRoute.result.ok
+              ? `<p class="inspect-muted inspect-muted--tight" role="status">${escapeHtml(graphRoute.result.message || '')}</p>`
+              : ''
+          }`,
+        )
+      : '';
+
   return `
     <div class="inspect-stack">
       ${graphViewNote}
+      ${routeBlock}
       <div class="inspect-card inspect-card--hero">
         <span class="badge">Room</span>
         <div class="inspect-title">${escapeHtml(roomName)}</div>
@@ -881,6 +1124,17 @@ function renderRoomInspector(ctx, wingName, roomName, _mode) {
 }
 
 function onInspectorClick(e) {
+  const r = e.target.closest('[data-route-action]');
+  if (r) {
+    const ra = r.getAttribute('data-route-action');
+    if (ra === 'set-start') graphRouteSetStartFromSelection();
+    else if (ra === 'route-here') {
+      const w = r.getAttribute('data-wing');
+      const rm = r.getAttribute('data-room');
+      if (w && rm) graphRouteSetTarget(`room:${w}:${rm}`);
+    } else if (ra === 'clear-route') clearGraphRoute();
+    return;
+  }
   const g = e.target.closest('[data-graph-action]');
   if (g) {
     const act = g.getAttribute('data-graph-action');
@@ -888,6 +1142,11 @@ function onInspectorClick(e) {
     else if (act === 'next') graphStepNeighbor(1);
     else if (act === 'prev') graphStepNeighbor(-1);
     else if (act === 'back') graphFocusBack();
+    else if (act === 'route-start') graphRouteJumpEndpoint('start');
+    else if (act === 'route-end') graphRouteJumpEndpoint('end');
+    else if (act === 'route-prev') graphRouteStepHop(-1);
+    else if (act === 'route-next') graphRouteStepHop(1);
+    else if (act === 'route-clear') clearGraphRoute();
     return;
   }
   const btn = e.target.closest('[data-inspect-action]');
@@ -1038,6 +1297,7 @@ function syncScenePresentation() {
     searchQuery: appState.searchQuery,
     selectedId: appState.selected?.id ?? null,
     pinActive: appState.pinned,
+    route: routePresentationPayload(),
   });
 }
 
@@ -1226,11 +1486,16 @@ function renderGraphSearchPanel() {
     .map((hit, i) => {
       const ix = start + i;
       const active = ix === cur;
-      return `<li>
+      const routeBtn =
+        hit.kind === 'room'
+          ? `<button type="button" class="btn btn--ghost btn--sm graph-search-hit__route" data-graph-route-to="${ix}" title="Use as route target (needs route start)">Route</button>`
+          : '';
+      return `<li class="graph-search-hit-row">
         <button type="button" class="graph-search-hit ${active ? 'is-active' : ''}" data-graph-hit-ix="${ix}" role="option" aria-selected="${active ? 'true' : 'false'}">
           <span class="graph-search-hit__label">${escapeHtml(hit.label)}</span>
           <span class="graph-search-hit__sub">${escapeHtml(hit.sublabel)}</span>
         </button>
+        ${routeBtn}
       </li>`;
     })
     .join('');
@@ -1654,6 +1919,7 @@ function applyView(view) {
   closeHelpIfOpen();
   if (appState.view === 'graph' && view !== 'graph') {
     graphFocusHistory.length = 0;
+    clearGraphRoute();
   }
   appState.view = view;
   if (view === 'wings') {
@@ -1966,6 +2232,16 @@ function wireControls() {
   });
 
   $('graph-search-panel')?.addEventListener('click', (e) => {
+    const rt = e.target.closest('[data-graph-route-to]');
+    if (rt) {
+      const ix = Number(rt.getAttribute('data-graph-route-to'));
+      if (Number.isNaN(ix) || !graphSearchMatches[ix]) return;
+      const hit = graphSearchMatches[ix];
+      if (hit.kind !== 'room') return;
+      graphRouteSetTarget(hit.sceneId);
+      dismissGraphSearchFirstUseHint();
+      return;
+    }
     const b = e.target.closest('[data-graph-search-step]');
     if (b) {
       const d = Number(b.getAttribute('data-graph-search-step'));
@@ -2038,13 +2314,16 @@ function wireControls() {
     if (e.key === '3') applyView('graph');
     if (e.key === 'r' || e.key === 'R') sceneApi?.resetCamera();
     if (appState.view === 'graph' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      const routeLive = graphRoute.result?.ok && graphRoute.result.pathSceneIds?.length > 1;
       if (e.key === '[') {
         e.preventDefault();
-        graphStepNeighbor(-1);
+        if (routeLive) graphRouteStepHop(-1);
+        else graphStepNeighbor(-1);
       }
       if (e.key === ']') {
         e.preventDefault();
-        graphStepNeighbor(1);
+        if (routeLive) graphRouteStepHop(1);
+        else graphStepNeighbor(1);
       }
       if (e.key === 'u' || e.key === 'U') {
         e.preventDefault();
@@ -2200,6 +2479,9 @@ async function loadData(preserveContext) {
   const focusWing = appState.view === 'rooms' ? appState.currentWing : null;
   sceneApi?.setView(appState.view, focusWing);
   syncGraphRelationshipFiltersWithData();
+  if (graphRoute.startSceneId && graphRoute.targetSceneId) {
+    recomputeGraphRoute();
+  }
   syncScenePresentation();
 
   sceneApi?.setAutoRotate($('toggle-rotate')?.checked ?? true);

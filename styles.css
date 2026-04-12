@@ -275,6 +275,50 @@ a {
   transition: outline-color 0.12s ease;
 }
 
+.graph-route-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(91, 140, 255, 0.35);
+  background: rgba(30, 41, 59, 0.55);
+  font-size: 0.72rem;
+}
+
+.graph-route-strip__nav {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+.graph-route-strip__meta {
+  color: var(--text-dim);
+  margin-right: 6px;
+}
+
+.graph-search-hit-row {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  list-style: none;
+}
+
+.graph-search-hit-row .graph-search-hit {
+  flex: 1;
+  min-width: 0;
+}
+
+.graph-search-hit-row .graph-search-hit__route {
+  flex-shrink: 0;
+  align-self: center;
+  padding: 4px 8px;
+  font-size: 0.68rem;
+}
+
 .graph-explore-strip {
   display: flex;
   flex-wrap: wrap;
