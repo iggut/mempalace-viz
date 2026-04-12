@@ -175,17 +175,23 @@ content = replace_function_block(content, 'selectNode', """function selectNode(n
   if (node.kind === 'wing') {
     selectedScopeWings.clear(); selectedScopeWings.add(node.wing);
     loadGraph().then(() => {
-      updateSceneBanner('Wing focus', node.wing);
-      setOrbitDistance(120, node.mesh.position.clone());
-      renderInspector(node);
+      const fresh = nodeMap.get(node.id) || nodeMap.get('wing:' + node.wing) || node;
+      updateSceneBanner('Wing focus', fresh.wing);
+      setOrbitDistance(120, fresh.mesh.position.clone());
+      renderInspector(fresh);
+      controls.target.copy(fresh.mesh.position);
+      applyVisibilityMode();
     });
   } else if (node.kind === 'room') {
     selectedScopeWings.clear(); selectedScopeWings.add(node.wing);
     selectedScopeRooms.clear(); selectedScopeRooms.add(node.room);
     loadGraph().then(() => {
-      updateSceneBanner('Room focus', node.wing + ' • ' + node.room);
-      setOrbitDistance(60, node.mesh.position.clone());
-      renderInspector(node);
+      const fresh = nodeMap.get(node.id) || nodeMap.get(`room:${node.wing}:${node.room}`) || node;
+      updateSceneBanner('Room focus', fresh.wing + ' • ' + fresh.room);
+      setOrbitDistance(60, fresh.mesh.position.clone());
+      renderInspector(fresh);
+      controls.target.copy(fresh.mesh.position);
+      applyVisibilityMode();
     });
   } else {
     focusedIds = computeNeighborhood(node.id, expansionDepth);
@@ -194,9 +200,9 @@ content = replace_function_block(content, 'selectNode', """function selectNode(n
     updateSceneBanner(node.kind === 'crystal' ? 'Crystal focus' : 'Entity focus', trimLabel(node.label, 56) + ' • ' + expansionDepth + ' hop');
     if (node.kind === 'entity') setOrbitDistance(34, node.mesh.position.clone());
     else setOrbitDistance(isolateFocus ? 18 : 28, node.mesh.position.clone());
+    controls.target.copy(node.mesh.position);
+    applyVisibilityMode();
   }
-  controls.target.copy(node.mesh.position);
-  applyVisibilityMode();
 }""")
 
 # 5. setOrbitDistance
