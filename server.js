@@ -22,6 +22,7 @@ const STATIC_FILES = {
   '/ui.js': 'ui.js',
   '/scene.js': 'scene.js',
   '/api.js': 'api.js',
+  '/insights.js': 'insights.js',
   '/brain.js': 'brain.js',
 };
 

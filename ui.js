@@ -3,6 +3,21 @@
  */
 import { loadPalaceData, getApiBase, wingExists, roomExists } from './api.js';
 import { createPalaceScene, wingColorFor } from './scene.js';
+import {
+  buildGraphAnalytics,
+  buildOverviewModel,
+  characterizeRoom,
+  countTotalRooms,
+  formatPct,
+  getRoomGraphSlice,
+  getWingTunnelSlice,
+  ordinal,
+  rankRoomsInWingByDrawers,
+  rankWingsByDrawers,
+  rankWingsByRoomCount,
+  sumDrawerCountsInWing,
+  totalDrawersAcrossWings,
+} from './insights.js';
 
 const LS_KEY = 'mempalace-viz-explorer-v1';
 
@@ -40,6 +55,502 @@ function escapeHtml(s) {
 function formatNum(n) {
   if (n == null || Number.isNaN(Number(n))) return '—';
   return Number(n).toLocaleString();
+}
+
+function formatKgSummary(kg) {
+  if (!kg || typeof kg !== 'object') return null;
+  const parts = [];
+  for (const [k, v] of Object.entries(kg)) {
+    if (k === 'error') continue;
+    if (typeof v === 'number') parts.push(`${k}: ${formatNum(v)}`);
+    else if (typeof v === 'string') parts.push(`${k}: ${v}`);
+  }
+  return parts.length ? parts.slice(0, 8).join(' · ') : null;
+}
+
+/** Single-flight derived context for inspector + footer (recalculate when data or state changes). */
+function buildPalaceContext() {
+  const st = dataBundle?.status;
+  const wingsData = dataBundle?.wingsData || {};
+  const roomsData = dataBundle?.roomsData || {};
+  const graphEdges = dataBundle?.graphEdges || [];
+  const gs = dataBundle?.graphStats;
+  const kg = dataBundle?.kgStats;
+
+  const totalDrawers =
+    typeof st?.total_drawers === 'number' ? st.total_drawers : totalDrawersAcrossWings(wingsData);
+  const wingCount = Object.keys(wingsData).length;
+  const roomCount = countTotalRooms(roomsData);
+  let tunnelNodeCount = 0;
+  if (gs?.tunnels && typeof gs.tunnels === 'object') tunnelNodeCount = Object.keys(gs.tunnels).length;
+
+  const graphEdgeCount = graphEdges.length;
+  const ga = buildGraphAnalytics(graphEdges, roomsData);
+  const kgSummary = formatKgSummary(kg);
+  const kgAvailable = !!(kg && typeof kg === 'object' && !kg.error);
+
+  return {
+    status: st,
+    wingsData,
+    roomsData,
+    graphEdges,
+    graphStats: gs,
+    kgStats: kg,
+    totalDrawers,
+    wingCount,
+    roomCount,
+    tunnelNodeCount,
+    graphEdgeCount,
+    ga,
+    kgAvailable,
+    kgSummary,
+    focusWing: appState.currentWing,
+  };
+}
+
+function inspectSection(title, inner, emptyMessage) {
+  const body =
+    inner && String(inner).trim()
+      ? inner
+      : `<p class="inspect-empty">${escapeHtml(emptyMessage || 'No data.')}</p>`;
+  return `
+    <section class="inspect-section">
+      <h3 class="inspect-section__title">${escapeHtml(title)}</h3>
+      <div class="inspect-section__body">${body}</div>
+    </section>`;
+}
+
+function pctBar(pct) {
+  if (pct == null || Number.isNaN(Number(pct))) return '';
+  const w = Math.min(100, Math.max(0, Number(pct)));
+  return `<div class="inspect-bar" aria-hidden="true"><div class="inspect-bar__fill" style="width:${w}%"></div></div>`;
+}
+
+function clickRow(label, sub, attrs) {
+  const a = attrs || {};
+  const data = Object.entries(a)
+    .map(([k, v]) => ` data-${k}="${escapeHtml(String(v))}"`)
+    .join('');
+  return `<button type="button" class="inspect-row inspect-row--action"${data}>
+    <span class="inspect-row__main">${escapeHtml(label)}</span>
+    <span class="inspect-row__meta">${escapeHtml(sub)}</span>
+  </button>`;
+}
+
+function renderOverviewInspector(ctx) {
+  const om = buildOverviewModel(ctx, appState.view);
+  const kgLine = om.kgAvailable
+    ? om.kgSummary || '—'
+    : 'Knowledge graph statistics are unavailable from the current API.';
+  const topWings = om.largestWingsByDrawers
+    .map(
+      (r) =>
+        clickRow(r.wing, `${formatNum(r.drawers)} drawers · #${r.rank}`, {
+          'inspect-action': 'go-wing',
+          wing: r.wing,
+        }),
+    )
+    .join('');
+
+  const topRooms = om.mostConnectedRooms.length
+    ? om.mostConnectedRooms
+        .map((r) =>
+          clickRow(`${r.room}`, `${r.wing} · degree ${r.degree}`, {
+            'inspect-action': 'select-room',
+            wing: r.wing,
+            room: r.room,
+          }),
+        )
+        .join('')
+    : '';
+
+  const topCross = om.mostCrossLinkedWings.length
+    ? om.mostCrossLinkedWings
+        .map((x) =>
+          clickRow(x.wing, `${formatNum(x.crossEdges)} cross-wing edges`, {
+            'inspect-action': 'go-wing',
+            wing: x.wing,
+          }),
+        )
+        .join('')
+    : '';
+
+  const palaceBlurb = [
+    `Palace scale: ${formatNum(om.totalDrawers)} drawers across ${formatNum(om.wingCount)} wings and ${formatNum(om.roomCount)} rooms.`,
+    om.tunnelNodeCount
+      ? `Tunnel index lists ${formatNum(om.tunnelNodeCount)} room keys and ${formatNum(om.graphEdgeCount)} directed edges.`
+      : 'No tunnel index entries in graph-stats.',
+    om.graphBlurb,
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+  return `
+    <div class="inspect-stack">
+      <div class="inspect-card inspect-card--hero">
+        <span class="badge">Overview</span>
+        <p class="inspect-lead">${escapeHtml(om.viewHint)}</p>
+        <p class="inspect-muted">${escapeHtml(palaceBlurb)}</p>
+      </div>
+      ${inspectSection(
+        'Palace summary',
+        `
+        <div class="meta-block">
+          ${metaRow('Total drawers', formatNum(om.totalDrawers))}
+          ${metaRow('Wings', formatNum(om.wingCount))}
+          ${metaRow('Rooms (taxonomy)', formatNum(om.roomCount))}
+          ${metaRow('Tunnel edges (raw)', formatNum(om.graphEdgeCount))}
+          ${metaRow('Cross-wing (resolved)', om.ga.hasResolvableEdges ? formatNum(om.crossWingEdges) : '—')}
+          ${metaRow('Rooms with no tunnels', om.ga.hasResolvableEdges ? formatNum(om.roomsWithNoTunnels) : '—')}
+        </div>
+        <p class="inspect-muted inspect-muted--tight">${escapeHtml(kgLine)}</p>
+        `,
+      )}
+      ${inspectSection(
+        'Largest wings',
+        `<div class="inspect-rows">${topWings || '<p class="inspect-empty">No wing counts available.</p>'}</div>`,
+      )}
+      ${inspectSection(
+        'Most connected rooms',
+        topRooms || '<p class="inspect-empty">No resolvable tunnel edges, or graph endpoints do not match room names.</p>',
+      )}
+      ${inspectSection(
+        'Most cross-linked wings',
+        topCross || '<p class="inspect-empty">No cross-wing tunnel edges resolved.</p>',
+      )}
+      <div class="inspect-card inspect-card--hint">
+        <strong>How to explore</strong>
+        <p class="inspect-muted inspect-muted--tight">Use <kbd>1</kbd>–<kbd>3</kbd> to switch views. Click wings and rooms to drill in; Pin keeps the inspector fixed. Search dims non-matching nodes.</p>
+      </div>
+    </div>`;
+}
+
+function renderWingInspector(ctx, wingName, _mode) {
+  const { wingsData, roomsData, totalDrawers, ga, graphEdges } = ctx;
+  const d = Number(wingsData[wingName]) || 0;
+  const rooms = roomsData[wingName] || [];
+  const roomN = rooms.length;
+  const wingDrawerRank = rankWingsByDrawers(wingsData);
+  const dr = wingDrawerRank.find((x) => x.wing === wingName);
+  const roomRankList = rankWingsByRoomCount(roomsData);
+  const rr = roomRankList.find((x) => x.wing === wingName);
+
+  const pctDrawers = formatPct(d, totalDrawers);
+  const totalRoomsAll = countTotalRooms(roomsData);
+  const pctRooms = formatPct(roomN, totalRoomsAll);
+
+  const sumRooms = sumDrawerCountsInWing(roomsData, wingName);
+  const denom = sumRooms > 0 ? sumRooms : d;
+  const avg = roomN ? (denom / roomN).toFixed(1) : null;
+
+  const ranked = rankRoomsInWingByDrawers(roomsData, wingName);
+  const largest = ranked[0];
+  const smallest = ranked.length > 1 ? ranked[ranked.length - 1] : null;
+
+  const sentence = [
+    pctDrawers != null && dr
+      ? `This wing holds ${pctDrawers}% of all drawers and is the ${ordinal(dr.rank)} largest wing by drawer count.`
+      : null,
+    pctRooms != null && rr && roomN
+      ? `It ranks ${ordinal(rr.rank)} among wings by room count (${pctRooms}% of all rooms).`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+  const tunnel = getWingTunnelSlice(wingName, graphEdges, roomsData);
+  const externalBlock =
+    tunnel.crossWingTouches > 0
+      ? `
+      ${metaRow('Cross-wing tunnel touches', formatNum(tunnel.crossWingTouches))}
+      <div class="inspect-rows">
+        ${tunnel.topExternalWings
+          .map((x) =>
+            clickRow(x.wing, `${formatNum(x.edges)} edges`, { 'inspect-action': 'go-wing', wing: x.wing }),
+          )
+          .join('')}
+      </div>`
+      : '';
+
+  const topByCross = tunnel.topRoomsByCrossWing
+    .map((r) =>
+      clickRow(r.room, `cross-wing ${formatNum(r.crossEdges)}`, {
+        'inspect-action': 'select-room',
+        wing: r.wing,
+        room: r.room,
+      }),
+    )
+    .join('');
+
+  const topByDrawers = ranked.slice(0, 5).map((r) =>
+    clickRow(r.name, `${formatNum(r.drawers)} drawers`, {
+      'inspect-action': 'select-room',
+      wing: wingName,
+      room: r.name,
+    }),
+  );
+
+  const byDegree = [...rooms]
+    .map((r) => {
+      const key = `${wingName}/${r.name}`;
+      const deg = ga.degreeByKey.get(key) ?? 0;
+      return { ...r, deg };
+    })
+    .sort((a, b) => b.deg - a.deg)
+    .slice(0, 5);
+  const topByDeg = byDegree.length
+    ? byDegree
+        .map((r) =>
+          clickRow(r.name, `degree ${r.deg}`, {
+            'inspect-action': 'select-room',
+            wing: wingName,
+            room: r.name,
+          }),
+        )
+        .join('')
+    : '';
+
+  const structureExtra =
+    roomN === 0
+      ? '<p class="inspect-empty">This wing has no room-level drawer breakdown in taxonomy.</p>'
+      : `
+      ${metaRow('Rooms listed', formatNum(roomN))}
+      ${metaRow('Drawers (wing total)', formatNum(d))}
+      ${avg != null ? metaRow('Avg drawers / room', avg) : ''}
+      ${largest ? metaRow('Largest room', `${largest.name} (${formatNum(largest.drawers)})`) : ''}
+      ${smallest && smallest.name !== largest?.name ? metaRow('Smallest room', `${smallest.name} (${formatNum(smallest.drawers)})`) : ''}
+    `;
+
+  const graphViewNote =
+    appState.view === 'graph'
+      ? '<p class="inspect-muted inspect-muted--tight">Graph view: node positions are layout-only; drawer ranks use taxonomy and wings API.</p>'
+      : '';
+
+  return `
+    <div class="inspect-stack">
+      ${graphViewNote}
+      <div class="inspect-card inspect-card--hero">
+        <span class="badge">Wing</span>
+        <div class="inspect-title">${escapeHtml(wingName)}</div>
+        <p class="inspect-lead">${escapeHtml(sentence || 'Wing footprint in the palace.')}</p>
+        ${pctDrawers != null ? `<div class="inspect-pct"><span>${pctDrawers}% of palace drawers</span>${pctBar(pctDrawers)}</div>` : ''}
+      </div>
+      ${inspectSection(
+        'Summary',
+        `
+        <div class="meta-block">
+          ${metaRow('Drawer count', formatNum(d))}
+          ${metaRow('Rank by drawers', dr ? `${ordinal(dr.rank)} of ${wingDrawerRank.length}` : '—')}
+          ${metaRow('Rooms', formatNum(roomN))}
+          ${metaRow('Rank by room count', rr ? `${ordinal(rr.rank)} of ${roomRankList.length}` : '—')}
+        </div>`,
+      )}
+      ${inspectSection('Structure', `<div class="meta-block">${structureExtra}</div>`)}
+      ${inspectSection(
+        'Connections',
+        ga.hasResolvableEdges
+          ? `${externalBlock || `<p class="inspect-empty">No cross-wing tunnel relationships touch this wing.</p>`}
+             ${topByCross ? `<p class="inspect-micro">Rooms with cross-wing links</p><div class="inspect-rows">${topByCross}</div>` : ''}`
+          : '<p class="inspect-empty">No tunnel relationships could be resolved against taxonomy rooms.</p>',
+      )}
+      ${inspectSection(
+        'Related rooms',
+        `<p class="inspect-micro">Largest by drawers</p><div class="inspect-rows">${topByDrawers.join('')}</div>
+         ${topByDeg ? `<p class="inspect-micro">Most connected (tunnels)</p><div class="inspect-rows">${topByDeg}</div>` : '<p class="inspect-empty">No graph degree for rooms in this wing.</p>'}`,
+      )}
+      ${inspectSection(
+        'Health / graph insight',
+        `<p class="inspect-muted">${escapeHtml(
+          ga.topCrossLinkedWings[0]?.wing === wingName
+            ? 'This wing is among the most cross-linked in the tunnel graph.'
+            : tunnel.crossWingTouches > 0
+              ? 'Participates in cross-wing tunnels; see Connections for peers.'
+              : roomN > 0
+                ? 'No cross-wing tunnel edges touch this wing in the current graph.'
+                : 'Add taxonomy rooms to compare structure.',
+        )}</p>`,
+      )}
+    </div>`;
+}
+
+function renderRoomInspector(ctx, wingName, roomName, _mode) {
+  const { wingsData, roomsData, totalDrawers, ga } = ctx;
+  const rooms = roomsData[wingName] || [];
+  const room = rooms.find((r) => r.name === roomName);
+  const drawers = room ? Number(room.drawers) || 0 : null;
+
+  const wingTotal = Number(wingsData[wingName]) || 0;
+  const sumInWing = sumDrawerCountsInWing(roomsData, wingName);
+  const wingDen = sumInWing > 0 ? sumInWing : wingTotal;
+
+  const ranked = rankRoomsInWingByDrawers(roomsData, wingName);
+  const rr = ranked.find((r) => r.name === roomName);
+
+  const pctWing = drawers != null && wingDen > 0 ? formatPct(drawers, wingDen) : null;
+  const pctPalace = drawers != null && totalDrawers > 0 ? formatPct(drawers, totalDrawers) : null;
+
+  const sentence = [
+    rr && pctWing != null
+      ? `This room is the ${ordinal(rr.rank)} largest in “${wingName}” by drawers and holds about ${pctWing}% of that wing’s drawers (by room list).`
+      : null,
+    pctPalace != null ? `It is ${pctPalace}% of the entire palace by drawers.` : null,
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+  const roomKey = `${wingName}/${roomName}`;
+  const slice = getRoomGraphSlice(roomKey, ga);
+  const graphAvailable = ga.hasResolvableEdges;
+
+  const insight = characterizeRoom(
+    {
+      drawers: drawers ?? 0,
+      wingRoomSum: wingDen,
+      palaceTotal: totalDrawers,
+    },
+    slice,
+    graphAvailable,
+  );
+
+  const wingAvg = wingDen > 0 && rooms.length ? wingDen / rooms.length : null;
+  const cmp =
+    drawers != null && wingAvg != null
+      ? drawers >= wingAvg * 1.1
+        ? 'Above wing average size'
+        : drawers <= wingAvg * 0.9
+          ? 'Below wing average size'
+          : 'Near wing average size'
+      : '—';
+
+  const relRooms = (slice?.relatedRooms || [])
+    .filter((x) => !(x.wing === wingName && x.room === roomName))
+    .slice(0, 6);
+
+  const relRoomRows = relRooms.length
+    ? relRooms
+        .map((r) =>
+          clickRow(`${r.room}`, `${r.wing} · deg ${r.degree}`, {
+            'inspect-action': 'select-room',
+            wing: r.wing,
+            room: r.room,
+          }),
+        )
+        .join('')
+    : '';
+
+  const relWingRows = (slice?.relatedWings || [])
+    .filter((w) => w.wing !== wingName)
+    .slice(0, 6)
+    .map((w) =>
+      clickRow(w.wing, `${formatNum(w.links)} tunnel link${w.links === 1 ? '' : 's'}`, {
+        'inspect-action': 'go-wing',
+        wing: w.wing,
+      }),
+    )
+    .join('');
+
+  const bridgeNote =
+    slice && slice.isBridge
+      ? 'Acts as a bridge: at least one cross-wing tunnel edge is incident to this room.'
+      : 'No bridge pattern detected (no cross-wing edges on this room).';
+
+  const graphViewNote =
+    appState.view === 'graph'
+      ? '<p class="inspect-muted inspect-muted--tight">Graph view: layout is force-directed; tunnel metrics match the same resolved edges as Rooms/Wings.</p>'
+      : '';
+
+  return `
+    <div class="inspect-stack">
+      ${graphViewNote}
+      <div class="inspect-card inspect-card--hero">
+        <span class="badge">Room</span>
+        <div class="inspect-title">${escapeHtml(roomName)}</div>
+        <p class="inspect-lead">${escapeHtml(sentence || 'Room in the palace taxonomy.')}</p>
+        ${pctWing != null ? `<div class="inspect-pct"><span>${pctWing}% of wing drawers (room list)</span>${pctBar(pctWing)}</div>` : ''}
+      </div>
+      ${inspectSection(
+        'Summary',
+        `
+        <div class="meta-block">
+          ${metaRow('Parent wing', escapeHtml(wingName))}
+          ${metaRow('Drawers', drawers != null ? formatNum(drawers) : '—')}
+          ${metaRow('Share of palace', pctPalace != null ? `${pctPalace}%` : '—')}
+        </div>`,
+      )}
+      ${inspectSection(
+        'Position in wing',
+        rooms.length
+          ? `
+        <div class="meta-block">
+          ${metaRow('Rank in wing (by drawers)', rr ? `${ordinal(rr.rank)} of ${ranked.length}` : '—')}
+          ${metaRow('Wing avg drawers / room', wingAvg != null ? wingAvg.toFixed(1) : '—')}
+          ${metaRow('vs average', cmp)}
+        </div>`
+          : '<p class="inspect-empty">This wing has no room-level drawer breakdown.</p>',
+      )}
+      ${inspectSection(
+        'Connections',
+        graphAvailable && slice
+          ? `
+        <div class="meta-block">
+          ${metaRow('Tunnel degree', formatNum(slice.degree))}
+          ${metaRow('Cross-wing links', formatNum(slice.crossWingLinks))}
+          ${metaRow('Intra-wing links', formatNum(slice.intraWingLinks))}
+          ${metaRow('Median degree (all rooms)', slice.medianDegree != null ? formatNum(slice.medianDegree) : '—')}
+        </div>
+        <p class="inspect-muted inspect-muted--tight">${escapeHtml(bridgeNote)}</p>
+        ${relRoomRows ? `<p class="inspect-micro">Related rooms</p><div class="inspect-rows">${relRoomRows}</div>` : '<p class="inspect-empty">No tunnel neighbors found for this room.</p>'}
+        ${relWingRows ? `<p class="inspect-micro">Related wings</p><div class="inspect-rows">${relWingRows}</div>` : ''}
+        `
+          : '<p class="inspect-empty">No tunnel relationships available for this room (unresolved graph or empty tunnels).</p>',
+      )}
+      ${inspectSection(
+        'Insight',
+        `<p class="insight-chip">${escapeHtml(insight.label)}</p><p class="inspect-muted inspect-muted--tight">${escapeHtml(insight.detail)}</p>`,
+      )}
+    </div>`;
+}
+
+function onInspectorClick(e) {
+  const btn = e.target.closest('[data-inspect-action]');
+  if (!btn) return;
+  const action = btn.getAttribute('data-inspect-action');
+  const wing = btn.getAttribute('data-wing');
+  const room = btn.getAttribute('data-room');
+  if (action === 'go-wing' && wing) {
+    navigateToWing(wing);
+    return;
+  }
+  if (action === 'select-room' && wing && room) {
+    selectRoomFromInspector(wing, room);
+  }
+}
+
+function selectRoomFromInspector(wing, room) {
+  if (!dataBundle || !wingExists(dataBundle.wingsData, wing) || !roomExists(dataBundle.roomsData, wing, room)) {
+    return;
+  }
+  const rd = dataBundle.roomsData[wing];
+  const rm = Array.isArray(rd) ? rd.find((r) => r.name === room) : null;
+  appState.currentWing = wing;
+  appState.currentRoom = room;
+  appState.selected = {
+    id: `room:${wing}:${room}`,
+    type: 'room',
+    name: room,
+    wing,
+    drawers: rm?.drawers,
+  };
+  appState.pinned = false;
+  appState.view = 'rooms';
+  sceneApi?.setView('rooms', wing);
+  syncScenePresentation();
+  sceneApi?.centerOnNodeId(`room:${wing}:${room}`);
+  setActiveViewButtons();
+  $('view-helper-text').textContent = VIEWS.find((v) => v.id === 'rooms')?.hint || '';
+  renderBreadcrumb();
+  renderInspector();
+  persistState();
 }
 
 function selectionFromUserData(ud) {
@@ -173,22 +684,61 @@ function showError(message, detail) {
   $('err-retry')?.addEventListener('click', () => loadData(false));
 }
 
+function updateFooterContextLine(subject, ctx) {
+  const el = $('metric-context');
+  const wrap = $('metric-context-wrap');
+  if (!el || !wrap) return;
+
+  if (!subject || !ctx) {
+    wrap.hidden = true;
+    el.textContent = '';
+    return;
+  }
+
+  wrap.hidden = false;
+  if (subject.type === 'wing') {
+    const dr = rankWingsByDrawers(ctx.wingsData).find((x) => x.wing === subject.name);
+    el.textContent = dr ? `Selected wing · ${ordinal(dr.rank)} by drawers` : 'Selected wing';
+    return;
+  }
+  if (subject.type === 'room') {
+    const rk = rankRoomsInWingByDrawers(ctx.roomsData, subject.wing).find((r) => r.name === subject.name);
+    el.textContent = rk ? `Selected room · ${ordinal(rk.rank)} in ${subject.wing}` : 'Selected room';
+  }
+}
+
 function updateMetrics() {
   const st = dataBundle?.status;
   const gs = dataBundle?.graphStats;
   const kg = dataBundle?.kgStats;
+  const ctx = buildPalaceContext();
+  const { wingsData, roomsData, totalDrawers, ga } = ctx;
 
-  const drawers = st?.total_drawers;
-  const wingCount = st?.wings && typeof st.wings === 'object' ? Object.keys(st.wings).length : 0;
-  const roomCount = st?.rooms && typeof st.rooms === 'object' ? Object.keys(st.rooms).length : 0;
-
-  $('metric-drawers').textContent = formatNum(drawers ?? 0);
-  $('metric-wings').textContent = formatNum(wingCount);
-  $('metric-rooms').textContent = formatNum(roomCount);
+  $('metric-drawers').textContent = formatNum(totalDrawers ?? 0);
+  $('metric-wings').textContent = formatNum(Object.keys(wingsData).length);
+  $('metric-rooms').textContent = formatNum(countTotalRooms(roomsData));
 
   let tunnels = 0;
   if (gs?.tunnels && typeof gs.tunnels === 'object') tunnels = Object.keys(gs.tunnels).length;
   $('metric-tunnels').textContent = tunnels ? formatNum(tunnels) : '—';
+
+  const crossEl = $('metric-cross');
+  if (crossEl) {
+    crossEl.textContent = ga.hasResolvableEdges ? formatNum(ga.crossWingEdgeCount) : '—';
+  }
+
+  const foot = $('metric-footnote');
+  if (foot) {
+    const topW = ga.topCrossLinkedWings[0];
+    const topR = ga.topConnectedRooms[0];
+    if (ga.hasResolvableEdges && topW && topR) {
+      foot.textContent = `Most cross-linked wing: ${topW.wing} · Most connected room: ${topR.room} (${topR.wing})`;
+    } else if (ga.hasResolvableEdges && topW) {
+      foot.textContent = `Most cross-linked wing: ${topW.wing}`;
+    } else {
+      foot.textContent = 'Tunnel graph: resolve endpoints to see cross-wing stats.';
+    }
+  }
 
   if (kg && typeof kg === 'object' && !kg.error) {
     const parts = [];
@@ -201,6 +751,8 @@ function updateMetrics() {
   } else {
     $('metric-kg').textContent = '—';
   }
+
+  updateFooterContextLine(appState.selected, ctx);
 }
 
 function filterLegendSearch(text, query) {
@@ -335,32 +887,32 @@ function renderInspector() {
 
   renderBreadcrumb();
 
+  const ctx = buildPalaceContext();
+
   if (!subject || subject.type === 'center') {
-    body.innerHTML = `
-      <div class="empty-state">
-        <strong>${mode === 'empty' ? 'Nothing selected' : 'Hover a node'}</strong>
-        ${mode === 'empty' ? '<p>Click a wing to open its rooms. Click a room or graph node to select. Use Pin to keep the inspector fixed while exploring.</p>' : '<p>Move the pointer over the scene for a quick preview.</p>'}
-      </div>`;
+    if (mode === 'empty') {
+      body.innerHTML = renderOverviewInspector(ctx);
+    } else {
+      body.innerHTML = `
+        <div class="empty-state">
+          <strong>Hover a node</strong>
+          <p>Move the pointer over the scene for a quick preview, or select a wing or room.</p>
+        </div>`;
+    }
+    updateFooterContextLine(null, ctx);
     updatePinButton();
     return;
   }
 
   const t = subject;
-  const typeLabel = t.type === 'wing' ? 'Wing' : t.type === 'room' ? 'Room' : 'Node';
-  let rows = '';
-  if (t.type === 'wing') rows += metaRow('Drawers', formatNum(t.drawers));
-  if (t.type === 'room') {
-    rows += metaRow('Wing', escapeHtml(t.wing));
-    rows += metaRow('Drawers in room', formatNum(t.drawers));
+  if (t.type === 'wing') {
+    body.innerHTML = renderWingInspector(ctx, t.name, mode);
+  } else if (t.type === 'room') {
+    body.innerHTML = renderRoomInspector(ctx, t.wing, t.name, mode);
+  } else {
+    body.innerHTML = `<div class="inspect-card"><p class="inspect-muted">Unknown node type.</p></div>`;
   }
-
-  body.innerHTML = `
-    <div class="inspect-card">
-      <span class="badge">${escapeHtml(typeLabel)}</span>
-      <div class="inspect-title">${escapeHtml(t.name || '')}</div>
-      ${rows ? `<div class="meta-block">${rows}</div>` : ''}
-    </div>
-  `;
+  updateFooterContextLine(t, ctx);
   updatePinButton();
 }
 
@@ -755,10 +1307,18 @@ async function loadData(preserveContext) {
   persistState();
 }
 
+function wireInspectorDelegation() {
+  const body = $('inspect-body');
+  if (!body || body._delegationWired) return;
+  body._delegationWired = true;
+  body.addEventListener('click', onInspectorClick);
+}
+
 function main() {
   buildViewButtons();
   setupScene();
   wireControls();
+  wireInspectorDelegation();
   loadData(false);
 }
 
