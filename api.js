@@ -58,9 +58,32 @@ export function parseTaxonomy(taxonomyRaw) {
   return { taxonomy: taxonomy || {}, roomsData };
 }
 
+/** Optional: fetch room list for a wing from `/api/rooms?wing=`. */
+export async function fetchRoomsForWing(wing) {
+  if (!wing) return null;
+  const base = getApiBase();
+  try {
+    return await fetchJson(`${base}/api/rooms?wing=${encodeURIComponent(wing)}`);
+  } catch {
+    return null;
+  }
+}
+
+/** Return true if wing exists in loaded wings data. */
+export function wingExists(wingsData, wing) {
+  return !!(wingsData && typeof wingsData === 'object' && wing in wingsData);
+}
+
+/** Return true if room exists under wing in roomsData map. */
+export function roomExists(roomsData, wing, room) {
+  const rooms = roomsData?.[wing];
+  if (!Array.isArray(rooms)) return false;
+  return rooms.some((r) => r.name === room);
+}
+
 /**
  * Load all viz endpoints in parallel. kg-stats is optional.
- * @returns {{ status: object, wingsData: object, roomsData: object, taxonomy: object, graphStats: object, kgStats: object|null, error: Error|null }}
+ * @returns {Promise<object>}
  */
 export async function loadPalaceData() {
   const base = getApiBase();

@@ -30,7 +30,7 @@
               type="search"
               id="search-wings"
               class="search-input"
-              placeholder="Filter wings in legend…"
+              placeholder="Search wings &amp; rooms (dims non-matches in scene)…"
               autocomplete="off"
             />
             <div id="view-buttons" class="view-seg"></div>
@@ -55,7 +55,7 @@
 
             <div class="btn-row" style="margin-top: 14px">
               <button type="button" id="btn-reset-cam" class="btn btn--ghost">Reset camera</button>
-              <button type="button" id="btn-center" class="btn btn--ghost" title="Frame the hovered node">Center on hover</button>
+              <button type="button" id="btn-center" class="btn btn--ghost" title="Frame selection, or hovered node">Center</button>
             </div>
           </div>
         </aside>
@@ -72,7 +72,14 @@
         <aside class="panel panel--right" id="panel-right">
           <div class="panel-header">Inspector</div>
           <div class="panel-body">
-            <div id="breadcrumb" class="breadcrumb">All wings</div>
+            <div class="inspector-toolbar">
+              <span id="inspect-mode-badge" class="inspect-mode-badge" data-mode="empty">Nothing selected</span>
+              <div class="inspector-toolbar__actions">
+                <button type="button" id="btn-pin" class="btn btn--ghost btn--sm" title="Pin inspector (ignore hover)">Pin</button>
+                <button type="button" id="btn-clear-sel" class="btn btn--ghost btn--sm" title="Clear selection">Clear</button>
+              </div>
+            </div>
+            <div id="breadcrumb" class="breadcrumb"></div>
             <div id="inspect-body"></div>
           </div>
         </aside>
@@ -86,10 +93,32 @@
           <span class="metric"><span class="metric__k">Tunnel nodes</span> <span id="metric-tunnels" class="metric__v">—</span></span>
           <span class="metric"><span class="metric__k">Knowledge graph</span> <span id="metric-kg" class="metric__v">—</span></span>
         </div>
-        <div class="hint-row">
-          <kbd>1</kbd>–<kbd>3</kbd> views · <kbd>R</kbd> camera · <kbd>L</kbd> labels · <kbd>Space</kbd> rotate
+        <div class="footer-actions">
+          <button type="button" id="btn-help" class="btn btn--ghost btn--sm" title="Shortcuts">Shortcuts</button>
+          <span class="hint-row" style="margin: 0">
+            <kbd>1</kbd>–<kbd>3</kbd> · <kbd>R</kbd> camera · <kbd>L</kbd> labels · <kbd>Space</kbd> rotate · <kbd>Esc</kbd> unpin/clear
+          </span>
         </div>
       </footer>
+    </div>
+
+    <div id="help-overlay" class="help-overlay" aria-hidden="true" role="presentation">
+      <div class="help-modal" role="dialog" aria-labelledby="help-title">
+        <h2 id="help-title" class="help-modal__title">Shortcuts &amp; interaction</h2>
+        <button type="button" id="help-close" class="help-modal__close" aria-label="Close">×</button>
+        <ul class="help-list">
+          <li><kbd>1</kbd> / <kbd>2</kbd> / <kbd>3</kbd> — Switch Wings / Rooms / Graph view</li>
+          <li><kbd>R</kbd> — Reset camera</li>
+          <li><kbd>L</kbd> — Toggle labels</li>
+          <li><kbd>Space</kbd> — Toggle auto-rotate</li>
+          <li><kbd>Esc</kbd> — Unpin inspector, or clear selection</li>
+          <li><strong>Click</strong> wing (Wings) — Enter that wing’s rooms</li>
+          <li><strong>Click</strong> room (Rooms) — Select &amp; center</li>
+          <li><strong>Click</strong> node (Graph) — Select &amp; pin</li>
+          <li><strong>Click</strong> empty canvas — Clear selection (unless pinned)</li>
+          <li><strong>Breadcrumb</strong> — Navigate: All wings → wing → refocus room</li>
+        </ul>
+      </div>
     </div>
 
     <script type="module" src="/ui.js"></script>

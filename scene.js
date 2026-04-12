@@ -1,5 +1,5 @@
 /**
- * Three.js scene for MemPalace 3D — wings / rooms / graph views.
+ * Three.js scene — wings / rooms / graph with focus, filter, and selection visuals.
  */
 import * as THREE from 'https://cdn.skypack.dev/three@0.160.0';
 import { OrbitControls } from 'https://cdn.skypack.dev/three@0.160.0/examples/jsm/controls/OrbitControls.js';
@@ -27,6 +27,12 @@ const CONFIG = {
     center: 0xe2e8f0,
   },
 };
+
+export function nodeKeyFor(type, wing, name) {
+  if (type === 'wing') return `wing:${wing || name}`;
+  if (type === 'room') return `room:${wing}:${name}`;
+  return `${type}:${wing}:${name}`;
+}
 
 function hashHue(name) {
   let h = 0;
@@ -70,16 +76,25 @@ export function createPalaceScene(container, options = {}) {
   let graphEdges = [];
 
   let nodes = [];
-  let links = [];
+  let linkObjects = [];
   let labelSprites = [];
 
   let currentView = 'wings';
+  let roomsFocusWing = null;
   let motionIntensity = 1;
   let labelsVisible = true;
   let autoRotateUser = true;
 
   let hoveredMesh = null;
-  let pinnedUserData = null;
+  let presentation = {
+    searchQuery: '',
+    hoveredId: null,
+    selectedId: null,
+    pinActive: false,
+  };
+
+  const nodeRegistry = new Map();
+  const labelByNodeId = new Map();
 
   const callbacks = {
     onHover: options.onHover || (() => {}),
@@ -111,18 +126,20 @@ export function createPalaceScene(container, options = {}) {
       scene.remove(mesh);
       disposeMeshTree(mesh);
     });
-    links.forEach((line) => {
+    linkObjects.forEach(({ line }) => {
       scene.remove(line);
       disposeLine(line);
     });
-    labelSprites.forEach((spr) => {
-      scene.remove(spr);
-      spr.material.map?.dispose();
-      spr.material.dispose();
+    labelSprites.forEach(({ sprite }) => {
+      scene.remove(sprite);
+      sprite.material.map?.dispose();
+      sprite.material.dispose();
     });
     nodes = [];
-    links = [];
+    linkObjects = [];
     labelSprites = [];
+    nodeRegistry.clear();
+    labelByNodeId.clear();
   }
 
   function createStars() {
@@ -169,15 +186,29 @@ export function createPalaceScene(container, options = {}) {
     return sprite;
   }
 
-  function addLabelAt(text, x, y, z, color) {
+  function registerNode(id, mesh, data) {
+    const mainMat = mesh.material;
+    nodeRegistry.set(id, {
+      mesh,
+      data,
+      id,
+      baseOpacity: mainMat.opacity,
+      baseEmissive: mainMat.emissiveIntensity,
+      baseScale: 1,
+    });
+    mesh.userData.nodeId = id;
+  }
+
+  function addLabelForNode(nodeId, text, x, y, z, color) {
     const sprite = makeLabelSprite(text, color);
     sprite.visible = labelsVisible;
     sprite.position.set(x, y + 2.2, z);
     scene.add(sprite);
-    labelSprites.push(sprite);
+    labelSprites.push({ sprite, nodeId });
+    labelByNodeId.set(nodeId, sprite);
   }
 
-  function createLink(from, to, colorHex, opacity = 0.28) {
+  function createLink(from, to, colorHex, opacity = 0.28, meta = {}) {
     const points = [new THREE.Vector3(...from), new THREE.Vector3(...to)];
     const geometry = new THREE.BufferGeometry().setFromPoints(points);
     const material = new THREE.LineBasicMaterial({
@@ -186,14 +217,16 @@ export function createPalaceScene(container, options = {}) {
       opacity,
     });
     const line = new THREE.Line(geometry, material);
+    line.userData = meta;
     scene.add(line);
-    links.push(line);
+    linkObjects.push({ line, ...meta });
     return line;
   }
 
   function createWingNode(wingName, x, y, z, size) {
     const colorStr = wingColorFor(wingName);
     const color = new THREE.Color(colorStr);
+    const id = `wing:${wingName}`;
 
     const geometry = new THREE.SphereGeometry(size, 28, 28);
     const material = new THREE.MeshStandardMaterial({
@@ -209,6 +242,7 @@ export function createPalaceScene(container, options = {}) {
     const mesh = new THREE.Mesh(geometry, material);
     mesh.position.set(x, y, z);
     mesh.userData = {
+      id,
       name: wingName,
       type: 'wing',
       drawers: wingsData[wingName],
@@ -229,6 +263,7 @@ export function createPalaceScene(container, options = {}) {
 
     scene.add(mesh);
     nodes.push({ mesh, data: mesh.userData });
+    registerNode(id, mesh, mesh.userData);
     return mesh;
   }
 
@@ -236,6 +271,7 @@ export function createPalaceScene(container, options = {}) {
     const colorStr = wingColorFor(wing);
     const c = new THREE.Color(colorStr);
     c.offsetHSL(0, -0.05, -0.06);
+    const id = `room:${wing}:${roomName}`;
 
     const geometry = new THREE.SphereGeometry(size, 20, 20);
     const material = new THREE.MeshStandardMaterial({
@@ -251,6 +287,7 @@ export function createPalaceScene(container, options = {}) {
     const mesh = new THREE.Mesh(geometry, material);
     mesh.position.set(x, y, z);
     mesh.userData = {
+      id,
       name: roomName,
       type: 'room',
       wing,
@@ -261,7 +298,59 @@ export function createPalaceScene(container, options = {}) {
 
     scene.add(mesh);
     nodes.push({ mesh, data: mesh.userData });
+    registerNode(id, mesh, mesh.userData);
     return mesh;
+  }
+
+  function nodeMatchesSearch(data, q) {
+    if (!q) return true;
+    const parts = [data.name, data.label, data.wing, data.type]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+    return parts.includes(q) || q.split(/\s+/).every((t) => t.length < 2 || parts.includes(t));
+  }
+
+  function syncVisualPresentation() {
+    const q = (presentation.searchQuery || '').trim().toLowerCase();
+    const hid = presentation.hoveredId;
+    const sid = presentation.selectedId;
+    const pin = presentation.pinActive;
+
+    nodeRegistry.forEach((entry, id) => {
+      const { mesh, data, baseOpacity, baseEmissive } = entry;
+      const mat = mesh.material;
+      if (!mat || mat.type === 'MeshBasicMaterial') return;
+
+      const match = nodeMatchesSearch(data, q);
+      let opacityMult = match ? 1 : 0.14;
+      let emissiveMult = 1;
+
+      if (id === hid) emissiveMult *= 1.45;
+      if (id === sid) emissiveMult *= pin ? 1.85 : 1.65;
+      if (id === sid && pin) opacityMult = Math.max(opacityMult, 0.85);
+
+      mat.opacity = Math.min(1, baseOpacity * opacityMult);
+      mat.emissiveIntensity = baseEmissive * emissiveMult;
+
+      const emphasis = id === sid ? (pin ? 1.09 : 1.06) : id === hid ? 1.04 : 1;
+      const dimScale = match ? 1 : 0.88;
+      mesh.scale.setScalar(emphasis * dimScale);
+    });
+
+    labelByNodeId.forEach((sprite, id) => {
+      const data = nodeRegistry.get(id)?.data;
+      if (!data) return;
+      const match = nodeMatchesSearch(data, q);
+      sprite.material.opacity = match ? (id === sid ? 1 : 0.92) : 0.2;
+    });
+
+    linkObjects.forEach(({ line, fromId, toId, baseOpacity = 0.28 }) => {
+      const mf = fromId ? nodeMatchesSearch(nodeRegistry.get(fromId)?.data || {}, q) : true;
+      const mt = toId ? nodeMatchesSearch(nodeRegistry.get(toId)?.data || {}, q) : true;
+      const show = !q || (mf && mt);
+      line.material.opacity = show ? baseOpacity : baseOpacity * 0.12;
+    });
   }
 
   function renderWingsView() {
@@ -278,7 +367,7 @@ export function createPalaceScene(container, options = {}) {
       const drawerCount = wingsData[wing] || 1;
       const size = THREE.MathUtils.mapLinear(drawerCount, 1, 200, CONFIG.nodeSizes.wingMin, CONFIG.nodeSizes.wingMax);
       createWingNode(wing, x, 0, z, size);
-      addLabelAt(wing, x, 0, z, '#e2e8f0');
+      addLabelForNode(`wing:${wing}`, wing, x, 0, z, '#e2e8f0');
     });
 
     const centerGeometry = new THREE.SphereGeometry(1.1, 20, 20);
@@ -299,13 +388,45 @@ export function createPalaceScene(container, options = {}) {
       const angle = i * angleStep;
       const x = Math.cos(angle) * radius;
       const z = Math.sin(angle) * radius;
-      createLink([0, 0, 0], [x, 0, z], CONFIG.accent.linkWing, 0.22);
+      createLink([0, 0, 0], [x, 0, z], CONFIG.accent.linkWing, 0.22, {
+        fromId: null,
+        toId: `wing:${wing}`,
+        baseOpacity: 0.22,
+      });
     });
 
     tweenCamera(new THREE.Vector3(0, 36, 88), new THREE.Vector3(0, 0, 0));
   }
 
-  function renderRoomsView() {
+  /** Single-wing focus: wing at center, rooms in orbit. */
+  function renderRoomsViewFocused(focusWing) {
+    const rooms = roomsData[focusWing] || [];
+    const wingSize = CONFIG.nodeSizes.wingMin + 1.2;
+    createWingNode(focusWing, 0, 0, 0, wingSize);
+    addLabelForNode(`wing:${focusWing}`, focusWing, 0, 0, 0, '#e2e8f0');
+
+    const roomRadius = CONFIG.spacing.roomRadius;
+    const n = Math.max(rooms.length, 1);
+    const step = (Math.PI * 2) / n;
+
+    rooms.forEach((room, i) => {
+      const ang = i * step;
+      const rx = Math.cos(ang) * roomRadius;
+      const rz = Math.sin(ang) * roomRadius;
+      const size = THREE.MathUtils.mapLinear(room.drawers || 1, 1, 80, CONFIG.nodeSizes.roomMin, CONFIG.nodeSizes.roomMax);
+      createRoomNode(room.name, focusWing, rx, 0, rz, size);
+      createLink([0, 0, 0], [rx, 0, rz], CONFIG.accent.linkWing, 0.22, {
+        fromId: `wing:${focusWing}`,
+        toId: `room:${focusWing}:${room.name}`,
+        baseOpacity: 0.22,
+      });
+      addLabelForNode(`room:${focusWing}:${room.name}`, room.name, rx, 0, rz, '#94a3b8');
+    });
+
+    tweenCamera(new THREE.Vector3(0, 38, 72), new THREE.Vector3(0, 0, 0));
+  }
+
+  function renderRoomsViewAll() {
     const wingNames = Object.keys(roomsData);
     if (!wingNames.length) return;
 
@@ -318,7 +439,7 @@ export function createPalaceScene(container, options = {}) {
       const wingZ = Math.sin(wingAngle) * wingRadius;
 
       createWingNode(wing, wingX, 0, wingZ, CONFIG.nodeSizes.wingMin);
-      addLabelAt(wing, wingX, 0, wingZ, '#cbd5e1');
+      addLabelForNode(`wing:${wing}`, wing, wingX, 0, wingZ, '#cbd5e1');
 
       const rooms = roomsData[wing] || [];
       const roomAngleStep = (Math.PI * 2) / Math.max(rooms.length, 1);
@@ -330,8 +451,12 @@ export function createPalaceScene(container, options = {}) {
         const roomZ = wingZ + Math.sin(roomAngle) * roomRadius;
         const size = THREE.MathUtils.mapLinear(room.drawers || 1, 1, 80, CONFIG.nodeSizes.roomMin, CONFIG.nodeSizes.roomMax);
         createRoomNode(room.name, wing, roomX, 0, roomZ, size);
-        createLink([wingX, 0, wingZ], [roomX, 0, roomZ], CONFIG.accent.linkWing, 0.18);
-        addLabelAt(room.name, roomX, 0, roomZ, '#94a3b8');
+        createLink([wingX, 0, wingZ], [roomX, 0, roomZ], CONFIG.accent.linkWing, 0.18, {
+          fromId: `wing:${wing}`,
+          toId: `room:${wing}:${room.name}`,
+          baseOpacity: 0.18,
+        });
+        addLabelForNode(`room:${wing}:${room.name}`, room.name, roomX, 0, roomZ, '#94a3b8');
       });
     });
 
@@ -351,10 +476,20 @@ export function createPalaceScene(container, options = {}) {
 
     wingNames.forEach((wing, i) => {
       const angle = i * wingAngleStep;
-      createLink([0, 0, 0], [Math.cos(angle) * wingRadius, 0, Math.sin(angle) * wingRadius], CONFIG.accent.linkWing, 0.2);
+      createLink([0, 0, 0], [Math.cos(angle) * wingRadius, 0, Math.sin(angle) * wingRadius], CONFIG.accent.linkWing, 0.2, {
+        baseOpacity: 0.2,
+      });
     });
 
     tweenCamera(new THREE.Vector3(0, 52, 102), new THREE.Vector3(0, 0, 0));
+  }
+
+  function renderRoomsView() {
+    if (roomsFocusWing && roomsData[roomsFocusWing]) {
+      renderRoomsViewFocused(roomsFocusWing);
+    } else {
+      renderRoomsViewAll();
+    }
   }
 
   function simulateForceLayout(nodeList, edges, iterations = 55) {
@@ -435,10 +570,10 @@ export function createPalaceScene(container, options = {}) {
       const size = isWing ? CONFIG.nodeSizes.wingMin + 0.4 : CONFIG.nodeSizes.roomMin + 0.2;
       if (isWing) {
         createWingNode(nodeId, nodeData.x, nodeData.y, nodeData.z, size);
-        addLabelAt(nodeId, nodeData.x, nodeData.y, nodeData.z, '#cbd5e1');
+        addLabelForNode(`wing:${nodeId}`, nodeId, nodeData.x, nodeData.y, nodeData.z, '#cbd5e1');
       } else {
         createRoomNode(nodeData.name, nodeData.wing, nodeData.x, nodeData.y, nodeData.z, size);
-        addLabelAt(nodeData.name, nodeData.x, nodeData.y, nodeData.z, '#94a3b8');
+        addLabelForNode(`room:${nodeData.wing}:${nodeData.name}`, nodeData.name, nodeData.x, nodeData.y, nodeData.z, '#94a3b8');
       }
     });
 
@@ -448,11 +583,14 @@ export function createPalaceScene(container, options = {}) {
       );
       const toNode = nodeList.find((n) => n.name === edge.to || `${n.wing}/${n.name}` === edge.to);
       if (fromNode && toNode) {
+        const fid = fromNode.type === 'wing' ? `wing:${fromNode.name}` : `room:${fromNode.wing}:${fromNode.name}`;
+        const tid = toNode.type === 'wing' ? `wing:${toNode.name}` : `room:${toNode.wing}:${toNode.name}`;
         createLink(
           [fromNode.x, fromNode.y, fromNode.z],
           [toNode.x, toNode.y, toNode.z],
           CONFIG.accent.linkGraph,
           0.38,
+          { fromId: fid, toId: tid, baseOpacity: 0.38 },
         );
       }
     });
@@ -466,19 +604,26 @@ export function createPalaceScene(container, options = {}) {
     controls.autoRotateSpeed = 0.35 * (autoRotateUser ? 1 : 0);
   }
 
-  function setView(view) {
+  function setView(view, focusWing = null) {
     currentView = view;
+    roomsFocusWing = focusWing;
     clearSceneContent();
+    hoveredMesh = null;
+    presentation.hoveredId = null;
     applyViewSettings();
 
     if (view === 'wings') renderWingsView();
     else if (view === 'rooms') renderRoomsView();
     else if (view === 'graph') renderGraphView();
+
+    syncVisualPresentation();
   }
 
   function onPointerLeave() {
     hoveredMesh = null;
+    presentation.hoveredId = null;
     renderer.domElement.style.cursor = 'default';
+    syncVisualPresentation();
     callbacks.onHover(null, { x: 0, y: 0 });
   }
 
@@ -495,24 +640,26 @@ export function createPalaceScene(container, options = {}) {
       while (obj && !obj.userData?.type) obj = obj.parent;
       if (obj && obj.userData?.type && obj.userData.type !== 'center') {
         hoveredMesh = obj;
+        presentation.hoveredId = obj.userData.id || null;
         renderer.domElement.style.cursor = 'pointer';
+        syncVisualPresentation();
         callbacks.onHover({ ...obj.userData }, { x: event.clientX, y: event.clientY });
         return;
       }
     }
     hoveredMesh = null;
+    presentation.hoveredId = null;
     renderer.domElement.style.cursor = 'default';
+    syncVisualPresentation();
     callbacks.onHover(null, { x: event.clientX, y: event.clientY });
   }
 
   function onPointerClick() {
     if (!hoveredMesh) {
-      pinnedUserData = null;
       callbacks.onClick(null);
       return;
     }
     const data = { ...hoveredMesh.userData };
-    pinnedUserData = data;
     callbacks.onClick(data);
   }
 
@@ -595,17 +742,29 @@ export function createPalaceScene(container, options = {}) {
     tweenCamera(new THREE.Vector3(0, 34, 90), new THREE.Vector3(0, 0, 0));
   }
 
-  function centerOnSelection() {
-    if (!hoveredMesh) return;
+  function centerOnNodeId(nodeId) {
+    const entry = nodeRegistry.get(nodeId);
+    if (!entry) return;
     const p = new THREE.Vector3();
-    hoveredMesh.getWorldPosition(p);
+    entry.mesh.getWorldPosition(p);
     const dir = camera.position.clone().sub(p).normalize();
-    const dist = 28;
+    const dist = currentView === 'rooms' && roomsFocusWing ? 26 : 30;
     tweenCamera(p.clone().add(dir.multiplyScalar(dist)), p);
   }
 
+  function centerOnHovered() {
+    if (!hoveredMesh?.userData?.id) return;
+    centerOnNodeId(hoveredMesh.userData.id);
+  }
+
+  function updatePresentation(patch) {
+    presentation = { ...presentation, ...patch };
+    syncVisualPresentation();
+  }
+
   function clearPin() {
-    pinnedUserData = null;
+    presentation.selectedId = null;
+    syncVisualPresentation();
   }
 
   function dispose() {
@@ -631,6 +790,7 @@ export function createPalaceScene(container, options = {}) {
     init,
     setData,
     setView,
+    updatePresentation,
     setAutoRotate(v) {
       autoRotateUser = v;
       applyViewSettings();
@@ -641,19 +801,21 @@ export function createPalaceScene(container, options = {}) {
     setLabelsVisible(v) {
       labelsVisible = !!v;
       if (labelsVisible && !labelSprites.length) {
-        setView(currentView);
+        setView(currentView, roomsFocusWing);
         return;
       }
-      labelSprites.forEach((s) => {
-        s.visible = labelsVisible;
+      labelSprites.forEach(({ sprite }) => {
+        sprite.visible = labelsVisible;
       });
     },
     resetCamera,
-    centerOnSelection,
+    centerOnHovered,
+    centerOnNodeId,
     clearPin,
     resize,
     dispose,
     getView: () => currentView,
+    getFocusWing: () => roomsFocusWing,
     getHovered: () => (hoveredMesh ? { ...hoveredMesh.userData } : null),
     setCallbacks(c) {
       Object.assign(callbacks, c);
