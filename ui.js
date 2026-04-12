@@ -47,12 +47,18 @@ import {
 import { buildSearchCatalog, normalizeSearchQuery, rankGraphSearch, stepWrapped } from './graph-search.js';
 import {
   computeGraphRoute,
+  DEFAULT_ROUTE_MODE,
+  normalizeRouteMode,
   normalizeRouteStepIndex,
   roomIdFromSceneRoomId,
+  ROUTE_MODE_META,
+  ROUTE_MODES,
+  sceneRoomIdFromRoomId,
   stepRouteIndex,
 } from './graph-route.js';
 
 const LS_KEY = 'mempalace-viz-explorer-v1';
+const ROUTE_MODE_LS_KEY = 'mempalace-viz-route-mode-v1';
 const PANEL_STATE_KEY = 'mempalace-viz-panel-state-v1';
 
 /** Enabled relationship types for graph view; normalized when palace data loads. */
@@ -105,6 +111,8 @@ let graphSearchLastQueryKey = '';
  * Graph route (room → room) — 3D path highlight + inspector context.
  * History: route stepping does not push graph focus history (same rule as search result stepping).
  * Changing route start/target does not pop history.
+ * Route modes (Shortest vs weighted) persist in localStorage; all routing uses only edges visible
+ * under current relationship-type filters — see graph-route.js / recomputeGraphRoute.
  */
 let graphRoute = {
   /** @type {string | null} */
@@ -115,6 +123,29 @@ let graphRoute = {
   result: null,
   stepIndex: 0,
 };
+
+/** @type {string} */
+let graphRouteMode = DEFAULT_ROUTE_MODE;
+
+function loadRouteMode() {
+  try {
+    const raw = localStorage.getItem(ROUTE_MODE_LS_KEY);
+    if (raw) return normalizeRouteMode(JSON.parse(raw));
+  } catch {
+    /* ignore */
+  }
+  return DEFAULT_ROUTE_MODE;
+}
+
+function persistRouteMode(mode) {
+  try {
+    localStorage.setItem(ROUTE_MODE_LS_KEY, JSON.stringify(normalizeRouteMode(mode)));
+  } catch {
+    /* ignore */
+  }
+}
+
+graphRouteMode = loadRouteMode();
 
 const $ = (id) => document.getElementById(id);
 
@@ -186,9 +217,27 @@ function graphExploreStripHtml() {
   const routeOk = rr?.ok && rr.pathSceneIds?.length;
   const pathN = routeOk ? rr.pathSceneIds.length : 0;
   const hopLabel = routeOk ? `Hop ${normalizeRouteStepIndex(graphRoute.stepIndex, pathN) + 1} / ${pathN}` : '';
+  const showRouteMode = appState.view === 'graph' && graphRoute.startSceneId;
+  const modeChips = showRouteMode
+    ? `<div class="graph-route-mode" role="group" aria-label="Route mode">${ROUTE_MODES.map((m) => {
+        const on = graphRouteMode === m;
+        const meta = ROUTE_MODE_META[m];
+        return `<button type="button" class="route-mode-chip ${on ? 'is-on' : ''}" data-route-mode="${escapeHtml(
+          m,
+        )}" title="${escapeHtml(meta.hint)}">${escapeHtml(meta.shortLabel)}</button>`;
+      }).join('')}</div>`
+    : '';
+  const compareHint =
+    routeOk && rr.comparisonNote
+      ? `<div class="graph-route-strip__compare">${escapeHtml(rr.comparisonNote)}</div>`
+      : '';
   const routeStrip = routeOk
     ? `<div class="graph-route-strip" role="group" aria-label="Route along highlighted path">
-    <span class="graph-route-strip__meta">${escapeHtml(hopLabel)} · ${rr.hops} edge${rr.hops === 1 ? '' : 's'}</span>
+    ${modeChips}
+    ${compareHint}
+    <span class="graph-route-strip__meta">${escapeHtml(hopLabel)} · ${rr.hops} edge${rr.hops === 1 ? '' : 's'} · ${escapeHtml(
+      ROUTE_MODE_META[graphRouteMode]?.shortLabel || graphRouteMode,
+    )}</span>
     <span class="graph-route-strip__nav">
       <button type="button" class="btn btn--ghost btn--sm" data-graph-action="route-start" title="Jump to route start">Start</button>
       <button type="button" class="btn btn--ghost btn--sm" data-graph-action="route-prev" ${pathN > 1 ? '' : 'disabled'} title="Previous hop ([ when route active)">◀</button>
@@ -197,7 +246,9 @@ function graphExploreStripHtml() {
       <button type="button" class="btn btn--ghost btn--sm" data-graph-action="route-clear" title="Clear route highlight">Clear route</button>
     </span>
   </div>`
-    : '';
+    : showRouteMode
+      ? `<div class="graph-route-strip graph-route-strip--mode-only" role="group" aria-label="Route mode">${modeChips}<span class="graph-route-strip__hint">Applies when you route to a target.</span></div>`
+      : '';
   return `${routeStrip}<div class="graph-explore-strip" role="group" aria-label="Graph exploration">
     <button type="button" class="btn btn--ghost btn--sm" data-graph-action="frame-nbr" title="Re-frame camera on selection and its neighbors">Frame neighborhood</button>
     <span class="graph-explore-strip__nav">
@@ -270,19 +321,49 @@ function clearGraphRoute() {
   persistState();
 }
 
+/**
+ * Changing route mode recomputes the active route (if start+target set) and preserves hop index when possible.
+ * Does not push graph focus history (same family as filter-driven recompute).
+ */
+function setGraphRouteMode(mode) {
+  const next = normalizeRouteMode(mode);
+  if (next === graphRouteMode) return;
+  graphRouteMode = next;
+  persistRouteMode(next);
+  if (graphRoute.startSceneId && graphRoute.targetSceneId) {
+    const prevStep = graphRoute.stepIndex;
+    recomputeGraphRoute();
+    const res = graphRoute.result;
+    if (res?.ok && res.pathSceneIds?.length) {
+      graphRoute.stepIndex = normalizeRouteStepIndex(prevStep, res.pathSceneIds.length);
+      applyGraphRouteToSceneSelection();
+      sceneApi?.centerOnNodeId(appState.selected?.id);
+    } else {
+      graphRoute.stepIndex = 0;
+    }
+    if (res && !res.ok) {
+      showToast(res.message || 'No route for this mode.');
+    }
+  }
+  syncScenePresentation();
+  renderInspector();
+}
+
 function routePresentationPayload() {
   const r = graphRoute.result;
   if (r && r.ok && Array.isArray(r.pathSceneIds) && r.pathSceneIds.length) {
     const n = r.pathSceneIds.length;
     const step = normalizeRouteStepIndex(graphRoute.stepIndex, n);
+    const bridgeSceneIds = (r.bridges || []).map((rid) => sceneRoomIdFromRoomId(rid)).filter(Boolean);
     return {
       active: true,
       pathSceneIds: r.pathSceneIds,
       stepIndex: step,
       segmentTypes: r.segmentTypes || [],
+      bridgeSceneIds,
     };
   }
-  return { active: false, pathSceneIds: [], stepIndex: 0, segmentTypes: [] };
+  return { active: false, pathSceneIds: [], stepIndex: 0, segmentTypes: [], bridgeSceneIds: [] };
 }
 
 function recomputeGraphRoute() {
@@ -310,6 +391,7 @@ function recomputeGraphRoute() {
     availableRelTypes: avail,
     startRoomId: a,
     endRoomId: b,
+    routeMode: graphRouteMode,
   });
   if (graphRoute.result.ok && graphRoute.result.pathSceneIds?.length) {
     graphRoute.stepIndex = normalizeRouteStepIndex(graphRoute.stepIndex, graphRoute.result.pathSceneIds.length);
@@ -373,7 +455,9 @@ function graphRouteSetTarget(sceneId) {
     graphRoute.stepIndex = 0;
     applyGraphRouteToSceneSelection();
     sceneApi?.centerOnNodeId(appState.selected?.id);
-    showToast(`Route · ${res.hops} hop${res.hops === 1 ? '' : 's'}`);
+    showToast(
+      `Route · ${res.hops} hop${res.hops === 1 ? '' : 's'} · ${ROUTE_MODE_META[graphRouteMode]?.shortLabel || graphRouteMode}`,
+    );
   }
   syncScenePresentation();
   renderInspector();
@@ -418,7 +502,12 @@ function formatRouteInspectorSummary(res) {
     bridges.length > 0
       ? `Bridge rooms (cross-wing connectors): ${bridges.map((id) => id.split('/').pop()).join(', ')}.`
       : 'No interior cross-wing bridge hops — path is short or stays within-wing.';
-  return `${res.hops} hop(s) on visible edges · ${mix}. ${br}`;
+  const modeLabel = ROUTE_MODE_META[res.routeMode]?.label || res.routeMode;
+  const costBit =
+    res.routeMode !== 'shortest' && res.totalCost != null ? ` · weighted cost ${res.totalCost}` : '';
+  const mixLine = res.mixSummary ? `${res.mixSummary} ` : '';
+  const compare = res.comparisonNote ? ` ${res.comparisonNote}` : '';
+  return `Mode: ${modeLabel}${costBit}. ${res.hops} hop(s) on visible edges. ${mixLine}Types: ${mix}. ${br}${compare}`;
 }
 
 function formatNum(n) {
@@ -1046,7 +1135,7 @@ function renderRoomInspector(ctx, wingName, roomName, _mode) {
             <button type="button" class="btn btn--ghost btn--sm" data-route-action="set-start">Set as route start</button>
             <button type="button" class="btn btn--ghost btn--sm" data-route-action="route-here" data-wing="${escapeHtml(
               wingName,
-            )}" data-room="${escapeHtml(roomName)}" ${canRouteHere ? '' : 'disabled'} title="Shortest path along visible edges">Route to here</button>
+            )}" data-room="${escapeHtml(roomName)}" ${canRouteHere ? '' : 'disabled'} title="Compute route along visible edges (current mode)">Route to here</button>
             <button type="button" class="btn btn--ghost btn--sm" data-route-action="clear-route" ${
               graphRoute.startSceneId || graphRoute.targetSceneId ? '' : 'disabled'
             }>Clear route</button>
@@ -1124,6 +1213,12 @@ function renderRoomInspector(ctx, wingName, roomName, _mode) {
 }
 
 function onInspectorClick(e) {
+  const modeBtn = e.target.closest('[data-route-mode]');
+  if (modeBtn) {
+    const m = modeBtn.getAttribute('data-route-mode');
+    if (m) setGraphRouteMode(m);
+    return;
+  }
   const r = e.target.closest('[data-route-action]');
   if (r) {
     const ra = r.getAttribute('data-route-action');

@@ -300,6 +300,56 @@ a {
   margin-right: 6px;
 }
 
+.graph-route-strip--mode-only {
+  margin-bottom: 10px;
+}
+
+.graph-route-strip__hint {
+  color: var(--text-dim);
+  font-size: 0.68rem;
+  opacity: 0.9;
+}
+
+.graph-route-strip__compare {
+  width: 100%;
+  flex-basis: 100%;
+  font-size: 0.66rem;
+  color: #94a3b8;
+  line-height: 1.35;
+}
+
+.graph-route-mode {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  width: 100%;
+  flex-basis: 100%;
+  margin-bottom: 2px;
+}
+
+.route-mode-chip {
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(15, 23, 42, 0.5);
+  color: var(--text-dim);
+  font-size: 0.65rem;
+  padding: 3px 7px;
+  border-radius: 999px;
+  cursor: pointer;
+  letter-spacing: 0.02em;
+}
+
+.route-mode-chip:hover {
+  border-color: rgba(91, 140, 255, 0.45);
+  color: #e2e8f0;
+}
+
+.route-mode-chip.is-on {
+  border-color: rgba(91, 140, 255, 0.65);
+  background: rgba(91, 140, 255, 0.18);
+  color: #e2e8f0;
+}
+
 .graph-search-hit-row {
   display: flex;
   align-items: stretch;

@@ -1,9 +1,11 @@
 /**
  * Pure helpers for graph focus history and neighbor stepping (UI + scene coordination).
  *
- * Route mode (see ui.js / graph-route.js): stepping along a computed path does **not** push
+ * Route stepping (see ui.js / graph-route.js): stepping along a computed path does **not** push
  * graph focus history — same idea as stepping search results (Alt+N/P). Manual room picks and
  * inspector navigation may still push history via their existing handlers.
+ * Changing route **mode** (Shortest vs weighted modes) recomputes the path without history pushes;
+ * hop index is clamped to the new path length.
  */
 
 /**

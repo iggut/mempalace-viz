@@ -4,8 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MemPalace 3D Visualization</title>
-    <script type="module" crossorigin src="/assets/index-CzYc6_hV.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-HHOEEkGg.css">
+    <script type="module" crossorigin src="/assets/index-CC9ugB2z.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-DZrmhc6C.css">
   </head>
   <body>
     <a href="#main-canvas-wrap" class="skip-link">Skip to 3D view</a>
@@ -223,7 +223,7 @@
           </button>
           <span class="hint-row footer-shortcuts-hint" style="margin: 0">
             <kbd>1</kbd>–<kbd>3</kbd> · <kbd>R</kbd> camera · <kbd>/</kbd> search · <kbd>L</kbd> labels · <kbd>Space</kbd> rotate ·
-            <kbd>Esc</kbd> clear search / help / unpin · graph: <kbd>[</kbd> <kbd>]</kbd> <kbd>U</kbd> · find:
+            <kbd>Esc</kbd> clear search / help / unpin · graph: <kbd>[</kbd> <kbd>]</kbd> <kbd>U</kbd> (route active: hop path) · find:
             <kbd>Alt+N</kbd> <kbd>Alt+P</kbd>
           </span>
         </div>
@@ -260,7 +260,11 @@
           <li><strong>Click</strong> wing (Wings) — Enter that wing’s rooms</li>
           <li><strong>Click</strong> room (Rooms) — Select &amp; center</li>
           <li><strong>Click</strong> node (Graph) — Focus (inspector lock) &amp; frame</li>
-          <li><kbd>[</kbd> / <kbd>]</kbd> — Step along connected rooms (graph) · <kbd>U</kbd> — Prior focus</li>
+          <li>
+            <kbd>[</kbd> / <kbd>]</kbd> — With an active route: step hops on the highlighted path; otherwise step along connected
+            rooms (graph) · <kbd>U</kbd> — Prior focus
+          </li>
+          <li><strong>Route</strong> — Inspector (Graph, room): set start → “Route to here” or search result <strong>Route</strong>; 3D edges/nodes emphasize the path</li>
           <li><strong>Click</strong> empty canvas — Clear selection (unless pinned); subtle canvas cue</li>
           <li><strong>Breadcrumb</strong> — Navigate: All wings → wing → refocus room</li>
         </ul>

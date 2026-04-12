@@ -145,12 +145,13 @@ export function createPalaceScene(container, options = {}) {
   let autoRotateUser = true;
 
   let hoveredMesh = null;
-  /** @type {{ active: boolean, pathSceneIds: string[], stepIndex: number, segmentTypes: string[] }} */
+  /** @type {{ active: boolean, pathSceneIds: string[], stepIndex: number, segmentTypes: string[], bridgeSceneIds: string[] }} */
   const defaultRoutePresentation = () => ({
     active: false,
     pathSceneIds: [],
     stepIndex: 0,
     segmentTypes: [],
+    bridgeSceneIds: [],
   });
 
   let presentation = {
@@ -514,7 +515,13 @@ export function createPalaceScene(container, options = {}) {
     if (a.stepIndex !== b.stepIndex) return false;
     const pa = (a.pathSceneIds || []).join('\0');
     const pb = (b.pathSceneIds || []).join('\0');
-    return pa === pb;
+    if (pa !== pb) return false;
+    const sa = (a.segmentTypes || []).join('\0');
+    const sb = (b.segmentTypes || []).join('\0');
+    if (sa !== sb) return false;
+    const ba = (a.bridgeSceneIds || []).join('\0');
+    const bb = (b.bridgeSceneIds || []).join('\0');
+    return ba === bb;
   }
 
   function undirectedPairKey(a, b) {
@@ -546,12 +553,16 @@ export function createPalaceScene(container, options = {}) {
       currentView === 'graph' && route.active && Array.isArray(route.pathSceneIds) && route.pathSceneIds.length > 0;
     /** @type {Set<string>} */
     const routePairKeys = new Set();
+    /** @type {Map<string, number>} pair key -> segment index for route.segmentTypes */
+    const routePairToSegIx = new Map();
     if (routeActive) {
       const ids = route.pathSceneIds;
       for (let i = 0; i < ids.length - 1; i += 1) {
         routePairKeys.add(undirectedPairKey(ids[i], ids[i + 1]));
+        routePairToSegIx.set(undirectedPairKey(ids[i], ids[i + 1]), i);
       }
     }
+    const bridgeSceneSet = new Set(route.bridgeSceneIds || []);
     const stepSceneId =
       routeActive && route.pathSceneIds.length > 0
         ? route.pathSceneIds[normalizeRouteStepIndex(route.stepIndex, route.pathSceneIds.length)]
@@ -613,11 +624,22 @@ export function createPalaceScene(container, options = {}) {
       if (routeActive && isGraphRelationship && fromId && toId) {
         const pk = undirectedPairKey(fromId, toId);
         const onRoute = routePairKeys.has(pk);
-        const hex = styleColorHex ?? getStyleForRelationshipType(relationshipType || 'tunnel').color;
+        const segIx = routePairToSegIx.get(pk);
+        const segType =
+          segIx != null && Array.isArray(route.segmentTypes) && route.segmentTypes[segIx]
+            ? route.segmentTypes[segIx]
+            : relationshipType || 'tunnel';
+        const hex = styleColorHex ?? getStyleForRelationshipType(segType).color;
         const baseC = new THREE.Color(hex);
         if (onRoute) {
           op = Math.min(1, op * 1.52);
           baseC.lerp(new THREE.Color(0xffffff), 0.11);
+          if (segType === 'tunnel') {
+            baseC.lerp(new THREE.Color(0x5b8cff), 0.06);
+            op = Math.min(1, op * 1.03);
+          } else if (segType === 'taxonomy_adjacency') {
+            baseC.lerp(new THREE.Color(0x3dc9b8), 0.05);
+          }
         } else {
           op *= 0.32;
           baseC.multiplyScalar(0.72);
@@ -686,6 +708,10 @@ export function createPalaceScene(container, options = {}) {
           const pLast = route.pathSceneIds[route.pathSceneIds.length - 1];
           if (id === p0) emissiveMult *= 1.1;
           if (id === pLast) emissiveMult *= 1.08;
+          if (bridgeSceneSet.has(id) && id !== p0 && id !== pLast) {
+            emissiveMult *= 1.06;
+            routeScale = Math.max(routeScale, 1.03);
+          }
           if (stepSceneId && id === stepSceneId) {
             emissiveMult *= 1.18;
             routeScale = 1.05;
