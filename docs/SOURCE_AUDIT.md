@@ -26,5 +26,5 @@ This is a concise map of **where graph-related relationship data comes from** in
 
 ## Cheap vs expensive
 
-- **Cheap at query time:** merging precomputed tunnel rows + taxonomy adjacency in Node (pure CPU).
+- **Cheap at query time:** merging precomputed tunnel rows with taxonomy for **endpoint resolution** in Node (pure CPU). No inferred taxonomy-adjacency edges are added to the shipped graph.
 - **Expensive:** full Chroma metadata sweep (`build_graph`) — unavoidable for complete tunnel discovery unless MemPalace adds an index.

@@ -24,7 +24,7 @@ const STATIC_FILES = {
   '/': 'constellation.html',
   '/constellation': 'constellation.html',
   '/dynamic': 'dynamic.html',
-  /** MemPalace 3D wings/rooms/graph visualization (Three.js) */
+  /** MemPalace 3D wings/rooms/graph visualization (Three.js) — primary shipped UI */
   '/index.html': 'index.html',
   '/viz': 'index.html',
   '/3d': 'index.html',
@@ -35,6 +35,15 @@ const STATIC_FILES = {
   '/api.js': 'api.js',
   '/insights.js': 'insights.js',
   '/brain.js': 'brain.js',
+  '/canonical.js': 'canonical.js',
+  '/graph-guidance.js': 'graph-guidance.js',
+  '/graph-navigation.js': 'graph-navigation.js',
+  '/graph-relationships.js': 'graph-relationships.js',
+  '/graph-route.js': 'graph-route.js',
+  '/graph-scene-helpers.js': 'graph-scene-helpers.js',
+  '/graph-search.js': 'graph-search.js',
+  '/state-utils.js': 'state-utils.js',
+  '/debug.js': 'debug.js',
 };
 
 const MIME_TYPES = {

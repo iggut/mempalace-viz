@@ -126,6 +126,42 @@ export function roomWithNoTunnelNeighborsGuidance() {
   return 'No tunnel neighbors for this room in the current MCP graph — that is expected when there is no shared room name across wings. This viewer does not add links.';
 }
 
+/** Route inspector summary — first sentence (pairs with hops/mode lines in ui). */
+export function routeInspectorBasisLine() {
+  return 'Uses only explicit edges from MemPalace MCP data (what is visible in the scene).';
+}
+
+/** Footer metric footnote prefix in Graph view (prepended to contextual line). */
+export function metricFootnoteGraphViewPrefix() {
+  return 'Explicit MemPalace edges only — this viewer does not add or infer links.';
+}
+
+/**
+ * Graph toolbar primary status: resolved edge count from MCP (may include tunnel, taxonomy_adjacency, etc.).
+ * @param {{ resolvedFormatted: string, resolvedCount: number, visibleFormatted?: string, visibleCount?: number, graphFilterNarrowed?: boolean }} p
+ */
+export function graphToolbarPrimaryStatusLine(p) {
+  const n = Number(p.resolvedCount);
+  const plural = n === 1 ? '' : 's';
+  const base = `${p.resolvedFormatted} resolved graph edge${plural} from MCP`;
+  if (p.graphFilterNarrowed && p.visibleFormatted != null && p.visibleCount != null) {
+    return `Visible: ${p.visibleFormatted} (filtered) · base ${base}`;
+  }
+  return base;
+}
+
+/** Overview inspector when kg-stats endpoint missing or errored — separate from palace tunnel graph. */
+export function knowledgeGraphStatsUnavailableLine() {
+  return 'Knowledge graph statistics are unavailable from the current API.';
+}
+
+/**
+ * Connections section when graph/tunnel data missing for the room (not an error — valid empty state).
+ */
+export function connectionsSectionNoExplicitEdgesLine() {
+  return 'No explicit edges for this room in the current MCP data — unresolved endpoints or no tunnels yet is a valid state.';
+}
+
 export function graphInspectorUnresolvedEndpointsLines(edgeCount, unresolvedCount) {
   const u = unresolvedCount != null ? unresolvedCount : 0;
   const plural = edgeCount === 1 ? '' : 's';

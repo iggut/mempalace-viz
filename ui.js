@@ -65,11 +65,16 @@ import {
 } from './graph-route.js';
 import {
   actionableWorkflowBullets,
+  connectionsSectionNoExplicitEdgesLine,
   graphInspectorNoEdgesNoticeLines,
   graphInspectorUnresolvedEndpointsLines,
+  graphToolbarPrimaryStatusLine,
   howConnectionsWorkBullets,
+  knowledgeGraphStatsUnavailableLine,
+  metricFootnoteGraphViewPrefix,
   neighborStepDisconnectedMessage,
   routeDisconnectedDetailLines,
+  routeInspectorBasisLine,
   roomWithNoTunnelNeighborsGuidance,
   shouldShowHowConnectionsExplainer,
   shouldShowTunnelWorkflowCard,
@@ -565,7 +570,7 @@ function formatRouteInspectorSummary(res) {
     res.routeMode !== 'shortest' && res.totalCost != null ? ` · weighted cost ${res.totalCost}` : '';
   const mixLine = res.mixSummary ? `${res.mixSummary} ` : '';
   const compare = res.comparisonNote ? ` ${res.comparisonNote}` : '';
-  const basis = 'Uses only explicit edges from MemPalace MCP (what is visible in the scene).';
+  const basis = routeInspectorBasisLine();
   return `${basis} Mode: ${modeLabel}${costBit}. ${res.hops} hop(s) on visible edges. ${mixLine}Types: ${mix}. ${br}${compare}`;
 }
 
@@ -728,7 +733,8 @@ function updateGraphViewChrome() {
   const chips = $('graph-rel-chips');
   if (chips) {
     if (!avail.length) {
-      chips.innerHTML = '<span class="inspect-muted">No typed edges in this graph.</span>';
+      chips.innerHTML =
+        '<span class="inspect-muted">No relationship-typed edges in the current graph payload.</span>';
     } else {
       chips.innerHTML = avail
         .map((t) => {
@@ -749,10 +755,13 @@ function updateGraphViewChrome() {
     const narrowed = ctx.graphFilterNarrowed;
     const vis = ctx.visibleGraphSummary;
     const hint = buildGraphCompletenessHint(ctx.graphMeta, ctx.summary);
-    const explicitLine = `${formatNum(ctx.graphEdgeCount)} MCP tunnel edge(s)`;
-    const primary = narrowed
-      ? `Visible: ${formatNum(vis.visibleEdgeCount)} (filtered) · base ${explicitLine}`
-      : `${explicitLine}`;
+    const primary = graphToolbarPrimaryStatusLine({
+      resolvedFormatted: formatNum(ctx.graphEdgeCount),
+      resolvedCount: ctx.graphEdgeCount,
+      visibleFormatted: formatNum(vis.visibleEdgeCount),
+      visibleCount: vis.visibleEdgeCount,
+      graphFilterNarrowed: narrowed,
+    });
     statusEl.innerHTML = `<span class="graph-status-pill__primary">${escapeHtml(primary)}</span>${
       hint
         ? `<span class="graph-status-pill__hint">${escapeHtml(hint.length > 240 ? `${hint.slice(0, 240)}…` : hint)}</span>`
@@ -821,9 +830,7 @@ function renderOverviewInspector(ctx) {
         .join('; ')
     : '';
   const completenessLine = (ctx.graphMeta?.completenessNotes || []).filter(Boolean).join(' ');
-  const kgLine = om.kgAvailable
-    ? om.kgSummary || '—'
-    : 'Knowledge graph statistics are unavailable from the current API.';
+  const kgLine = om.kgAvailable ? om.kgSummary || '—' : knowledgeGraphStatsUnavailableLine();
   const topWings = om.largestWingsByDrawers
     .map(
       (r) =>
@@ -1281,7 +1288,7 @@ function renderRoomInspector(ctx, wingName, roomName, _mode) {
         }`}
         ${relWingRows ? `<p class="inspect-micro">Related wings (global graph)</p><div class="inspect-rows">${relWingRows}</div>` : ''}
         `
-          : '<p class="inspect-empty">No tunnel relationships available for this room (unresolved graph or empty tunnels).</p>',
+          : `<p class="inspect-empty">${escapeHtml(connectionsSectionNoExplicitEdgesLine())}</p>`,
       )}
       ${inspectSection(
         'Insight',
@@ -1568,7 +1575,7 @@ function updateMetrics() {
       line = 'Tunnel graph: resolve endpoints to see cross-wing stats.';
     }
     if (appState.view === 'graph') {
-      line = `Explicit MemPalace edges only (no inferred links) · ${line}`;
+      line = `${metricFootnoteGraphViewPrefix()} · ${line}`;
     }
     if (appState.view === 'graph' && ctx.graphFilterNarrowed) {
       line = `Visible ${formatNum(ctx.visibleGraphSummary.visibleEdgeCount)} edges · ${line}`;

@@ -1,7 +1,7 @@
 {
   "name": "mempalace-viz",
   "version": "1.0.0",
-  "description": "3D visualization for MemPalace - wings, rooms, drawers, and knowledge graph",
+  "description": "3D MemPalace viewer: wings, rooms, explicit MCP tunnel graph (KG stats are separate)",
   "type": "module",
   "scripts": {
     "dev": "vite",

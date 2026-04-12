@@ -1,5 +1,7 @@
 # Canonical graph semantics (MemPalace viz)
 
+**At a glance:** The 3D graph shows **explicit** MemPalace MCP/API edges (stock: **tunnels** — same room name across wings). The viewer **does not** infer or fabricate links. **Disconnected** components are valid. **KG** statistics are a **different** surface than this palace graph. **Stock MCP** does not support persisting arbitrary room-to-room graph edits. See root **`README.md`** (Graph truth model) and **`MCP_CONNECTION_CAPABILITIES.md`**.
+
 ## Contract version
 
 - `graphContractVersion: 2` on **`/api/graph-stats`** and **`/api/overview`** (enriched graph).
@@ -24,6 +26,8 @@ Each undirected edge in `edgesResolved` includes:
 | `relationshipType` | Origin |
 | --- | --- |
 | `tunnel` | `mempalace_find_tunnels` — same room name in multiple wings (Chroma metadata) |
+
+**Stock** upstream emits **`tunnel`** edges for the palace graph. The `relationshipType` field is structured so a **fork** could add other explicit types without changing the viewer contract; this repo’s semantics describe what stock provides.
 
 The viz **does not** emit `taxonomy_adjacency` or other inferred structural edges. `edgesInferred` is always empty from enriched routes (kept for schema compatibility).
 

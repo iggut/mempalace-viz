@@ -1,6 +1,8 @@
 # MemPalace Viz API — canonical data contract
 
-This document describes the **enriched** HTTP API exposed by `server.js` for the 3D visualization. It is designed so the frontend can use **stable identifiers** and **explicit graph semantics** instead of inferring relationships from ambiguous strings.
+This document describes the **enriched** HTTP API exposed by `server.js` for the **3D** visualization. It is designed so the frontend can use **stable identifiers** and **explicit graph semantics** from MemPalace MCP/API data instead of inferring relationships from ambiguous strings.
+
+The **shipped UI** is `index.html` + `ui.js` + `graph-guidance.js` (and the built `dist/` bundle). See root **`README.md`** for product entry points and the graph truth model.
 
 ## Version field
 

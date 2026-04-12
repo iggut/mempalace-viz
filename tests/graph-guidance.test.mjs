@@ -2,12 +2,17 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   actionableWorkflowBullets,
+  connectionsSectionNoExplicitEdgesLine,
   graphInspectorNoEdgesNoticeLines,
   graphInspectorUnresolvedEndpointsLines,
+  graphToolbarPrimaryStatusLine,
   howConnectionsWorkBullets,
+  knowledgeGraphStatsUnavailableLine,
+  metricFootnoteGraphViewPrefix,
   neighborStepDisconnectedMessage,
   routeDisconnectedDetailLines,
   routeFailureMessage,
+  routeInspectorBasisLine,
   roomWithNoTunnelNeighborsGuidance,
   shouldShowHowConnectionsExplainer,
   shouldShowTunnelWorkflowCard,
@@ -85,4 +90,40 @@ test('graphInspector copy helpers', () => {
 test('neighborStepDisconnectedMessage and room guidance are non-error tone', () => {
   assert.ok(neighborStepDisconnectedMessage().includes('disconnected'));
   assert.ok(roomWithNoTunnelNeighborsGuidance().includes('expected'));
+});
+
+test('routeInspectorBasisLine and metricFootnoteGraphViewPrefix are MCP-honest', () => {
+  assert.ok(routeInspectorBasisLine().includes('explicit edges'));
+  assert.ok(routeInspectorBasisLine().includes('MCP'));
+  assert.ok(metricFootnoteGraphViewPrefix().includes('does not add'));
+  assert.ok(metricFootnoteGraphViewPrefix().includes('infer'));
+});
+
+test('graphToolbarPrimaryStatusLine: resolved edges from MCP, optional filtered visible count', () => {
+  const plain = graphToolbarPrimaryStatusLine({
+    resolvedFormatted: '12',
+    resolvedCount: 12,
+    graphFilterNarrowed: false,
+  });
+  assert.ok(plain.includes('12'));
+  assert.ok(plain.includes('resolved graph edge'));
+  assert.ok(plain.includes('from MCP'));
+  assert.ok(!plain.toLowerCase().includes('tunnel edge'));
+
+  const filt = graphToolbarPrimaryStatusLine({
+    resolvedFormatted: '12',
+    resolvedCount: 12,
+    visibleFormatted: '3',
+    visibleCount: 3,
+    graphFilterNarrowed: true,
+  });
+  assert.ok(filt.includes('Visible:'));
+  assert.ok(filt.includes('filtered'));
+});
+
+test('knowledgeGraphStatsUnavailableLine and connectionsSectionNoExplicitEdgesLine', () => {
+  assert.ok(knowledgeGraphStatsUnavailableLine().includes('unavailable'));
+  const c = connectionsSectionNoExplicitEdgesLine();
+  assert.ok(c.includes('valid'));
+  assert.ok(c.includes('explicit'));
 });

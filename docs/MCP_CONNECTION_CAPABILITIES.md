@@ -2,6 +2,8 @@
 
 This summarizes **stock** `mempalace` MCP tools as used by the viz HTTP API. **The viz does not modify MemPalace.**
 
+The **primary shipped client** is the 3D app (`index.html`, `ui.js`, `graph-guidance.js`, `dist/`). It reflects these capabilities in routing copy and graph behavior.
+
 ## Graph structure exposed to the viz
 
 | MCP tool | Role |

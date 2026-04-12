@@ -1,6 +1,6 @@
 # MemPalace viz — frontend identity and heuristics
 
-This note tracks **what was removed**, **what remains**, and **why**, after the canonical `wingId` / `roomId` / `edgesResolved` API contract.
+This note tracks **what was removed**, **what remains**, and **why**, after the canonical `wingId` / `roomId` / `edgesResolved` API contract. The **shipped** UI is **`ui.js`** (with **`graph-guidance.js`**) behind **`index.html`** / **`dist/`** — not the older standalone `*.html` demos in the repo root.
 
 ## Canonical-first path (default)
 

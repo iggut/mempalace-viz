@@ -12,7 +12,7 @@
       <header class="app-header" role="banner">
         <div class="brand">
           <h1>MemPalace 3D Visualization</h1>
-          <p class="tagline">Spatial view of wings, rooms, tunnels, and knowledge structure</p>
+          <p class="tagline">Wings, rooms, and explicit tunnel links from MemPalace MCP (same room name across wings)</p>
         </div>
         <div class="header-actions">
           <div
@@ -207,9 +207,9 @@
             <span class="metric"><span class="metric__k">Drawers</span> <span id="metric-drawers" class="metric__v">—</span></span>
             <span class="metric"><span class="metric__k">Wings</span> <span id="metric-wings" class="metric__v">—</span></span>
             <span class="metric"><span class="metric__k">Rooms</span> <span id="metric-rooms" class="metric__v">—</span></span>
-            <span class="metric"><span class="metric__k">Tunnel nodes</span> <span id="metric-tunnels" class="metric__v">—</span></span>
+            <span class="metric"><span class="metric__k">Resolved edges</span> <span id="metric-tunnels" class="metric__v">—</span></span>
             <span class="metric"><span class="metric__k">Cross-wing</span> <span id="metric-cross" class="metric__v">—</span></span>
-            <span class="metric"><span class="metric__k">Knowledge graph</span> <span id="metric-kg" class="metric__v">—</span></span>
+            <span class="metric"><span class="metric__k">KG stats (API)</span> <span id="metric-kg" class="metric__v">—</span></span>
             <span class="metric metric--context" id="metric-context-wrap" hidden
               ><span class="metric__k">Focus</span> <span id="metric-context" class="metric__v"></span
             ></span>
@@ -264,7 +264,7 @@
             rooms (graph) · <kbd>U</kbd> — Prior focus
           </li>
           <li>
-            <strong>Route</strong> — Inspector (Graph, room): set start → “Route to here” or search result <strong>Route</strong>; the scene highlights that path on explicit edges from MCP. Routes never invent links. Stock MemPalace does not expose arbitrary graph persistence — see <code>docs/MCP_CONNECTION_CAPABILITIES.md</code>.
+            <strong>Route</strong> — In Graph, pick a room: set route start, then <strong>Route to here</strong> (or Route from search). The scene highlights a path on <strong>explicit MCP edges only</strong> (same rules as tunnel discovery). Disconnected rooms are valid. Stock MemPalace MCP does not support persisting arbitrary room-to-room graph links — see <code>docs/MCP_CONNECTION_CAPABILITIES.md</code>.
           </li>
           <li><strong>Click</strong> empty canvas — Clear selection (unless pinned); subtle canvas cue</li>
           <li><strong>Breadcrumb</strong> — Navigate: All wings → wing → refocus room</li>
