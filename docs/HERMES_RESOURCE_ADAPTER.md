@@ -4,6 +4,9 @@ MemPalace MCP currently exposes **tools only** (`tools/list`, `tools/call`) and 
 
 If Hermes expects MCP resources, use `hermes-mempalace-adapter.js` as a protocol shim.
 
+If you want a ready-to-wire Hermes-friendly wrapper with common entrypoints,
+use `hermes-mempalace-wrapper.js`.
+
 ## What it fixes
 
 - Translates `resources/list` into taxonomy-driven synthetic resources.
@@ -46,6 +49,29 @@ const adapter = createHermesMemPalaceAdapter({
 export async function handleMcp(request) {
   return adapter.handleRequest(request);
 }
+```
+
+## Hermes wrapper example (drop-in)
+
+```js
+import { createHermesMemPalaceWrapper } from './hermes-mempalace-wrapper.js';
+
+const hermesMcp = createHermesMemPalaceWrapper({
+  sendJsonRpc: async (request) => {
+    // Your existing Hermes MCP transport call:
+    return sendToMcpServer(request);
+  },
+  defaultSearchQuery: 'recent important memories decisions learnings preferences',
+  defaultSearchLimit: 8,
+});
+
+// Use whichever entrypoint your Hermes runtime expects:
+export const handleRequest = hermesMcp.handleRequest;
+// aliases available:
+// hermesMcp.onRequest(...)
+// hermesMcp.request(...)
+// hermesMcp.readResource('wing_user/room_preferences')
+// hermesMcp.listResources()
 ```
 
 ## Notes
