@@ -102,9 +102,31 @@ async function getRequestBody(req) {
 
 function extractMcpContent(result) {
   if (result?.content?.[0]?.text) {
-    return JSON.parse(result.content[0].text);
+    const text = result.content[0].text;
+    try {
+      return JSON.parse(text);
+    } catch (_) {
+      return text;
+    }
   }
   return result;
+}
+
+function coerceChatText(value) {
+  if (typeof value === 'string') return value;
+  if (value && typeof value === 'object') {
+    if (typeof value.response === 'string') return value.response;
+    if (typeof value.text === 'string') return value.text;
+    if (Array.isArray(value.content)) {
+      const joined = value.content
+        .map((item) => (typeof item === 'string' ? item : item?.text))
+        .filter(Boolean)
+        .join('\n')
+        .trim();
+      if (joined) return joined;
+    }
+  }
+  return '';
 }
 
 function filterNoisyStderr(stderr = '') {
@@ -498,6 +520,7 @@ function enrichGraphPayload(payload) {
     if (relation.target_type === 'entity' && !allowedEntityIds.has(relation.target_id)) return false;
     const key = `${relation.source_type}:${relation.source_id}->${relation.target_type}:${relation.target_id}:${relation.relation}`;
     if (dedupe.has(key)) return false;
+
     dedupe.add(key);
     return true;
   }).slice(0, 800);
@@ -1037,12 +1060,47 @@ Keep the tone professional, insightful, and "ghost-in-the-machine" wise. Be conc
           res.end(JSON.stringify({ error: 'Missing query' }));
           return;
         }
-        result = enrichScenePayload(mcpResultsToPayload(await recallMemories({
+        
+        // Recall relevant memories
+        const memories = await recallMemories({
           query,
           maxResults: body.max_results || 8,
           wings: body.wings || (body.wing ? [body.wing] : []),
           rooms: body.rooms || (body.room ? [body.room] : []),
-        }), query));
+        });
+        const scenePayload = enrichScenePayload(mcpResultsToPayload(memories, query));
+        
+        // Build LLM prompt with context
+        const memoryText = memories.length > 0
+          ? memories.map(m => `- ${cleanMemoryText(m.text || m.summary)}`).join('\n')
+          : 'No recent memories found.';
+        
+        const chatPrompt = `You are the MemPalace Ghost with access to the user's memory palace.
+
+User query: "${query}"
+
+Recent memories:
+${memoryText}
+
+Respond using insights from these memories or general knowledge if none apply.`;
+        
+        try {
+          const llmResponse = await callMcp('mempalace_chat', {
+            message: chatPrompt,
+            model: body.model || 'qwen3.5:2b'
+          });
+          const responseText = coerceChatText(llmResponse) || 'No response generated';
+          result = {
+            ...scenePayload,
+            response: responseText,
+          };
+        } catch (error) {
+          result = {
+            ...scenePayload,
+            response: 'LLM interaction failed',
+            error: error.message
+          };
+        }
         break;
       }
       default:

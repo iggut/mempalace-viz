@@ -267,6 +267,81 @@ const minimapCtx = minimap.getContext('2d');
 
 init();
 
+function toUnixSeconds(value, fallback) {
+  if (typeof value === 'number' && Number.isFinite(value)) return Math.max(0, Math.floor(value));
+  if (typeof value === 'string' && value.trim()) {
+    const numeric = Number(value);
+    if (Number.isFinite(numeric)) return Math.max(0, Math.floor(numeric));
+    const parsed = Date.parse(value);
+    if (Number.isFinite(parsed)) return Math.floor(parsed / 1000);
+  }
+  return fallback;
+}
+
+function processMemoryEntry(entry, index = 0) {
+  if (!entry || typeof entry !== 'object') {
+    console.warn('Invalid memory entry detected, skipping:', entry);
+    return null;
+  }
+
+  const content = String(entry.content || entry.summary || entry.text || entry.title || '').trim();
+  if (!content) {
+    console.warn('Incomplete memory entry detected, missing content:', entry);
+    return null;
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  const createdAt = toUnixSeconds(entry.created_at, now);
+  const updatedAt = toUnixSeconds(entry.updated_at, createdAt);
+  const numericId = Number(entry.id);
+  const importance = Number(entry.importance_score);
+
+  return {
+    ...entry,
+    id: Number.isFinite(numericId) && numericId > 0 ? Math.floor(numericId) : (createdAt + index + 1),
+    content,
+    title: String(entry.title || '').trim() || content.slice(0, 72),
+    summary: String(entry.summary || '').trim() || content,
+    text: String(entry.text || '').trim() || content,
+    importance_score: Number.isFinite(importance) ? importance : 0,
+    created_at: createdAt,
+    updated_at: updatedAt,
+    actor: entry.actor || 'user',
+    wing: entry.wing || 'general',
+    room: entry.room || 'memories',
+    entities: Array.isArray(entry.entities) ? entry.entities.filter(Boolean) : [],
+    self_state: entry.self_state || entry.wing || 'general',
+  };
+}
+
+function normalizeSceneData(payload) {
+  const source = payload && typeof payload === 'object' ? payload : {};
+  const crystals = (Array.isArray(source.crystals) ? source.crystals : [])
+    .map((entry, index) => processMemoryEntry(entry, index))
+    .filter(Boolean);
+  const entities = (Array.isArray(source.entities) ? source.entities : [])
+    .filter(entity => entity && typeof entity === 'object');
+  const relations = (Array.isArray(source.relations) ? source.relations : [])
+    .filter(relation => relation && typeof relation === 'object');
+
+  return {
+    ...source,
+    crystals,
+    entities,
+    relations,
+    wings: Array.isArray(source.wings) ? source.wings : [],
+    last_scene: source.last_scene && typeof source.last_scene === 'object'
+      ? {
+          ...source.last_scene,
+          crystals: (Array.isArray(source.last_scene.crystals) ? source.last_scene.crystals : [])
+            .map((entry, index) => processMemoryEntry(entry, index))
+            .filter(Boolean),
+          entities: Array.isArray(source.last_scene.entities) ? source.last_scene.entities.filter(Boolean) : [],
+        }
+      : null,
+  };
+}
+
 function init() {
   scene = new THREE.Scene();
   scene.background = new THREE.Color(0x05060b);
@@ -335,7 +410,7 @@ async function loadGraph(query) {
     selectedScopeRooms.forEach(room => params.append('room', room));
     const url = '/api/graph' + (params.toString() ? ('?' + params.toString()) : '');
     const response = await fetch(url);
-    sceneData = await response.json();
+    sceneData = normalizeSceneData(await response.json());
     buildGraph(sceneData);
     renderFilterChips();
     if (sceneData.last_scene) applyScene(sceneData.last_scene, { preserveSelection: true });
@@ -878,7 +953,7 @@ function syncLabels() {
   if (!showLabels) return;
   const visibleNodes = nodes
     .filter(node => node.mesh.visible)
-    .sort((a, b) => (b.data.importance_score || b.data.salience || 0) - (a.data.importance_score || a.data.salience || 0))
+    .sort((a, b) => ((b.data?.importance_score || b.data?.salience || 0) - (a.data?.importance_score || a.data?.salience || 0)))
     .slice(0, labelDensity);
   visibleNodes.forEach((node) => {
     if (node.kind === 'entity' && !activeSceneNodeIds.has(node.id) && !focusedIds.has(node.id)) return;
@@ -922,7 +997,8 @@ function animate() {
     const isFocused = focusedIds.size && focusedIds.has(node.id);
     const isPinned = pinnedIds.has(node.id);
     const isScene = activeSceneNodeIds.has(node.id);
-    const baseEmissive = node.kind === 'entity' ? 0.55 : 0.45 + Math.min(0.85, (node.data.importance_score || 0) * 0.4);
+    const nodeImportance = Number(node.data?.importance_score || 0);
+    const baseEmissive = node.kind === 'entity' ? 0.55 : 0.45 + Math.min(0.85, nodeImportance * 0.4);
     const pulse = isScene ? (0.25 + 0.18 * Math.sin(time * 3.2)) : 0;
     const rotationSpeed = node.kind === 'entity' ? 0.18 : 0.09;
     node.mesh.rotation.y += dt * rotationSpeed;

@@ -7,6 +7,7 @@ Concise references for the MemPalace 3D visualization. The **shipped product** b
 | [**API_CONTRACT.md**](API_CONTRACT.md) | HTTP API fields, canonical ids (`wingId`, `roomId`), `graph-stats` / `overview`, MCP notes |
 | [**GRAPH_SEMANTICS.md**](GRAPH_SEMANTICS.md) | `edgesResolved`, relationship types, `graphMeta`, summary stats |
 | [**MCP_CONNECTION_CAPABILITIES.md**](MCP_CONNECTION_CAPABILITIES.md) | What stock MCP reads/writes; **no** arbitrary persisted palace graph links |
+| [**HERMES_RESOURCE_ADAPTER.md**](HERMES_RESOURCE_ADAPTER.md) | Shim for Hermes `resources/*` calls against tool-only MemPalace MCP |
 | [**SOURCE_AUDIT.md**](SOURCE_AUDIT.md) | Where tunnel vs KG vs other data comes from |
 | [**frontend-heuristics.md**](frontend-heuristics.md) | Canonical-first frontend paths, legacy fallbacks |
 
