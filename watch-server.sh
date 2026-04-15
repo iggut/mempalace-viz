@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-cd /home/iggut/.openclaw/workspace/mempalace-viz
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
 
 export HOST="${HOST:-0.0.0.0}"
 export PORT="${PORT:-8767}"
@@ -25,7 +26,7 @@ kill_server() {
 
 start_server() {
   kill_server
-  nohup env HOST="$HOST" PORT="$PORT" AUTO_EXIT_MS=0 node /home/iggut/.openclaw/workspace/mempalace-viz/server.js >>"$LOG_FILE" 2>&1 </dev/null &
+  nohup env HOST="$HOST" PORT="$PORT" AUTO_EXIT_MS=0 node "$SCRIPT_DIR/server.js" >>"$LOG_FILE" 2>&1 </dev/null &
   echo $! > "$PID_FILE"
 }
 
