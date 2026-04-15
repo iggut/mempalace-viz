@@ -6,10 +6,10 @@ export default defineConfig({
   server: {
     port: 3001,
     proxy: {
-      '/mcp': {
-        target: 'http://localhost',
+      '/api': {
+        target: 'http://localhost:8767',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/mcp/, '')
+        rewrite: (path) => path
       }
     }
   }

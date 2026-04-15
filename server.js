@@ -16,9 +16,9 @@ import {
 } from './canonical.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const WORKSPACE = '/home/iggut/.openclaw/workspace';
-const VENV_PYTHON = `${WORKSPACE}/mempalace-venv/bin/python`;
-const MEMPALACE_ROOT = `${WORKSPACE}/mempalace`;
+const WORKSPACE = process.env.WORKSPACE || join(__dirname, '..');
+const VENV_PYTHON = process.env.VENV_PYTHON || join(WORKSPACE, 'mempalace-venv/bin/python');
+const MEMPALACE_ROOT = process.env.MEMPALACE_ROOT || join(WORKSPACE, 'mempalace');
 
 const STATIC_FILES = {
   '/': 'constellation.html',
@@ -627,47 +627,69 @@ async function callMcp(toolName, params = {}, timeout = 10000) {
       },
     });
 
+    let stdout = '';
+    let stderr = '';
+
     const timeoutId = setTimeout(() => {
       try {
         proc.kill();
       } catch (_) {
         /* ignore */
       }
-      reject(new Error(`MCP server timeout: ${toolName} (${timeout / 1000}s)`));
+      const err = new Error(`MCP server timeout: ${toolName} (${timeout / 1000}s)`);
+      err.stdout = stdout;
+      err.stderr = stderr;
+      console.error(`[MCP Timeout] ${toolName}: ${stderr}`);
+      reject(err);
     }, timeout);
-
-    let stdout = '';
-    let stderr = '';
-
-    proc.stdin.write(reqBody);
-    proc.stdin.end();
 
     proc.stdout.on('data', d => { stdout += d.toString(); });
     proc.stderr.on('data', d => { stderr += d.toString(); });
+
     proc.on('error', (err) => {
       clearTimeout(timeoutId);
+      console.error(`[MCP Process Error] ${toolName}:`, err);
       reject(err);
     });
 
-    proc.on('close', (code) => {
+    proc.on('exit', (code) => {
       clearTimeout(timeoutId);
       if (code !== 0 && code !== null) {
-        const cleanStderr = filterNoisyStderr(stderr);
-        reject(new Error(`MCP process exited with code ${code}: ${cleanStderr}`));
-        return;
+        const err = new Error(`MCP server exited with code ${code} for ${toolName}`);
+        err.stdout = stdout;
+        err.stderr = stderr;
+        console.error(`[MCP Exit Error] ${toolName} (code ${code}): ${stderr}`);
+        return reject(err);
       }
       try {
-        const result = JSON.parse(stdout);
-        if (result.error) {
-          reject(new Error(result.error.message));
-          return;
+        if (!stdout.trim()) {
+            throw new Error('MCP server returned empty stdout');
         }
-        resolve(extractMcpContent(result.result));
-      } catch (error) {
-        const cleanStderr = filterNoisyStderr(stderr);
-        reject(new Error(`Failed to parse MCP response: ${stdout}${cleanStderr ? `\n${cleanStderr}` : ''}`));
+        const response = JSON.parse(stdout);
+        if (response.error) {
+          return reject(new Error(response.error.message || 'MCP Error'));
+        }
+        // Unwrap the MCP result (content[0].text if it's a tool response)
+        const result = response.result;
+        if (result && result.content && Array.isArray(result.content)) {
+            const textContent = result.content.find(c => c.type === 'text');
+            if (textContent) {
+                try {
+                    return resolve(JSON.parse(textContent.text));
+                } catch {
+                    return resolve(textContent.text);
+                }
+            }
+        }
+        resolve(result);
+      } catch (e) {
+        console.error(`[MCP Parse Error] ${toolName}: Failed to parse stdout: "${stdout.slice(0, 200)}..."`, e);
+        reject(e);
       }
     });
+
+    proc.stdin.write(reqBody);
+    proc.stdin.end();
   });
 }
 
