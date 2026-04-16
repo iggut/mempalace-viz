@@ -293,6 +293,18 @@ const server = createServer(async (req, res) => {
 
   if (!pathname.startsWith('/api/')) {
     try {
+      // Serve node_modules for importmap resolution
+      if (pathname.startsWith('/node_modules/')) {
+        const nmPath = pathname.replace('/node_modules/', '');
+        const allowedModules = ['three/']; // whitelist
+        if (allowedModules.some(m => nmPath.startsWith(m))) {
+          const filePath = join(__dirname, 'node_modules', nmPath);
+          const content = await fs.readFile(filePath);
+          res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8' });
+          res.end(content);
+          return;
+        }
+      }
       const served = await serveStatic(req, res, pathname);
       if (served) return;
       res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8' });
