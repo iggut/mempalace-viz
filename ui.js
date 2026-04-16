@@ -974,8 +974,8 @@ function renderDiscoverySectionOverview(ctx) {
   return inspectSection(
     'Discovery (derived)',
     `<p class="inspect-muted inspect-muted--tight">Analysis from tunnel connectivity degree and optional drawer <strong>recent</strong> timestamps in tunnel rows. Separate from the knowledge graph and from semantic search relevance.</p>
-    <ul class="inspect-list-tight">${caveatLines || '<li class="inspect-muted">No extra caveats.</li>'}</ul>
-    <p class="inspect-micro">Strongest tunnel hubs (normalized degree)</p>
+    <ul class="inspect-list-tight">${caveatLines || '<li class="inspect-muted">No provenance or metadata warnings for this snapshot.</li>'}</ul>
+    <p class="inspect-micro">Strongest tunnel hubs (normalized degree on tunnel connectivity)</p>
     <div class="inspect-rows">${topHubs || '<p class="inspect-empty">No hub signal (no resolved edges).</p>'}</div>
     <p class="inspect-muted inspect-muted--tight">Use <strong>Discovery overlays</strong> in Explore to tint room nodes (emissive emphasis only; tunnel topology is unchanged).</p>`,
   );
@@ -1261,8 +1261,9 @@ function renderRoomInspector(ctx, wingName, roomName, _mode) {
     hubW != null || actW != null
       ? `<div class="meta-block">
           ${hubW != null ? metaRow('Hub emphasis (normalized degree)', `${(hubW * 100).toFixed(0)}%`) : ''}
-          ${actW != null ? metaRow('Recency emphasis (tunnel metadata)', `${(actW * 100).toFixed(0)}%`) : ''}
+          ${actW != null ? metaRow('Recency emphasis (parseable recent)', `${(actW * 100).toFixed(0)}%`) : ''}
         </div>
+        ${actW != null ? '<p class="inspect-muted inspect-muted--tight">Recency ranks only among rooms with parseable tunnel-row <strong>recent</strong> values; others are omitted from the scale.</p>' : ''}
         <p class="inspect-muted inspect-muted--tight">For 3D overlays only; does not add edges or change tunnel truth.</p>`
       : '<p class="inspect-empty">No derived hub/recency scores for this room in the current snapshot.</p>';
   const miningBlock = inspectSection('Discovery signals (derived)', miningInner);
@@ -1779,6 +1780,23 @@ function loadMiningOverlayFromStorage() {
   }
   const sel = document.querySelector(`input[name="mining-mode"][value="${miningOverlayMode}"]`);
   if (sel) sel.checked = true;
+  updateMiningOverlayHint();
+}
+
+/** Mode-specific copy for Explore — keeps tunnel-connectivity vs metadata boundaries explicit. */
+function updateMiningOverlayHint() {
+  const el = $('mining-mode-hint');
+  if (!el) return;
+  if (miningOverlayMode === MINING_OVERLAY_MODES.OFF) {
+    el.innerHTML =
+      'Overlays off. When enabled, tints apply to room nodes in Graph/Rooms only; tunnel lines are unchanged. Does not add edges or change tunnel truth.';
+  } else if (miningOverlayMode === MINING_OVERLAY_MODES.HUBS) {
+    el.innerHTML =
+      'Tunnel hubs: emphasis from <strong>tunnel connectivity</strong> — normalized degree on resolved tunnel edges (how many tunnels meet each room).';
+  } else {
+    el.innerHTML =
+      'Drawer recency: parseable <code>recent</code> on tunnel rows only; rooms without dated metadata are omitted, so the heatmap may be incomplete.';
+  }
 }
 
 function persistMiningOverlayMode() {
@@ -2717,6 +2735,7 @@ function wireMiningOverlay() {
       if (t && t.type === 'radio' && t.name === 'mining-mode' && t.checked) {
         miningOverlayMode = /** @type {'off'|'hubs'|'activity'} */ (t.value);
         persistMiningOverlayMode();
+        updateMiningOverlayHint();
         syncScenePresentation();
       }
     });

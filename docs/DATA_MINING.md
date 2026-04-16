@@ -25,7 +25,7 @@ This document defines what “data mining” means in the viewer, which official
 
 1. **Inspector — Discovery (derived)** (overview): caveats, top tunnel hubs (normalized degree), pointer to overlays.
 2. **Inspector — Discovery signals (derived)** (room): hub % and recency % when computable.
-3. **Explore — Discovery overlays** (collapsible): Off / Tunnel hubs / Drawer recency — adjusts **emissive intensity** on room nodes in Graph and Rooms views only; tunnel lines unchanged.
+3. **Explore — Discovery overlays** (collapsible): Off / Tunnel hubs / Drawer recency — adjusts **emissive intensity** on room nodes in Graph and Rooms views only; tunnel lines unchanged. The mode hint under the radios states tunnel-connectivity (hubs) vs parseable `recent` caveats (recency).
 4. **Copy fixes**: semantic search hint; Memory & knowledge lead; “Structural readout (tunnels)” wing section; “Structural insight (taxonomy + tunnels)” room section.
 
 ## Semantic boundary rules
