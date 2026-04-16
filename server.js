@@ -43,6 +43,9 @@ const STATIC_FILES = {
   '/viz': 'index.html',
   '/3d': 'index.html',
   '/palace3d': 'index.html',
+  /** Legacy bookmarks / stale processes that still expect the old entry file. */
+  '/constellation': 'constellation.html',
+  '/constellation.html': 'constellation.html',
   '/styles.css': 'styles.css',
   '/ui.js': 'ui.js',
   '/scene.js': 'scene.js',
