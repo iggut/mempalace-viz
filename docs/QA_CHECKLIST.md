@@ -16,6 +16,7 @@ Short regression pass before releases or after copy / routing / graph changes. T
 - [ ] Copy does **not** imply inferred or client-added edges.
 - [ ] Copy does **not** imply arbitrary graph persistence via stock MCP.
 - [ ] Footer: **"KG stats"** stays clearly separate from palace tunnel graph.
+- [ ] **Discovery** copy labels derived analysis vs tunnel truth vs KG vs semantic search (`docs/DATA_MINING.md`).
 - [ ] `graph-guidance.js` remains the behavioral source for route failure / disconnected / "how connections work" copy.
 
 ## 3. Graph semantics
@@ -31,6 +32,7 @@ Short regression pass before releases or after copy / routing / graph changes. T
 - [ ] **Semantic** search returns drawer hits; clicking a result jumps to Graph when wing/room exists in taxonomy.
 - [ ] **Memory lens** (`GET /api/kg-query`, diary, AAAK, duplicate-check) loads without breaking the scene; KG is not drawn as palace edges.
 - [ ] Room inspector: **Palace traverse** returns JSON; **Tunnel metadata** shows halls/recent when MCP supplied them.
+- [ ] **Discovery overlays**: default Off; hubs/recency tint **room emissive only** (no extra lines); Activity mode does nothing harmful when `recent` is missing or unparseable.
 - [ ] Route uses only visible explicit edges (respects relationship filters).
 - [ ] Route stepping / history coherent when neighbors are missing.
 - [ ] Canvas stays primary; panels don't steal the viewport.

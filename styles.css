@@ -764,6 +764,72 @@ input[type="range"] {
   display: none;
 }
 
+.mining-disclosure {
+  margin-top: 14px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: rgba(124, 156, 255, 0.04);
+}
+
+.mining-disclosure__summary {
+  cursor: pointer;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #9db7ff;
+  list-style: none;
+}
+
+.mining-disclosure__summary::-webkit-details-marker {
+  display: none;
+}
+
+.mining-disclosure__body {
+  margin-top: 8px;
+}
+
+.mining-disclosure__lead {
+  margin: 0 0 8px;
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.mining-disclosure__hint {
+  margin: 8px 0 0;
+  font-size: 0.68rem;
+  color: var(--text-dim);
+}
+
+.mining-mode-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mining-mode-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.mining-mode-option input {
+  accent-color: var(--accent);
+}
+
+.inspect-list-tight {
+  margin: 6px 0 10px;
+  padding-left: 1.1rem;
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
 /* Inspector */
 .inspector-toolbar {
   display: flex;

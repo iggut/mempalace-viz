@@ -4,6 +4,13 @@ Notable product changes. Newest first. Semver-ish; pre-1.0.
 
 ## Unreleased — release acceptance pass
 
+**Discovery / data mining (product)**
+
+- New module `data-mining.js`: hub scores from tunnel degree; recency scores from parseable `recent` on tunnel row metadata — **no invented edges**, no KG/search mixing.
+- Explore: collapsible **Discovery overlays** (Off / Tunnel hubs / Drawer recency) — **emissive tint on room nodes** in Graph + Rooms views; tunnel lines unchanged.
+- Inspector: **Discovery (derived)** on overview; **Discovery signals (derived)** on rooms; wing **Structural readout (tunnels)**; room **Structural insight (taxonomy + tunnels)**.
+- Docs: `docs/DATA_MINING.md`; README + `GRAPH_SEMANTICS.md` boundary notes.
+
 **Official MCP surface (product + bridge)**
 
 - HTTP bridge: generic JSON-RPC helper + **`GET /api/mcp-tools`** (`tools/list`).

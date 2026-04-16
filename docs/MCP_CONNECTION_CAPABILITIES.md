@@ -4,6 +4,8 @@
 
 This viewer uses a **stateless HTTP bridge** (`server.js`) that spawns the MCP server per request. It exposes **read** palace structure and tunnel topology for the 3D view, plus **additional read tools** for discovery (semantic search, traverse, KG reads, diary read, AAAK spec) and a **duplicate-check** helper. **Write** tools (drawer add/delete, KG add/invalidate, diary write) are **not** proxied — use an MCP client for mutations.
 
+**Client-only Discovery:** hub/recency overlays and inspector “Discovery” sections use **`data-mining.js`** on tunnel edges + metadata — not separate MCP calls; see `docs/DATA_MINING.md`.
+
 ## 1. Capability coverage matrix
 
 | MCP tool (official) | HTTP / UI | Notes |

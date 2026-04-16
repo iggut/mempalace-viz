@@ -78,3 +78,7 @@ Rollups include:
 - Stock MemPalace MCP returns a **bare JSON array** of tunnel rows (capped at 50). The viz HTTP API normalizes via `parseTunnelDiscoveryResult` (including the 50-row heuristic). Optional envelopes from forks are still accepted.
 - Upstream rows may include **`halls`**, **`recent`**, and **`count`** per room; `canonical.js` copies these into per-edge **`metadata`** (for inspector context). Edges remain pairwise **tunnel** links from shared room names across wings — halls are drawer metadata, not extra nodes.
 - `edgeId` values include a relationship suffix; do not parse beyond equality / display.
+
+## Discovery overlays (derived, non-topology)
+
+The viewer may emphasize **room nodes** (emissive intensity only) using **`data-mining.js`**: tunnel **degree** (hub mode) and **parseable `recent`** timestamps on tunnel rows (recency mode). These overlays **do not** add lines, modify `edgesResolved`, or represent KG or search relevance. See `docs/DATA_MINING.md`.

@@ -174,6 +174,8 @@ export function createPalaceScene(container, options = {}) {
     /** @type {Set<string>|null} when null, all relationship types are shown */
     relationshipTypesVisible: null,
     route: defaultRoutePresentation(),
+    /** Derived mining emphasis on room nodes — never draws extra graph edges */
+    miningOverlay: { mode: 'off', weights: {} },
   };
   let prefersReducedMotion =
     typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
@@ -610,6 +612,22 @@ export function createPalaceScene(container, options = {}) {
     return a < b ? `${a}\0${b}` : `${b}\0${a}`;
   }
 
+  function miningOverlayEqual(ma, mb) {
+    const a = ma && typeof ma === 'object' ? ma : { mode: 'off', weights: {} };
+    const b = mb && typeof mb === 'object' ? mb : { mode: 'off', weights: {} };
+    if (a.mode !== b.mode) return false;
+    const wa = a.weights && typeof a.weights === 'object' ? a.weights : {};
+    const wb = b.weights && typeof b.weights === 'object' ? b.weights : {};
+    const ka = Object.keys(wa).sort();
+    const kb = Object.keys(wb).sort();
+    if (ka.length !== kb.length) return false;
+    for (let i = 0; i < ka.length; i += 1) {
+      if (ka[i] !== kb[i]) return false;
+      if (wa[ka[i]] !== wb[kb[i]]) return false;
+    }
+    return true;
+  }
+
   function presentationEqual(a, b) {
     return (
       a.searchQuery === b.searchQuery &&
@@ -617,7 +635,8 @@ export function createPalaceScene(container, options = {}) {
       a.selectedId === b.selectedId &&
       a.pinActive === b.pinActive &&
       relationshipSetKey(a.relationshipTypesVisible) === relationshipSetKey(b.relationshipTypesVisible) &&
-      routePresentationEqual(a.route, b.route)
+      routePresentationEqual(a.route, b.route) &&
+      miningOverlayEqual(a.miningOverlay, b.miningOverlay)
     );
   }
 
@@ -800,6 +819,19 @@ export function createPalaceScene(container, options = {}) {
             emissiveMult *= 1.18;
             routeScale = 1.05;
           }
+        }
+      }
+
+      const mining =
+        presentation.miningOverlay && typeof presentation.miningOverlay === 'object'
+          ? presentation.miningOverlay
+          : { mode: 'off', weights: {} };
+      const mMode = mining.mode || 'off';
+      const mWeights = mining.weights && typeof mining.weights === 'object' ? mining.weights : {};
+      if (mMode !== 'off' && data.type === 'room' && (currentView === 'graph' || currentView === 'rooms')) {
+        const mw = mWeights[id];
+        if (typeof mw === 'number' && mw > 0) {
+          emissiveMult *= 1 + 0.24 * Math.min(1, mw);
         }
       }
 
@@ -1463,6 +1495,14 @@ export function createPalaceScene(container, options = {}) {
     const next = { ...presentation, ...patch };
     if (patch.route !== undefined) {
       next.route = { ...defaultRoutePresentation(), ...patch.route };
+    }
+    if (patch.miningOverlay !== undefined) {
+      const cur = presentation.miningOverlay && typeof presentation.miningOverlay === 'object' ? presentation.miningOverlay : {};
+      const p = patch.miningOverlay && typeof patch.miningOverlay === 'object' ? patch.miningOverlay : {};
+      next.miningOverlay = {
+        mode: p.mode != null ? p.mode : cur.mode ?? 'off',
+        weights: p.weights && typeof p.weights === 'object' ? p.weights : cur.weights ?? {},
+      };
     }
     if (presentationEqual(presentation, next)) return;
     presentation = next;

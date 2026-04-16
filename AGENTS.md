@@ -12,6 +12,7 @@
 ## Key files
 - `index.html` — shell (header / panels / footer).
 - `ui.js` — app state, inspector, navigation, persistence.
+- `data-mining.js` — deterministic Discovery signals (hub degree, tunnel `recent` metadata) for inspector + optional emissive overlays; see `docs/DATA_MINING.md`.
 - `scene.js` — Three.js scene, layout, interaction, motion.
 - `graph-*.js` — relationships, routing, navigation, search helpers.
 - `canonical.js` — server- and client-shared graph normalization.

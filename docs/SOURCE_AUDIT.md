@@ -24,6 +24,16 @@ This is a concise map of **where graph-related relationship data comes from** in
 | **SQLite knowledge graph (`mempalace_kg_*`)** | Entity/triple graph — **not** the Chroma palace tunnel graph. Exposed read-only via `/api/kg-stats`, `/api/kg-query`, `/api/kg-timeline`, and the Memory panel — never as fake room–room links. |
 | **Semantic search / traverse / diary** | Official MCP tools (`mempalace_search`, `mempalace_traverse`, `mempalace_diary_read`, …) — HTTP passthrough + UI panels; **do not** add edges to `edgesResolved`. |
 
+## Discovery overlays (`data-mining.js`)
+
+Deterministic **client-side** signals for inspector copy and optional **emissive** emphasis on room nodes — **not** new graph geometry:
+
+| Input | Signal |
+| --- | --- |
+| Tunnel `edgesResolved` (degree per room) | Hub / connector emphasis |
+| Tunnel row `metadata.recent` (when parseable as a date) | Relative recency emphasis |
+| **Excluded** | KG triples, semantic search scores, duplicate-check results — separate UI surfaces. |
+
 ## Cheap vs expensive
 
 - **Cheap at query time:** merging precomputed tunnel rows with taxonomy for **endpoint resolution** in Node (pure CPU). No inferred taxonomy-adjacency edges are added to the shipped graph.

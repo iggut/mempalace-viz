@@ -8,7 +8,9 @@ A three-dimensional cognitive map for your MemPalace — wings, rooms, and the e
 - **Rooms** — memory loci that orbit their wing with gentle vertical drift, so the composition has real depth instead of feeling like rings.
 - **Graph** — rooms as nodes, explicit MemPalace tunnel links as soft bezier arcs. Layout is force-directed; focus and routing highlight paths on the visible graph only.
 
-Three views (`1`, `2`, `3`) sharing one scene. Click to select and frame; hover to inspect; type to **filter structure** or run **semantic drawer search** (`mempalace_search`). The right-hand **Memory & knowledge** panel exposes read-only KG, diary, AAAK spec, and duplicate-check — orthogonal to the tunnel graph.
+Three views (`1`, `2`, `3`) sharing one scene. Click to select and frame; hover to inspect; type to **filter structure** or run **semantic drawer search** (`mempalace_search`). **Discovery overlays** (Explore panel) optionally tint room nodes by tunnel-hub degree or drawer **recency metadata** from tunnel rows — emissive only, never extra edges. The right-hand **Memory & knowledge** panel exposes read-only KG, diary, AAAK spec, and duplicate-check — orthogonal to the tunnel graph and to Discovery analysis.
+
+See `docs/DATA_MINING.md` for semantics and limitations.
 
 ## Graph truth model
 

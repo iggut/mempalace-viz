@@ -17,7 +17,12 @@ import {
   fetchDiaryRead,
   fetchCheckDuplicate,
 } from './api.js';
-import { makeRoomId } from './canonical.js';
+import { makeRoomId, parseRoomId } from './canonical.js';
+import {
+  buildPalaceMiningModel,
+  MINING_OVERLAY_MODES,
+  weightsForMiningMode,
+} from './data-mining.js';
 import { createPalaceScene, wingColorFor } from './scene.js';
 import {
   buildGraphAnalytics,
@@ -91,9 +96,13 @@ import {
 const LS_KEY = 'mempalace-viz-explorer-v1';
 const ROUTE_MODE_LS_KEY = 'mempalace-viz-route-mode-v1';
 const PANEL_STATE_KEY = 'mempalace-viz-panel-state-v1';
+const MINING_OVERLAY_LS_KEY = 'mempalace-viz-mining-overlay-v1';
 
 /** Enabled relationship types for graph view; normalized when palace data loads. */
 let graphRelEnabledTypes = new Set();
+
+/** @type {'off'|'hubs'|'activity'} */
+let miningOverlayMode = 'off';
 
 const VIEWS = [
   { id: 'wings', title: 'Wings', hint: 'High-level structure by domain or project.' },
@@ -933,11 +942,43 @@ function renderOverviewInspector(ctx) {
         'Most cross-linked wings',
         topCross || '<p class="inspect-empty">No cross-wing tunnel edges resolved.</p>',
       )}
+      ${renderDiscoverySectionOverview(ctx)}
       <div class="inspect-card inspect-card--hint">
         <strong>How to explore</strong>
         <p class="inspect-muted inspect-muted--tight">Use <kbd>1</kbd>–<kbd>3</kbd> to switch views. Click wings and rooms to drill in; Pin keeps the inspector fixed. Search dims non-matching nodes.</p>
       </div>
     </div>`;
+}
+
+function renderDiscoverySectionOverview(ctx) {
+  const model = buildPalaceMiningModel({
+    edgesResolved: ctx.edgesExplicit,
+    ga: ctx.gaPalace,
+    graphMeta: ctx.graphMeta,
+  });
+  const topHubs = Object.entries(model.hubByRoomId)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([k, w]) => {
+      const pr = parseRoomId(k);
+      if (!pr) return '';
+      return clickRow(`${pr.roomName}`, `${(w * 100).toFixed(0)}% · ${pr.wingId}`, {
+        'inspect-action': 'select-room',
+        wing: pr.wingId,
+        room: pr.roomName,
+      });
+    })
+    .join('');
+  const caveatItems = model.caveats.slice(0, 4);
+  const caveatLines = caveatItems.map((c) => `<li>${escapeHtml(c)}</li>`).join('');
+  return inspectSection(
+    'Discovery (derived)',
+    `<p class="inspect-muted inspect-muted--tight">Analysis from tunnel connectivity degree and optional drawer <strong>recent</strong> timestamps in tunnel rows. Separate from the knowledge graph and from semantic search relevance.</p>
+    <ul class="inspect-list-tight">${caveatLines || '<li class="inspect-muted">No extra caveats.</li>'}</ul>
+    <p class="inspect-micro">Strongest tunnel hubs (normalized degree)</p>
+    <div class="inspect-rows">${topHubs || '<p class="inspect-empty">No hub signal (no resolved edges).</p>'}</div>
+    <p class="inspect-muted inspect-muted--tight">Use <strong>Discovery overlays</strong> in Explore to tint room nodes (emissive emphasis only; tunnel topology is unchanged).</p>`,
+  );
 }
 
 function renderWingInspector(ctx, wingName, _mode) {
@@ -1095,7 +1136,7 @@ function renderWingInspector(ctx, wingName, _mode) {
          ${topByDeg ? `<p class="inspect-micro">Most connected (tunnels)</p><div class="inspect-rows">${topByDeg}</div>` : '<p class="inspect-empty">No graph degree for rooms in this wing.</p>'}`,
       )}
       ${inspectSection(
-        'Health / graph insight',
+        'Structural readout (tunnels)',
         `<p class="inspect-muted">${escapeHtml(
           ga.topCrossLinkedWings[0]?.wing === wingName
             ? 'This wing is among the most cross-linked in the tunnel graph.'
@@ -1208,6 +1249,23 @@ function renderRoomInspector(ctx, wingName, roomName, _mode) {
         </div>
         <p class="inspect-muted inspect-muted--tight">Hall fields come from drawer metadata when present; rendered edges still come only from tunnel discovery + taxonomy.</p>`
     : '';
+
+  const miningModel = buildPalaceMiningModel({
+    edgesResolved: ctx.edgesExplicit,
+    ga: ctx.gaPalace,
+    graphMeta: ctx.graphMeta,
+  });
+  const hubW = miningModel.hubByRoomId[roomKey];
+  const actW = miningModel.activityByRoomId[roomKey];
+  const miningInner =
+    hubW != null || actW != null
+      ? `<div class="meta-block">
+          ${hubW != null ? metaRow('Hub emphasis (normalized degree)', `${(hubW * 100).toFixed(0)}%`) : ''}
+          ${actW != null ? metaRow('Recency emphasis (tunnel metadata)', `${(actW * 100).toFixed(0)}%`) : ''}
+        </div>
+        <p class="inspect-muted inspect-muted--tight">For 3D overlays only; does not add edges or change tunnel truth.</p>`
+      : '<p class="inspect-empty">No derived hub/recency scores for this room in the current snapshot.</p>';
+  const miningBlock = inspectSection('Discovery signals (derived)', miningInner);
 
   const traverseBlock = inspectSection(
     'Palace traverse (MCP)',
@@ -1340,9 +1398,10 @@ function renderRoomInspector(ctx, wingName, roomName, _mode) {
           : `<p class="inspect-empty">${escapeHtml(connectionsSectionNoExplicitEdgesLine())}</p>`,
       )}
       ${hasTunnelMeta ? inspectSection('Tunnel metadata', tunnelMetaInner) : ''}
+      ${miningBlock}
       ${traverseBlock}
       ${inspectSection(
-        'Insight',
+        'Structural insight (taxonomy + tunnels)',
         `<p class="insight-chip">${escapeHtml(insight.label)}</p><p class="inspect-muted inspect-muted--tight">${escapeHtml(insight.detail)}</p>`,
       )}
     </div>`;
@@ -1674,13 +1733,60 @@ function mergePersistedNavigation(p) {
   appState.searchQuery = n.searchQuery;
 }
 
+function miningSceneWeightsFromRoomWeights(roomWeights) {
+  const out = {};
+  for (const [roomId, w] of Object.entries(roomWeights || {})) {
+    if (typeof w !== 'number' || w <= 0) continue;
+    const pr = parseRoomId(roomId);
+    if (!pr) continue;
+    out[`room:${pr.wingId}:${pr.roomName}`] = w;
+  }
+  return out;
+}
+
+function getMiningPresentationPayload() {
+  if (miningOverlayMode === 'off' || !dataBundle) {
+    return { mode: 'off', weights: {} };
+  }
+  const ctx = buildPalaceContext();
+  const model = buildPalaceMiningModel({
+    edgesResolved: ctx.edgesExplicit,
+    ga: ctx.gaPalace,
+    graphMeta: ctx.graphMeta,
+  });
+  const raw = weightsForMiningMode(model, miningOverlayMode);
+  return { mode: miningOverlayMode, weights: miningSceneWeightsFromRoomWeights(raw) };
+}
+
 function syncScenePresentation() {
   sceneApi?.updatePresentation({
     searchQuery: appState.searchQuery,
     selectedId: appState.selected?.id ?? null,
     pinActive: appState.pinned,
     route: routePresentationPayload(),
+    miningOverlay: getMiningPresentationPayload(),
   });
+}
+
+function loadMiningOverlayFromStorage() {
+  try {
+    const v = localStorage.getItem(MINING_OVERLAY_LS_KEY);
+    if (v === MINING_OVERLAY_MODES.HUBS || v === MINING_OVERLAY_MODES.ACTIVITY || v === MINING_OVERLAY_MODES.OFF) {
+      miningOverlayMode = v;
+    }
+  } catch {
+    /* ignore */
+  }
+  const sel = document.querySelector(`input[name="mining-mode"][value="${miningOverlayMode}"]`);
+  if (sel) sel.checked = true;
+}
+
+function persistMiningOverlayMode() {
+  try {
+    localStorage.setItem(MINING_OVERLAY_LS_KEY, miningOverlayMode);
+  } catch {
+    /* ignore */
+  }
 }
 
 function setConnState(state, label, detail = '') {
@@ -2604,6 +2710,19 @@ function persistPanelLayout() {
   }
 }
 
+function wireMiningOverlay() {
+  document.querySelectorAll('input[name="mining-mode"]').forEach((el) => {
+    el.addEventListener('change', (e) => {
+      const t = e.target;
+      if (t && t.type === 'radio' && t.name === 'mining-mode' && t.checked) {
+        miningOverlayMode = /** @type {'off'|'hubs'|'activity'} */ (t.value);
+        persistMiningOverlayMode();
+        syncScenePresentation();
+      }
+    });
+  });
+}
+
 function wirePanelCollapse() {
   const main = $('app-main-grid');
   $('btn-collapse-left')?.addEventListener('click', () => {
@@ -2725,6 +2844,7 @@ function wireControls() {
   wirePanelCollapse();
   wireSemanticSearch();
   wireMemoryLens();
+  wireMiningOverlay();
 
   $('graph-view-extras')?.addEventListener('click', (e) => {
     const btn = e.target.closest('[data-rel-type]');
@@ -2990,6 +3110,7 @@ function main() {
   buildViewButtons();
   const sceneReady = setupScene();
   if (!sceneReady) return;
+  loadMiningOverlayFromStorage();
   wireControls();
   wireInspectorDelegation();
   updateSearchModeCopy();

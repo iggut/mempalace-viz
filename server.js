@@ -48,6 +48,7 @@ const STATIC_FILES = {
   '/scene.js': 'scene.js',
   '/api.js': 'api.js',
   '/insights.js': 'insights.js',
+  '/data-mining.js': 'data-mining.js',
   '/canonical.js': 'canonical.js',
   '/graph-guidance.js': 'graph-guidance.js',
   '/graph-navigation.js': 'graph-navigation.js',

@@ -84,7 +84,8 @@
                   aria-describedby="semantic-search-hint"
                 />
                 <p id="semantic-search-hint" class="hint-row semantic-search-hint">
-                  Uses <code>mempalace_search</code> on your palace. Click a result to fly to that wing/room in Graph.
+                  Uses <code>mempalace_search</code> on your palace. Relevance scores rank drawers — they are not tunnel edges
+                  and not the same signal as Discovery overlays.
                 </p>
                 <div id="semantic-search-status" class="semantic-search-status" role="status" aria-live="polite"></div>
                 <ul id="semantic-search-results" class="semantic-search-results" aria-label="Semantic search results"></ul>
@@ -133,6 +134,29 @@
               </p>
               <div id="legend-host"></div>
             </div>
+
+            <details class="mining-disclosure" id="mining-disclosure">
+              <summary class="mining-disclosure__summary">Discovery overlays</summary>
+              <div class="mining-disclosure__body">
+                <p class="hint-row mining-disclosure__lead">
+                  Optional emissive tint on room nodes from tunnel-graph analysis — not extra edges, not the knowledge graph.
+                </p>
+                <div class="mining-mode-row" role="radiogroup" aria-label="Discovery overlay mode">
+                  <label class="mining-mode-option"
+                    ><input type="radio" name="mining-mode" value="off" checked /> Off</label
+                  >
+                  <label class="mining-mode-option"
+                    ><input type="radio" name="mining-mode" value="hubs" /> Tunnel hubs</label
+                  >
+                  <label class="mining-mode-option"
+                    ><input type="radio" name="mining-mode" value="activity" /> Drawer recency</label
+                  >
+                </div>
+                <p id="mining-mode-hint" class="hint-row mining-disclosure__hint">
+                  Hubs: normalized tunnel degree. Recency: parseable <code>recent</code> fields on tunnel rows only.
+                </p>
+              </div>
+            </details>
 
             <div class="btn-row" style="margin-top: 14px">
               <button type="button" id="btn-reset-cam" class="btn btn--ghost" title="Reset camera (shortcut R)">
@@ -203,8 +227,8 @@
               <summary class="memory-lens__summary">Memory &amp; knowledge (official MCP)</summary>
               <div class="memory-lens__body">
                 <p class="inspect-muted inspect-muted--tight memory-lens__lead">
-                  Read-only views into the same tools as the MemPalace MCP server. Palace tunnel topology stays on the canvas;
-                  the knowledge graph and diary are separate layers.
+                  Read-only MCP tools: KG query/timeline, diary, AAAK, duplicate check. These are separate from palace tunnel
+                  topology on the canvas and from Discovery (derived tunnel analysis) in Explore.
                 </p>
                 <section class="memory-lens__section" aria-label="Knowledge graph query">
                   <h4 class="memory-lens__h">Knowledge graph</h4>
