@@ -1530,23 +1530,33 @@ function showLoading(show) {
   $('loading-overlay')?.classList.toggle('is-hidden', !show);
 }
 
-function showError(message, detail) {
+function showError(message, detail, { kind = 'data' } = {}) {
   showLoading(true);
   const ov = $('loading-overlay');
   if (!ov) return;
+  const heading = kind === 'scene' ? 'Unable to start the 3D scene' : 'Unable to load data';
+  const hint =
+    kind === 'scene'
+      ? `
+      <p style="margin-top:10px;color:#94a3b8;font-size:0.76rem;">Try a modern browser with GPU acceleration enabled, or reload once the environment changes.</p>`
+      : `
+      <p style="margin-top:10px;color:#94a3b8;font-size:0.76rem;">Start the API bridge from the project folder:</p>
+      <code style="margin-top:4px;">node server.js</code>`;
   ov.innerHTML = `
     <div class="err-box">
-      <strong>Unable to load data</strong>
+      <strong>${escapeHtml(heading)}</strong>
       <p>${escapeHtml(message)}</p>
       ${detail ? `<code>${escapeHtml(detail)}</code>` : ''}
-      <p style="margin-top:10px;color:#94a3b8;font-size:0.76rem;">Start the API bridge from the project folder:</p>
-      <code style="margin-top:4px;">node server.js</code>
+      ${hint}
       <div class="btn-row">
         <button type="button" class="btn btn--ghost" id="err-retry">Retry</button>
       </div>
     </div>
   `;
-  $('err-retry')?.addEventListener('click', () => loadData(false));
+  $('err-retry')?.addEventListener('click', () => {
+    if (kind === 'scene') window.location.reload();
+    else loadData(false);
+  });
 }
 
 function updateFooterContextLine(subject, ctx) {
@@ -2273,26 +2283,38 @@ function handleSceneClick(ud) {
 
 function setupScene() {
   const container = $('canvas-container');
-  sceneApi = createPalaceScene(container, {
-    onHover: (data, pos) => {
-      if (shouldIgnoreHover()) {
-        fillHoverCard(null);
-        positionHoverCard(0, 0, false);
-        return;
-      }
-      appState.hovered = data && data.type !== 'center' ? { ...data } : null;
-      renderInspector();
-      fillHoverCard(data);
-      positionHoverCard(pos.x, pos.y, !!data && data.type !== 'center');
-    },
-    onClick: (data) => handleSceneClick(data),
-    onBackgroundClick: () => {
-      const wrap = $('canvas-container');
-      wrap?.classList.add('canvas-bg-dismiss');
-      setTimeout(() => wrap?.classList.remove('canvas-bg-dismiss'), 160);
-    },
-  });
-  sceneApi.init();
+  try {
+    sceneApi = createPalaceScene(container, {
+      onHover: (data, pos) => {
+        if (shouldIgnoreHover()) {
+          fillHoverCard(null);
+          positionHoverCard(0, 0, false);
+          return;
+        }
+        appState.hovered = data && data.type !== 'center' ? { ...data } : null;
+        renderInspector();
+        fillHoverCard(data);
+        positionHoverCard(pos.x, pos.y, !!data && data.type !== 'center');
+      },
+      onClick: (data) => handleSceneClick(data),
+      onBackgroundClick: () => {
+        const wrap = $('canvas-container');
+        wrap?.classList.add('canvas-bg-dismiss');
+        setTimeout(() => wrap?.classList.remove('canvas-bg-dismiss'), 160);
+      },
+    });
+    sceneApi.init();
+    return true;
+  } catch (error) {
+    sceneApi = null;
+    const detail = error?.message || String(error);
+    showError(
+      'The 3D scene could not start. Your browser may not support WebGL, or GPU acceleration is disabled.',
+      detail,
+      { kind: 'scene' },
+    );
+    return false;
+  }
 }
 
 function wireHelpFocusTrap() {
@@ -2727,7 +2749,8 @@ function wireInspectorDelegation() {
 
 function main() {
   buildViewButtons();
-  setupScene();
+  const sceneReady = setupScene();
+  if (!sceneReady) return;
   wireControls();
   wireInspectorDelegation();
   updateSearchModeCopy();

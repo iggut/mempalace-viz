@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PROJECT_DIR="/home/iggut/.openclaw/workspace/mempalace-viz"
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG_FILE="/tmp/mempalace-viz-server.log"
 PORT="8767"
 CMD_PATTERN='node .*server\.js'

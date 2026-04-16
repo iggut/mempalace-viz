@@ -2,7 +2,26 @@
 
 Notable product changes. Newest first. Semver-ish; pre-1.0.
 
-## Unreleased — production hardening & interaction polish
+## Unreleased — release acceptance pass
+
+**Resilience (`ui.js`)**
+
+- `setupScene()` now wraps `createPalaceScene().init()` in try/catch. When WebGL is unavailable (disabled GPU, old browser, headless context), the loader is replaced by a clear error panel with retry instead of leaving a permanent spinner.
+
+**Shell polish (`index.html`)**
+
+- Added inline SVG favicon so tabs no longer 404 on `/favicon.ico`.
+- Added `<meta name="description">` and `<meta name="theme-color">` for share previews and browser chrome.
+- Removed the stale `unpkg.com/three@0.160.0` importmap — unused in the Vite-bundled build and a confusing network fingerprint in release artifacts.
+
+**Repo hygiene**
+
+- Deleted `mempalace-viz.service` (broken: used shell `&>` and `&` syntax inside `ExecStart`, which systemd does not parse through a shell) and `server.js.bak` (stale Apr 11 backup referencing removed `constellation.html`/`brain.js`).
+- `restart-viz.sh` now derives its project directory from `$BASH_SOURCE` instead of a hardcoded `/home/iggut/…` path, matching `dev-server.sh` / `watch-server.sh` / `stop-viz.sh` / `status-viz.sh`.
+- `dist/` is `.gitignore`d and untracked — build artifacts no longer live in source control.
+- `docs/QA_CHECKLIST.md` section numbering is corrected (5 → 6 → 7).
+
+## Previous unreleased — production hardening & interaction polish
 
 **Interaction polish (`scene.js`)**
 

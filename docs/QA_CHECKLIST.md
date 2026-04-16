@@ -42,13 +42,13 @@ Short regression pass before releases or after copy / routing / graph changes. T
 - [ ] Clicking a node: the scale bump + emissive pulse are clearly visible (selection registers without ambiguity).
 - [ ] Hover card: left rule color shifts between wing (blue) and room (teal).
 
-## 7. Performance sanity
+## 6. Performance sanity
 
 - [ ] Rapid mouse drag across the canvas: no visible hover lag or stutter.
 - [ ] Collapsing / expanding side panels reflows the 3D canvas without a window resize.
 - [ ] Window resize feels smooth (no sub-frame thrash).
 
-## 6. Build / regression
+## 7. Build / regression
 
 - [ ] `npm test` passes.
 - [ ] `npm run build` succeeds.
