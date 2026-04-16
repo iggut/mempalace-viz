@@ -36,6 +36,12 @@ The viewer is also served statically by `server.js` at `/`, `/viz`, `/3d`, or `/
 
 Production build: `npm run build` emits `dist/`. Preview with `npm run preview`.
 
+## Official MemPalace MCP server
+
+This project is an **interface** to the real MemPalace Python MCP server from [MemPalace/mempalace](https://github.com/MemPalace/mempalace) (`python -m mempalace.mcp_server`). It is **local-first**; storage is **verbatim** text with **semantic** retrieval in other tools (not in this viewer). The shipped `mcp_server.py` registers a fixed set of named tools (see **`docs/MCP_CONNECTION_CAPABILITIES.md`** for the matrix against this HTTP bridge). Some public docs may list a different total tool count by version — your installed package is authoritative (`tools/list`).
+
+The 3D viewer uses only **read** tools needed for structure + tunnel graph + KG stats; it does not call search, traverse, diary, drawer writes, or KG mutations.
+
 ## Architecture
 
 ```

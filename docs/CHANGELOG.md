@@ -4,6 +4,13 @@ Notable product changes. Newest first. Semver-ish; pre-1.0.
 
 ## Unreleased — release acceptance pass
 
+**MCP conformance (docs + copy)**
+
+- Documented the official **tool coverage matrix** and intentional out-of-scope tools in `docs/MCP_CONNECTION_CAPABILITIES.md` (aligned with stock `mempalace/mcp_server.py`).
+- Clarified **`mempalace_graph_stats.total_edges`** vs **`find_tunnels`** (upstream `total_edges` can be zero without hall metadata; the viewer graph uses `find_tunnels` + taxonomy).
+- README: explicit link to **MemPalace/mempalace** and local-first / verbatim-storage positioning.
+- `graph-guidance.js`: JSDoc no longer implies stock edges include `taxonomy_adjacency`.
+
 **Resilience (`ui.js`)**
 
 - `setupScene()` now wraps `createPalaceScene().init()` in try/catch. When WebGL is unavailable (disabled GPU, old browser, headless context), the loader is replaced by a clear error panel with retry instead of leaving a permanent spinner.

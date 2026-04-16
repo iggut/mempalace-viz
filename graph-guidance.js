@@ -137,7 +137,8 @@ export function metricFootnoteGraphViewPrefix() {
 }
 
 /**
- * Graph toolbar primary status: resolved edge count from MCP (may include tunnel, taxonomy_adjacency, etc.).
+ * Graph toolbar primary status: resolved edge count from MCP.
+ * Stock MemPalace emits **tunnel** edges only; `taxonomy_adjacency` exists in the schema for forks but is not produced by stock `mempalace_find_tunnels` enrichment.
  * @param {{ resolvedFormatted: string, resolvedCount: number, visibleFormatted?: string, visibleCount?: number, graphFilterNarrowed?: boolean }} p
  */
 export function graphToolbarPrimaryStatusLine(p) {

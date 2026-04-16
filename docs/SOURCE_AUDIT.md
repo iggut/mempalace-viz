@@ -7,7 +7,7 @@ This is a concise map of **where graph-related relationship data comes from** in
 | Source | Explicit / inferred | Caps / gaps | Cost |
 | --- | --- | --- | --- |
 | **`build_graph` → tunnel rooms** | Explicit: same `room` name appears in **≥2 wings** (Chroma metadata) | Upstream **`find_tunnels` returns at most 50 rows** (`palace_graph.py`). The viz HTTP API **does not** patch MemPalace; it **heuristically** flags possible truncation when the MCP JSON array has length 50. | One full collection scan in batches (1000 rows); linear in drawer count. |
-| **`mempalace_graph_stats`** | Summary over the same graph (room counts, tunnel room count, hall edges list length) | Does not list every tunnel row; use `find_tunnels` for rows. | Same scan as `build_graph`. |
+| **`mempalace_graph_stats`** | Summary over the same graph (room counts, tunnel room count, `total_edges`, …) | `total_edges` counts **hall-labeled** edge rows in `build_graph` and can be **0** when metadata has no `hall`, even if tunnel rooms exist — do not use it as the viz edge count. Use `find_tunnels` for tunnel rows. | Same scan as `build_graph`. |
 | **`mempalace_get_taxonomy`** | Explicit hierarchy: wing → room → drawer count | Taxonomy is authoritative for **which** `(wing, room)` pairs exist for resolution. | MCP/Chroma read. |
 
 ## Viz HTTP API (`server.js` + `canonical.js`)

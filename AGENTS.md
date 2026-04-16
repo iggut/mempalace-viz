@@ -27,6 +27,7 @@
 - **Visual tuning**: edit `CONFIG` and the render functions in `scene.js`.
 - **New API route**: add a switch case in `server.js`, keep shapes canonical (`edgesResolved`, `graphMeta`, `wingId` / `roomId`).
 - **Graph semantics changes**: update `canonical.js` *and* `docs/GRAPH_SEMANTICS.md`.
+- **MCP tool coverage vs viewer**: see `docs/MCP_CONNECTION_CAPABILITIES.md` (official `mempalace.mcp_server` is the source of truth).
 
 ## What not to do
 - Don't invent edges on the client. The 3D graph renders only `edgesResolved` from MCP tunnels — see `docs/GRAPH_SEMANTICS.md`.

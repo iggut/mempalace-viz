@@ -76,4 +76,5 @@ Rollups include:
 ## Migration from tunnel-only model
 
 - Stock MemPalace MCP returns a **bare JSON array** of tunnel rows (capped at 50). The viz HTTP API normalizes via `parseTunnelDiscoveryResult` (including the 50-row heuristic). Optional envelopes from forks are still accepted.
+- Upstream rows may include **`halls`** (and `recent`) per room; the viewer does not currently attach those to edge `metadata` — edges are pairwise **tunnel** links from shared room names across wings.
 - `edgeId` values include a relationship suffix; do not parse beyond equality / display.

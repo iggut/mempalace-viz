@@ -68,6 +68,10 @@ Combines:
 - `mempalace_get_taxonomy`
 - `mempalace_find_tunnels` (see MCP note below)
 
+### `mempalace_graph_stats` vs tunnel edges
+
+Upstream `graph_stats()` computes `total_edges` from an edge list that requires **hall** metadata on drawers for rows to be emitted. Cross-wing **tunnel rooms** (same `room` in ≥2 wings) still appear in `find_tunnels` and `tunnel_rooms` even when `total_edges` is **zero**. **Do not** use `rawGraphStats.total_edges` as the canonical count of tunnel links for the viewer — use `summary.resolvedEdgeCount` / `edgesResolved` (from `find_tunnels` + taxonomy).
+
 ### Canonical graph arrays
 
 | Field | Description |
@@ -96,6 +100,8 @@ Combines:
 Single bundle for dashboards (aggregates several MCP calls).
 
 Includes: `status`, `wingsData`, `taxonomy`, `roomsData`, `wings`, `rooms`, `edgesResolved`, `edgesUnresolved`, `summary`, `graphMeta`, `stats`, `rawGraphStats`.
+
+`status` is the raw `mempalace_status` object (including `protocol` and `aaak_dialect` when present) for agent wake-up / protocol text — the viewer treats it as opaque metadata.
 
 ### `stats` (overview summary)
 
