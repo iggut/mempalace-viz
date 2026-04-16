@@ -33,7 +33,7 @@ start_server() {
 watch_loop() {
   start_server
   while true; do
-    inotifywait -qq -e close_write,move,create,delete constellation.html dynamic.html server.js >/dev/null 2>&1 || true
+    inotifywait -qq -e close_write,move,create,delete index.html server.js >/dev/null 2>&1 || true
     start_server
   done
 }

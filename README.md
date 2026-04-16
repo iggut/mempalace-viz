@@ -1,117 +1,85 @@
-# MemPalace 3D Visualization
+# MemPalace
 
-A **3D** MemPalace viewer: wings, rooms, and the **palace tunnel graph** rendered in Three.js with orbit controls, search, graph routing, and an inspector. The experience is scene-first (not a flat dashboard).
+A three-dimensional cognitive map for your MemPalace — wings, rooms, and the explicit tunnel links between them, rendered as an organic landscape instead of a database diagram.
 
-## Shipped UI (source of truth for the product)
+## What you see
 
-The maintained app is:
+- **Wings** — cognitive regions of the palace, placed on a shallow organic dome. Sphere size reflects drawer counts in the current view.
+- **Rooms** — memory loci that orbit their wing with gentle vertical drift, so the composition has real depth instead of feeling like rings.
+- **Graph** — rooms as nodes, explicit MemPalace tunnel links as soft bezier arcs. Layout is force-directed; focus and routing highlight paths on the visible graph only.
 
-| Surface | Role |
-| --- | --- |
-| **`index.html`** | Primary HTML shell |
-| **`ui.js`** | Application entry (module) |
-| **`graph-guidance.js`** | MCP-honest copy for routes, disconnections, and “how connections work” |
-| **`dist/`** | Production build (`npm run build`) — same app, bundled assets |
-
-Serve the app over HTTP with the API (see Quick start). For development, `npm run dev` (Vite) is typical; for static hosting, use `dist/` after a build or the root files if your server maps them.
-
-**Not** the primary product: other `*.html` files in the repo (`simple.html`, `final.html`, `dynamic.html`, `fixed.html`, `nobuild.html`, `constellation.html`, …) are **legacy or experimental** demos and prototypes. They are kept for reference only; do not treat them as the main entry point.
-
-## What you see in 3D
-
-- **Wings** — All wings laid out in the scene; sphere size reflects drawer counts in context.
-- **Rooms** — Rooms orbit their wing; same scaling idea.
-- **Graph** — Force-directed layout of **rooms as nodes** and **explicit palace edges** as links. Camera and framing are 3D; route highlighting and neighbor stepping operate on the visible graph in the scene.
-
-Search, route, and graph exploration are **driven by data from the MemPalace HTTP API** (which wraps MCP). They do not add edges client-side.
+Three views (`1`, `2`, `3`) sharing one scene. Click to select and frame; hover to inspect; type to filter.
 
 ## Graph truth model
 
-- **Edges you see** come from **explicit MemPalace MCP/API relationship data** exposed as `edgesResolved` (and related fields). With **stock** MemPalace, those are **tunnel** edges from `mempalace_find_tunnels`.
-- **Tunnels** mean the **same room name appears in more than one wing**; the server resolves endpoints against taxonomy. The viewer **does not invent** missing room-to-room links.
-- **Disconnected** graphs (rooms or components with no path on current edges) are **valid** and expected when the palace has no tunnels or filters hide edges.
-- **Stock MemPalace MCP does not** expose a tool to **persist arbitrary** user-defined graph links between arbitrary rooms. New tunnel-like structure in data comes from **naming** (same room name across wings), not from ad-hoc link editing in this UI.
-- **KG stats** (`/api/kg-stats`, footer “KG stats (API)”) are **separate** from the palace tunnel graph: they describe the SQLite knowledge-graph side of MemPalace, not the 3D palace link view.
+The viewer renders exactly what the MemPalace MCP exposes — nothing is inferred client-side.
 
-Details: **`docs/GRAPH_SEMANTICS.md`**, **`docs/MCP_CONNECTION_CAPABILITIES.md`**, **`docs/API_CONTRACT.md`**.
+- **Edges** come from `edgesResolved` on the API (`/api/graph-stats`, `/api/overview`). With stock MemPalace those are **tunnel** edges from `mempalace_find_tunnels`: the same room name appearing in more than one wing, resolved against taxonomy.
+- **Disconnected** rooms and components are a valid state. The viewer never invents missing links.
+- **Stock MemPalace MCP** has no tool for persisting arbitrary user-defined graph edges between rooms. New connectivity comes from naming (same room in multiple wings), not from ad-hoc link editing here.
+- **KG stats** (`/api/kg-stats`) describe MemPalace's separate SQLite knowledge-graph side. They are **not** the palace tunnel graph.
+
+See `docs/GRAPH_SEMANTICS.md`, `docs/MCP_CONNECTION_CAPABILITIES.md`, `docs/API_CONTRACT.md`.
 
 ## Quick start
 
-### 1. Start the API bridge
-
 ```bash
-cd /path/to/mempalace-viz
+# 1. Start the API bridge (spawns the MemPalace Python MCP per request)
 node server.js
-```
 
-Default: `http://localhost:8767` (API under `/api/…`, CORS enabled for local dev).
-
-**Important:** On this server, **`/`** serves **`constellation.html`** (a separate demo). The shipped **MemPalace 3D** app is at **`/index.html`**, **`/viz`**, **`/3d`**, or **`/palace3d`** — not the site root.
-
-### 2. Run the UI
-
-**Development (recommended):**
-
-```bash
+# 2. In another terminal, run the dev UI (Vite on 3001, proxies /api to 8767)
 npm install
 npm run dev
 ```
 
-Opens the Vite dev server (see `vite.config.ts`; default port **3001**). The client in `api.js` targets the API at **`http://localhost:8767`** by default.
+The viewer is also served statically by `server.js` at `/`, `/viz`, `/3d`, or `/palace3d` (all equivalent).
 
-You can also open the same **`index.html`** bundle via **`node server.js`** at **`http://localhost:8767/viz`** (static files are whitelisted for the shipped modules).
-
-**Production build:**
-
-```bash
-npm run build
-```
-
-Output: **`dist/`**. Serve `dist/` with any static server **and** run `server.js` for API routes, or use your own deployment layout.
-
-**Static preview of `dist/`** (after build):
-
-```bash
-npm run preview
-```
+Production build: `npm run build` emits `dist/`. Preview with `npm run preview`.
 
 ## Architecture
 
 ```
 ┌─────────────┐
-│  Browser    │  Three.js 3D scene (ui.js / dist bundle)
+│  Browser    │  Three.js cognitive-map viewer (ui.js → scene.js)
 │  index.html │
 └──────┬──────┘
        │ HTTP (JSON)
        ↓
 ┌─────────────┐
-│  server.js  │  Node bridge
+│  server.js  │  Node bridge, :8767 — stateless, spawns MCP per call
 └──────┬──────┘
-       │ MCP
+       │ stdio JSON-RPC
        ↓
 ┌─────────────┐
-│ MemPalace   │  Python MCP server
+│ MemPalace   │  Python MCP (mempalace.mcp_server)
 │ MCP Server  │
 └─────────────┘
 ```
 
-## API (high level)
+## API
 
 | Endpoint | Purpose |
 | --- | --- |
-| `GET /api/status` | Palace overview |
+| `GET /api/status` | Palace overview (totals, health) |
 | `GET /api/wings` | Wings and drawer counts |
-| `GET /api/rooms?wing=…` | Rooms in a wing |
-| `GET /api/taxonomy` | Hierarchy with canonical ids |
-| `GET /api/graph-stats` | Tunnel graph: `edgesResolved`, `edgesUnresolved`, `summary`, `graphMeta`, legacy `tunnels` |
-| `GET /api/overview` | Bundled palace + graph summary |
-| `GET /api/kg-stats` | Knowledge graph statistics (**not** the palace tunnel graph) |
+| `GET /api/rooms?wing=…` | Rooms under a wing |
+| `GET /api/taxonomy` | Wing → room → drawer hierarchy with canonical ids |
+| `GET /api/palace` | Full normalized snapshot (wings + taxonomy + graph + kg) |
+| `GET /api/graph-stats` | Tunnel graph: `edgesResolved`, `summary`, `graphMeta` |
+| `GET /api/overview` | Bundled palace + graph summary for the viewer |
+| `GET /api/kg-stats` | Knowledge-graph statistics (separate from the palace tunnel graph) |
 
-Full contract: **`docs/API_CONTRACT.md`**. Doc index: **`docs/README.md`**.
+Full contract: `docs/API_CONTRACT.md`. Doc index: `docs/README.md`.
 
-## Configuration (visuals)
+## Design language
 
-Scene layout and colors are defined in **`scene.js`** (`CONFIG`), not in `index.html`. Adjust there if you change sphere sizes, colors, or spacing.
+- **Organic over mechanical.** Wings drift on a shallow dome instead of a flat ring; rooms cluster with small jitter; there is no "palace core" anchor sphere.
+- **Depth through light.** A calm breathing pulse on emissive intensity, soft multi-layer halo per node, and warm-cool two-tone lighting replace harsh specular and vertical bob.
+- **Edges as thought.** Quadratic-bezier arcs (arc height scales with distance) read as neural connections, not wire diagrams.
+- **Atmosphere.** A two-layer nebula of "thought motes" sits behind the scene; exponential fog gives long-distance fall-off.
+- **Minimal chrome.** The canvas is primary. Controls are one toggle (labels), one button (reset camera), one filter row per view.
+
+All of this lives in `scene.js`'s `CONFIG` and the `render*View` functions — edit there.
 
 ## Tests
 
@@ -121,9 +89,9 @@ npm test
 
 ## Tech stack
 
-- **Three.js** — 3D rendering  
-- **Vanilla ES modules** — `ui.js` + helpers; production build via **Vite**  
-- **Node** — `server.js` API bridge  
+- **Three.js** — rendering
+- **Vanilla ES modules** — `ui.js` + helpers; production build via **Vite**
+- **Node** — stateless API bridge
 
 ---
 

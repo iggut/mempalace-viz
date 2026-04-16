@@ -21,8 +21,7 @@ This is a concise map of **where graph-related relationship data comes from** in
 
 | Source | Why |
 | --- | --- |
-| **SQLite knowledge graph (`mempalace_kg_*`)** | Entity/triple graph; not keyed to palace `wing`/`room` IDs in a way that yields stable room–room edges without extra projection. |
-| **`/api/graph` (search crystals)** | Synthetic co-occurrence for ambient graph; separate from canonical palace graph. |
+| **SQLite knowledge graph (`mempalace_kg_*`)** | Entity/triple graph; not keyed to palace `wing`/`room` IDs in a way that yields stable room–room edges without extra projection. Surfaced read-only via `/api/kg-stats` for footer stats. |
 
 ## Cheap vs expensive
 

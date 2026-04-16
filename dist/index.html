@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>MemPalace 3D Visualization</title>
+    <title>MemPalace — cognitive map</title>
 
     <script type="importmap">
       {
@@ -13,16 +13,16 @@
         }
       }
     </script>
-    <script type="module" crossorigin src="/assets/index-D6QrtLxD.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-Dxsfuz3j.css">
+    <script type="module" crossorigin src="/assets/index-Bwbq0SsS.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-Dnysyr4O.css">
   </head>
   <body>
     <a href="#main-canvas-wrap" class="skip-link">Skip to 3D view</a>
     <div class="app">
       <header class="app-header" role="banner">
         <div class="brand">
-          <h1>MemPalace 3D Visualization</h1>
-          <p class="tagline">Wings, rooms, and explicit tunnel links from MemPalace MCP (same room name across wings)</p>
+          <h1>MemPalace</h1>
+          <p class="tagline">A cognitive map of your memory palace</p>
         </div>
         <div class="header-actions">
           <div class="header-connection">
@@ -36,7 +36,7 @@
             >
               Connecting…
             </div>
-            <p id="conn-detail" class="status-detail">Loading the latest palace snapshot.</p>
+            <p id="conn-detail" class="status-detail">Loading palace snapshot.</p>
           </div>
           <button type="button" id="btn-refresh" class="btn btn--ghost" aria-label="Reload palace data from the API">
             Refresh
@@ -60,9 +60,6 @@
             </button>
           </div>
           <div class="panel-body" id="panel-left-body">
-            <p id="onboard-hint" class="hint-row" hidden style="margin-bottom: 10px">
-              Tip: use <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> to switch views, <kbd>R</kbd> to reset the camera.
-            </p>
             <div class="search-wrap">
               <label id="search-wings-label" class="search-label" for="search-wings">Filter wings and rooms</label>
               <input
@@ -109,25 +106,7 @@
             </div>
 
             <div class="control-row" style="margin-top: 14px">
-              <label for="toggle-rotate"><input type="checkbox" id="toggle-rotate" checked /> Auto-rotate scene</label>
-            </div>
-            <div class="control-row">
               <label for="toggle-labels"><input type="checkbox" id="toggle-labels" checked /> Show node labels</label>
-            </div>
-            <div class="control-row" style="flex-wrap: wrap">
-              <label for="motion-range">Motion intensity</label>
-              <input
-                type="range"
-                id="motion-range"
-                min="0"
-                max="2"
-                step="0.1"
-                value="1"
-                aria-valuemin="0"
-                aria-valuemax="2"
-                aria-valuenow="1"
-                style="max-width: 140px"
-              />
             </div>
 
             <div class="legend-block">
@@ -141,14 +120,6 @@
             <div class="btn-row" style="margin-top: 14px">
               <button type="button" id="btn-reset-cam" class="btn btn--ghost" title="Reset camera (shortcut R)">
                 Reset camera
-              </button>
-              <button
-                type="button"
-                id="btn-center"
-                class="btn btn--ghost"
-                title="Frame selection, or hovered node"
-              >
-                Center
               </button>
             </div>
           </div>
@@ -235,9 +206,8 @@
             Shortcuts
           </button>
           <span class="hint-row footer-shortcuts-hint" style="margin: 0">
-            <kbd>1</kbd>–<kbd>3</kbd> · <kbd>R</kbd> camera · <kbd>/</kbd> search · <kbd>L</kbd> labels · <kbd>Space</kbd> rotate ·
-            <kbd>Esc</kbd> clear search / help / unpin · graph: <kbd>[</kbd> <kbd>]</kbd> <kbd>U</kbd> (route active: hop path) · find:
-            <kbd>Alt+N</kbd> <kbd>Alt+P</kbd>
+            <kbd>1</kbd>–<kbd>3</kbd> view · <kbd>R</kbd> camera · <kbd>/</kbd> search · <kbd>L</kbd> labels ·
+            <kbd>Esc</kbd> clear · graph: <kbd>[</kbd> <kbd>]</kbd> <kbd>U</kbd> · find: <kbd>Alt+N</kbd> <kbd>Alt+P</kbd>
           </span>
         </div>
       </footer>
@@ -267,7 +237,6 @@
           <li><kbd>R</kbd> — Reset camera</li>
           <li><kbd>/</kbd> — Focus search</li>
           <li><kbd>L</kbd> — Toggle labels</li>
-          <li><kbd>Space</kbd> — Toggle auto-rotate</li>
           <li><kbd>Esc</kbd> — Close this dialog; then clear search; then unpin; then clear selection</li>
           <li><strong>Search</strong> — type a wing or room fragment; <kbd>Enter</kbd> frames in Graph · <kbd>Alt+N</kbd> / <kbd>Alt+P</kbd> next/prev match</li>
           <li><strong>Click</strong> wing (Wings) — Enter that wing’s rooms</li>

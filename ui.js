@@ -1440,8 +1440,6 @@ function persistState() {
         pinned: appState.pinned,
         searchQuery: appState.searchQuery,
         labels: $('toggle-labels')?.checked ?? true,
-        rotate: $('toggle-rotate')?.checked ?? true,
-        motion: Number($('motion-range')?.value ?? 1),
       };
       localStorage.setItem(LS_KEY, JSON.stringify(raw));
     } catch {
@@ -1458,8 +1456,6 @@ function validateStateAgainstData() {
 function applyPersistedToControls(p) {
   if (!p) return;
   if (p.labels !== undefined && $('toggle-labels')) $('toggle-labels').checked = !!p.labels;
-  if (p.rotate !== undefined && $('toggle-rotate')) $('toggle-rotate').checked = !!p.rotate;
-  if (p.motion !== undefined && $('motion-range')) $('motion-range').value = String(p.motion);
   if (p.searchQuery !== undefined && $('search-wings')) $('search-wings').value = p.searchQuery;
 }
 
@@ -2090,12 +2086,14 @@ function fillHoverCard(data) {
   if (!card) return;
   if (!data || data.type === 'center') {
     card.classList.remove('is-visible');
+    card.removeAttribute('data-node-type');
     return;
   }
   const title = data.name || data.label || 'Node';
   let sub = '';
   if (data.type === 'wing') sub = `Wing · ${formatNum(data.drawers)} drawers`;
   else if (data.type === 'room') sub = `Room in “${escapeHtml(data.wing)}”`;
+  card.setAttribute('data-node-type', data.type || '');
   card.innerHTML = `<div class="hc-title">${escapeHtml(title)}</div><div class="hc-sub">${sub}</div>`;
 }
 
@@ -2384,30 +2382,14 @@ function wireControls() {
   $('btn-refresh')?.addEventListener('click', () => loadData(true));
 
   $('btn-reset-cam')?.addEventListener('click', () => sceneApi?.resetCamera());
-  $('btn-center')?.addEventListener('click', () => {
-    if (appState.selected?.id) sceneApi?.centerOnNodeId(appState.selected.id);
-    else sceneApi?.centerOnHovered();
-  });
 
   $('btn-pin')?.addEventListener('click', () => togglePin());
   $('btn-clear-sel')?.addEventListener('click', () => clearSelection());
 
-  $('toggle-rotate')?.addEventListener('change', (e) => {
-    sceneApi?.setAutoRotate(e.target.checked);
-    persistState();
-  });
   $('toggle-labels')?.addEventListener('change', (e) => {
     sceneApi?.setLabelsVisible(e.target.checked);
     persistState();
   });
-  const motionEl = $('motion-range');
-  motionEl?.addEventListener('input', (e) => {
-    const v = Number(e.target.value);
-    sceneApi?.setMotionIntensity(v);
-    e.target.setAttribute('aria-valuenow', String(v));
-    persistState();
-  });
-  if (motionEl) motionEl.setAttribute('aria-valuenow', motionEl.value);
 
   VIEWS.forEach((v) => {
     document.querySelector(`[data-view="${v.id}"]`)?.addEventListener('click', () => applyView(v.id));
@@ -2566,36 +2548,7 @@ function wireControls() {
         cb.dispatchEvent(new Event('change'));
       }
     }
-    if (e.key === ' ') {
-      e.preventDefault();
-      const cb = $('toggle-rotate');
-      if (cb) {
-        cb.checked = !cb.checked;
-        cb.dispatchEvent(new Event('change'));
-      }
-    }
   });
-
-  if (!localStorage.getItem('mempalace-viz-onboarded')) {
-    $('onboard-hint').hidden = false;
-    localStorage.setItem('mempalace-viz-onboarded', '1');
-  }
-
-  if (
-    window.matchMedia?.('(prefers-reduced-motion: reduce)').matches &&
-    !localStorage.getItem(LS_KEY)
-  ) {
-    const tr = $('toggle-rotate');
-    if (tr) {
-      tr.checked = false;
-      tr.dispatchEvent(new Event('change'));
-    }
-    if (motionEl) {
-      motionEl.value = '0';
-      motionEl.setAttribute('aria-valuenow', '0');
-      sceneApi?.setMotionIntensity(0);
-    }
-  }
 }
 
 function buildViewButtons() {
@@ -2720,9 +2673,7 @@ async function loadData(preserveContext) {
   }
   syncScenePresentation();
 
-  sceneApi?.setAutoRotate($('toggle-rotate')?.checked ?? true);
   sceneApi?.setLabelsVisible($('toggle-labels')?.checked ?? true);
-  sceneApi?.setMotionIntensity(Number($('motion-range')?.value ?? 1));
 
   setActiveViewButtons();
   $('view-helper-text').textContent = VIEWS.find((v) => v.id === appState.view)?.hint || '';

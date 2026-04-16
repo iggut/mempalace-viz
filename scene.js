@@ -42,27 +42,38 @@ function findRoomNodeForEdge(nodeList, edge, end) {
   });
 }
 
+/**
+ * Visual language: "cognitive landscape".
+ * Colors lean warm-cool (thought vs. memory), layout is organic (shells with
+ * vertical drift, not flat rings), edges are soft bezier arcs, and lighting
+ * uses gentle emissive + multi-layer halo instead of hard specular.
+ */
 const CONFIG = {
   wingColors: {
-    projects: '#8b9cf8',
-    shared_grocery_list: '#6ee7b7',
-    openclaw: '#94a3b8',
-    default: '#fbbf24',
+    projects: '#8fa6ff',
+    shared_grocery_list: '#7ce0b8',
+    openclaw: '#a3b3c4',
+    default: '#f4c878',
   },
   nodeSizes: {
-    wingMin: 3,
-    wingMax: 8,
-    roomMin: 0.8,
-    roomMax: 2.5,
+    wingMin: 3.2,
+    wingMax: 8.4,
+    roomMin: 0.9,
+    roomMax: 2.6,
   },
   spacing: {
-    wingSeparation: 40,
-    roomRadius: 15,
+    wingSeparation: 44,
+    roomRadius: 16,
+    verticalDrift: 6,
   },
   accent: {
-    linkWing: 0x3d4454,
-    linkGraph: 0x5b8cff,
-    center: 0xe2e8f0,
+    linkWing: 0x3a4256,
+    linkGraph: 0x7aa3ff,
+    center: 0x334155,
+  },
+  bg: {
+    deep: 0x060912,
+    fogDensity: 0.0022,
   },
 };
 
@@ -141,7 +152,9 @@ export function createPalaceScene(container, options = {}) {
   let roomsFocusWing = null;
   let motionIntensity = 1;
   let labelsVisible = true;
-  let autoRotateUser = true;
+  // Auto-rotate is OFF by default — calmer first impression, and the ambient
+  // breath/pulse motion keeps the scene from feeling static.
+  let autoRotateUser = false;
 
   let hoveredMesh = null;
   /** @type {{ active: boolean, pathSceneIds: string[], stepIndex: number, segmentTypes: string[], bridgeSceneIds: string[] }} */
@@ -176,6 +189,10 @@ export function createPalaceScene(container, options = {}) {
 
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
+  let pendingPointerEvent = null;
+  let pointerRafId = 0;
+  let resizeRafId = 0;
+  let resizeObserver = null;
 
   function tweenCamera(targetPos, lookAt, duration = 850) {
     const startPos = camera.position.clone();
@@ -223,32 +240,68 @@ export function createPalaceScene(container, options = {}) {
     selectionPulse = null;
     if (selectionPulseTimer) clearTimeout(selectionPulseTimer);
     selectionPulseTimer = 0;
-    if (scene?.fog?.isFogExp2) scene.fog.density = 0.0026;
-    if (stars?.material) stars.material.opacity = 0.35;
+    if (scene?.fog?.isFogExp2) scene.fog.density = CONFIG.bg.fogDensity;
+    if (stars?.userData?.innerMat) stars.userData.innerMat.opacity = 0.38;
+    if (stars?.userData?.outerMat) stars.userData.outerMat.opacity = 0.22;
     nodeRegistry.clear();
     labelByNodeId.clear();
   }
 
+  /**
+   * Two-layer nebula: sparse inner "thought motes" close to the viewer and
+   * a larger outer drift. This reads as cognitive atmosphere rather than a
+   * literal starfield — fewer sharp specks, more depth.
+   */
   function createStars() {
-    const starsGeometry = new THREE.BufferGeometry();
-    const starsVertices = [];
-    for (let i = 0; i < 1800; i += 1) {
-      starsVertices.push(
-        THREE.MathUtils.randFloatSpread(380),
-        THREE.MathUtils.randFloatSpread(200),
-        THREE.MathUtils.randFloatSpread(380),
+    const group = new THREE.Group();
+
+    const inner = new THREE.BufferGeometry();
+    const innerPts = [];
+    for (let i = 0; i < 620; i += 1) {
+      const r = 30 + Math.random() * 80;
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(2 * Math.random() - 1);
+      innerPts.push(
+        r * Math.sin(phi) * Math.cos(theta),
+        r * Math.cos(phi) * 0.55,
+        r * Math.sin(phi) * Math.sin(theta),
       );
     }
-    starsGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starsVertices, 3));
-    const starsMaterial = new THREE.PointsMaterial({
-      color: 0x94a3b8,
-      size: 0.45,
+    inner.setAttribute('position', new THREE.Float32BufferAttribute(innerPts, 3));
+    const innerMat = new THREE.PointsMaterial({
+      color: 0xa8b5ff,
+      size: 0.32,
       transparent: true,
-      opacity: 0.35,
+      opacity: 0.38,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+    const innerPoints = new THREE.Points(inner, innerMat);
+    group.add(innerPoints);
+
+    const outer = new THREE.BufferGeometry();
+    const outerPts = [];
+    for (let i = 0; i < 1200; i += 1) {
+      outerPts.push(
+        THREE.MathUtils.randFloatSpread(480),
+        THREE.MathUtils.randFloatSpread(260),
+        THREE.MathUtils.randFloatSpread(480),
+      );
+    }
+    outer.setAttribute('position', new THREE.Float32BufferAttribute(outerPts, 3));
+    const outerMat = new THREE.PointsMaterial({
+      color: 0x6f7aa0,
+      size: 0.55,
+      transparent: true,
+      opacity: 0.22,
       depthWrite: false,
     });
-    stars = new THREE.Points(starsGeometry, starsMaterial);
-    scene.add(stars);
+    const outerPoints = new THREE.Points(outer, outerMat);
+    group.add(outerPoints);
+
+    scene.add(group);
+    stars = group;
+    stars.userData = { innerMat, outerMat };
   }
 
   function makeLabelSprite(text, color = '#e2e8f0') {
@@ -393,9 +446,25 @@ export function createPalaceScene(container, options = {}) {
     });
   }
 
+  /**
+   * Edges are soft bezier arcs, not straight lines. This reads as neural
+   * connection rather than wire-diagram; arc height scales with distance
+   * so long cross-wing edges bend visibly while short in-cluster links stay
+   * close to straight.
+   */
   function createLink(from, to, colorHex, opacity = 0.28, meta = {}) {
-    const points = [new THREE.Vector3(...from), new THREE.Vector3(...to)];
-    const geometry = new THREE.BufferGeometry().setFromPoints(points);
+    const a = new THREE.Vector3(...from);
+    const b = new THREE.Vector3(...to);
+    const mid = a.clone().add(b).multiplyScalar(0.5);
+    const dist = a.distanceTo(b);
+    const arc = Math.min(8, Math.max(0.6, dist * 0.18));
+    mid.y += arc;
+    const offset = Math.min(4, dist * 0.05);
+    mid.x += offset * (Math.sign(b.z - a.z) || 1) * 0.2;
+
+    const curve = new THREE.QuadraticBezierCurve3(a, mid, b);
+    const segments = dist > 40 ? 24 : dist > 16 ? 16 : 10;
+    const geometry = new THREE.BufferGeometry().setFromPoints(curve.getPoints(segments));
     const material = new THREE.LineBasicMaterial({
       color: colorHex,
       transparent: true,
@@ -436,16 +505,29 @@ export function createPalaceScene(container, options = {}) {
       _baseY: y,
     };
 
-    const glowGeometry = new THREE.SphereGeometry(size * 1.25, 24, 24);
-    const glowMaterial = new THREE.MeshBasicMaterial({
-      color,
-      transparent: true,
-      opacity: 0.08,
-      side: THREE.BackSide,
-      depthWrite: false,
-    });
-    const glow = new THREE.Mesh(glowGeometry, glowMaterial);
-    mesh.add(glow);
+    const glowInner = new THREE.Mesh(
+      new THREE.SphereGeometry(size * 1.22, 24, 24),
+      new THREE.MeshBasicMaterial({
+        color,
+        transparent: true,
+        opacity: 0.11,
+        side: THREE.BackSide,
+        depthWrite: false,
+      }),
+    );
+    const glowOuter = new THREE.Mesh(
+      new THREE.SphereGeometry(size * 1.7, 20, 20),
+      new THREE.MeshBasicMaterial({
+        color,
+        transparent: true,
+        opacity: 0.045,
+        side: THREE.BackSide,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+      }),
+    );
+    mesh.add(glowInner);
+    mesh.add(glowOuter);
 
     scene.add(mesh);
     nodes.push({ mesh, data: mesh.userData });
@@ -720,19 +802,21 @@ export function createPalaceScene(container, options = {}) {
 
       entry.presentationOpacity = Math.min(1, opacityMult);
       mat.opacity = Math.min(1, baseOpacity * opacityMult);
-      mat.emissiveIntensity = baseEmissive * emissiveMult;
+      const targetEmissive = baseEmissive * emissiveMult;
+      mat.emissiveIntensity = targetEmissive;
+      entry.presentationEmissive = targetEmissive;
 
       const emphasis =
         id === sid
           ? pin
-            ? 1.12
-            : 1.08
+            ? 1.18
+            : 1.14
           : id === hid
             ? sid && id !== sid
-              ? 1.04
-              : 1.06
+              ? 1.05
+              : 1.08
             : nbrFocus?.has(id)
-              ? 1.028
+              ? 1.035
               : 1;
       const dimScale = match ? 1 : 0.88;
       mesh.scale.setScalar(emphasis * dimScale * routeScale);
@@ -757,135 +841,154 @@ export function createPalaceScene(container, options = {}) {
     }
   }
 
+  /**
+   * Deterministic pseudo-noise from a string key — used so that each wing
+   * gets a stable organic offset between runs (cognitive landmarks don't
+   * wander every frame).
+   */
+  function stableNoise(key, seed = 0) {
+    let h = seed | 0;
+    const s = String(key);
+    for (let i = 0; i < s.length; i += 1) h = (h * 131 + s.charCodeAt(i)) | 0;
+    h = (h ^ (h >>> 13)) * 1274126177;
+    return ((h & 0x7fffffff) / 0x7fffffff) * 2 - 1;
+  }
+
+  /**
+   * Wings are cognitive regions. Instead of a flat ring we place them on a
+   * shallow dome with per-wing vertical drift — still readable top-down
+   * but with real depth cues. No center "palace core" sphere; the wings
+   * hold the composition on their own.
+   */
   function renderWingsView() {
     const wingNames = Object.keys(wingsData);
     if (!wingNames.length) return;
 
     const angleStep = (Math.PI * 2) / wingNames.length;
     const radius = CONFIG.spacing.wingSeparation / 2;
+    const drift = CONFIG.spacing.verticalDrift;
 
     wingNames.forEach((wing, i) => {
-      const angle = i * angleStep;
-      const x = Math.cos(angle) * radius;
-      const z = Math.sin(angle) * radius;
+      const angle = i * angleStep + stableNoise(wing, 3) * 0.12;
+      const jitter = 1 + stableNoise(wing, 7) * 0.08;
+      const x = Math.cos(angle) * radius * jitter;
+      const z = Math.sin(angle) * radius * jitter;
+      const y = stableNoise(wing, 11) * drift;
       const drawerCount = wingsData[wing] || 1;
       const size = THREE.MathUtils.mapLinear(drawerCount, 1, 200, CONFIG.nodeSizes.wingMin, CONFIG.nodeSizes.wingMax);
-      createWingNode(wing, x, 0, z, size);
-      addLabelForNode(`wing:${wing}`, wing, x, 0, z, '#e2e8f0');
+      createWingNode(wing, x, y, z, size);
+      addLabelForNode(`wing:${wing}`, wing, x, y, z, '#e8edf0');
     });
 
-    const centerGeometry = new THREE.SphereGeometry(1.1, 20, 20);
-    const centerMaterial = new THREE.MeshStandardMaterial({
-      color: CONFIG.accent.center,
-      emissive: 0x334155,
-      emissiveIntensity: 0.4,
-      metalness: 0.3,
-      roughness: 0.4,
-      transparent: true,
-      opacity: 0.55,
-    });
-    const centerNode = new THREE.Mesh(centerGeometry, centerMaterial);
-    scene.add(centerNode);
-    nodes.push({ mesh: centerNode, data: { name: 'Palace core', type: 'center' } });
-
-    wingNames.forEach((wing, i) => {
-      const angle = i * angleStep;
-      const x = Math.cos(angle) * radius;
-      const z = Math.sin(angle) * radius;
-      createLink([0, 0, 0], [x, 0, z], CONFIG.accent.linkWing, 0.22, {
-        fromId: null,
-        toId: `wing:${wing}`,
-        baseOpacity: 0.22,
+    // Soft neighbor tethers between adjacent wings on the dome — gives the
+    // composition cohesion without inventing a central hub.
+    for (let i = 0; i < wingNames.length; i += 1) {
+      const a = wingNames[i];
+      const b = wingNames[(i + 1) % wingNames.length];
+      const na = nodeRegistry.get(`wing:${a}`);
+      const nb = nodeRegistry.get(`wing:${b}`);
+      if (!na || !nb) continue;
+      const pa = na.mesh.position;
+      const pb = nb.mesh.position;
+      createLink([pa.x, pa.y, pa.z], [pb.x, pb.y, pb.z], CONFIG.accent.linkWing, 0.14, {
+        fromId: `wing:${a}`,
+        toId: `wing:${b}`,
+        baseOpacity: 0.14,
       });
-    });
+    }
 
-    tweenCamera(new THREE.Vector3(0, 36, 88), new THREE.Vector3(0, 0, 0));
+    tweenCamera(new THREE.Vector3(0, 34, 92), new THREE.Vector3(0, 0, 0));
   }
 
-  /** Single-wing focus: wing at center, rooms in orbit. */
+  /** Focused wing: parent loci at origin, rooms drift in a 3D shell. */
   function renderRoomsViewFocused(focusWing) {
     const rooms = roomsData[focusWing] || [];
     const wingSize = CONFIG.nodeSizes.wingMin + 1.2;
     createWingNode(focusWing, 0, 0, 0, wingSize);
-    addLabelForNode(`wing:${focusWing}`, focusWing, 0, 0, 0, '#e2e8f0');
+    addLabelForNode(`wing:${focusWing}`, focusWing, 0, 0, 0, '#e8edf0');
 
     const roomRadius = CONFIG.spacing.roomRadius;
     const n = Math.max(rooms.length, 1);
     const step = (Math.PI * 2) / n;
 
     rooms.forEach((room, i) => {
-      const ang = i * step;
-      const rx = Math.cos(ang) * roomRadius;
-      const rz = Math.sin(ang) * roomRadius;
+      const key = `${focusWing}:${room.name}`;
+      const ang = i * step + stableNoise(key, 5) * 0.09;
+      const rJ = 1 + stableNoise(key, 9) * 0.1;
+      const rx = Math.cos(ang) * roomRadius * rJ;
+      const rz = Math.sin(ang) * roomRadius * rJ;
+      const ry = stableNoise(key, 13) * 3.5;
       const size = THREE.MathUtils.mapLinear(room.drawers || 1, 1, 80, CONFIG.nodeSizes.roomMin, CONFIG.nodeSizes.roomMax);
-      createRoomNode(room.name, focusWing, rx, 0, rz, size);
-      createLink([0, 0, 0], [rx, 0, rz], CONFIG.accent.linkWing, 0.22, {
+      createRoomNode(room.name, focusWing, rx, ry, rz, size);
+      createLink([0, 0, 0], [rx, ry, rz], CONFIG.accent.linkWing, 0.2, {
         fromId: `wing:${focusWing}`,
         toId: `room:${focusWing}:${room.name}`,
-        baseOpacity: 0.22,
+        baseOpacity: 0.2,
       });
-      addLabelForNode(`room:${focusWing}:${room.name}`, room.name, rx, 0, rz, '#94a3b8');
+      addLabelForNode(`room:${focusWing}:${room.name}`, room.name, rx, ry, rz, '#aab4c3');
     });
 
-    tweenCamera(new THREE.Vector3(0, 38, 72), new THREE.Vector3(0, 0, 0));
+    tweenCamera(new THREE.Vector3(0, 36, 74), new THREE.Vector3(0, 0, 0));
   }
 
+  /** Overview: all wings as regions, each with its room cluster. */
   function renderRoomsViewAll() {
     const wingNames = Object.keys(roomsData);
     if (!wingNames.length) return;
 
     const wingAngleStep = (Math.PI * 2) / wingNames.length;
     const wingRadius = CONFIG.spacing.wingSeparation / 2;
+    const drift = CONFIG.spacing.verticalDrift;
 
     wingNames.forEach((wing, wingIdx) => {
-      const wingAngle = wingIdx * wingAngleStep;
-      const wingX = Math.cos(wingAngle) * wingRadius;
-      const wingZ = Math.sin(wingAngle) * wingRadius;
+      const wingAngle = wingIdx * wingAngleStep + stableNoise(wing, 3) * 0.1;
+      const wJ = 1 + stableNoise(wing, 7) * 0.07;
+      const wingX = Math.cos(wingAngle) * wingRadius * wJ;
+      const wingZ = Math.sin(wingAngle) * wingRadius * wJ;
+      const wingY = stableNoise(wing, 11) * drift;
 
-      createWingNode(wing, wingX, 0, wingZ, CONFIG.nodeSizes.wingMin);
-      addLabelForNode(`wing:${wing}`, wing, wingX, 0, wingZ, '#cbd5e1');
+      createWingNode(wing, wingX, wingY, wingZ, CONFIG.nodeSizes.wingMin);
+      addLabelForNode(`wing:${wing}`, wing, wingX, wingY, wingZ, '#d6dde6');
 
       const rooms = roomsData[wing] || [];
       const roomAngleStep = (Math.PI * 2) / Math.max(rooms.length, 1);
       const roomRadius = CONFIG.spacing.roomRadius;
 
       rooms.forEach((room, roomIdx) => {
-        const roomAngle = wingAngle + roomIdx * roomAngleStep;
-        const roomX = wingX + Math.cos(roomAngle) * roomRadius;
-        const roomZ = wingZ + Math.sin(roomAngle) * roomRadius;
+        const key = `${wing}:${room.name}`;
+        const roomAngle = wingAngle + roomIdx * roomAngleStep + stableNoise(key, 5) * 0.12;
+        const rJ = 1 + stableNoise(key, 9) * 0.1;
+        const roomX = wingX + Math.cos(roomAngle) * roomRadius * rJ;
+        const roomZ = wingZ + Math.sin(roomAngle) * roomRadius * rJ;
+        const roomY = wingY + stableNoise(key, 13) * 2.8;
         const size = THREE.MathUtils.mapLinear(room.drawers || 1, 1, 80, CONFIG.nodeSizes.roomMin, CONFIG.nodeSizes.roomMax);
-        createRoomNode(room.name, wing, roomX, 0, roomZ, size);
-        createLink([wingX, 0, wingZ], [roomX, 0, roomZ], CONFIG.accent.linkWing, 0.18, {
+        createRoomNode(room.name, wing, roomX, roomY, roomZ, size);
+        createLink([wingX, wingY, wingZ], [roomX, roomY, roomZ], CONFIG.accent.linkWing, 0.16, {
           fromId: `wing:${wing}`,
           toId: `room:${wing}:${room.name}`,
-          baseOpacity: 0.18,
+          baseOpacity: 0.16,
         });
-        addLabelForNode(`room:${wing}:${room.name}`, room.name, roomX, 0, roomZ, '#94a3b8');
+        addLabelForNode(`room:${wing}:${room.name}`, room.name, roomX, roomY, roomZ, '#aab4c3');
       });
     });
 
-    const centerGeometry = new THREE.SphereGeometry(1.1, 20, 20);
-    const centerMaterial = new THREE.MeshStandardMaterial({
-      color: CONFIG.accent.center,
-      emissive: 0x334155,
-      emissiveIntensity: 0.35,
-      metalness: 0.25,
-      roughness: 0.45,
-      transparent: true,
-      opacity: 0.5,
-    });
-    const centerNode = new THREE.Mesh(centerGeometry, centerMaterial);
-    scene.add(centerNode);
-    nodes.push({ mesh: centerNode, data: { name: 'Palace core', type: 'center' } });
-
-    wingNames.forEach((wing, i) => {
-      const angle = i * wingAngleStep;
-      createLink([0, 0, 0], [Math.cos(angle) * wingRadius, 0, Math.sin(angle) * wingRadius], CONFIG.accent.linkWing, 0.2, {
-        baseOpacity: 0.2,
+    // Sparse dome tethers between neighboring wings.
+    for (let i = 0; i < wingNames.length; i += 1) {
+      const a = wingNames[i];
+      const b = wingNames[(i + 1) % wingNames.length];
+      const na = nodeRegistry.get(`wing:${a}`);
+      const nb = nodeRegistry.get(`wing:${b}`);
+      if (!na || !nb) continue;
+      const pa = na.mesh.position;
+      const pb = nb.mesh.position;
+      createLink([pa.x, pa.y, pa.z], [pb.x, pb.y, pb.z], CONFIG.accent.linkWing, 0.1, {
+        fromId: `wing:${a}`,
+        toId: `wing:${b}`,
+        baseOpacity: 0.1,
       });
-    });
+    }
 
-    tweenCamera(new THREE.Vector3(0, 52, 102), new THREE.Vector3(0, 0, 0));
+    tweenCamera(new THREE.Vector3(0, 50, 108), new THREE.Vector3(0, 0, 0));
   }
 
   function renderRoomsView() {
@@ -967,8 +1070,11 @@ export function createPalaceScene(container, options = {}) {
     if (scene.fog && scene.fog.isFogExp2) {
       scene.fog.density = graphSceneMetrics.fogDensity;
     }
-    if (stars?.material) {
-      stars.material.opacity = Math.max(0.12, 0.34 - graphSceneMetrics.tier * 0.055);
+    if (stars?.userData?.innerMat) {
+      stars.userData.innerMat.opacity = Math.max(0.18, 0.38 - graphSceneMetrics.tier * 0.05);
+    }
+    if (stars?.userData?.outerMat) {
+      stars.userData.outerMat.opacity = Math.max(0.1, 0.22 - graphSceneMetrics.tier * 0.04);
     }
 
     graphLabelEntries = nodeList.map((n) => {
@@ -1067,6 +1173,17 @@ export function createPalaceScene(container, options = {}) {
   }
 
   function onPointerMove(event) {
+    pendingPointerEvent = event;
+    if (pointerRafId) return;
+    pointerRafId = requestAnimationFrame(() => {
+      pointerRafId = 0;
+      const ev = pendingPointerEvent;
+      pendingPointerEvent = null;
+      if (ev) processPointerMove(ev);
+    });
+  }
+
+  function processPointerMove(event) {
     const rect = renderer.domElement.getBoundingClientRect();
     pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
     pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
@@ -1112,7 +1229,7 @@ export function createPalaceScene(container, options = {}) {
         selectionPulseTimer = 0;
         selectionPulse = null;
         syncVisualPresentation();
-      }, 190);
+      }, 260);
     }
     callbacks.onClick(data);
   }
@@ -1121,15 +1238,25 @@ export function createPalaceScene(container, options = {}) {
     animationId = requestAnimationFrame(animate);
     controls.update();
 
+    // Calm breathing: subtle emissive pulse + slow rotation. No vertical
+    // bob — it was reading as jitter and fought depth cues. Positions are
+    // now stable; motion lives in light.
     const t = Date.now() * 0.001;
-    const bob = prefersReducedMotion ? 0 : 0.42 * motionIntensity;
-    const rot = prefersReducedMotion ? 0 : 0.006 * motionIntensity;
+    const pulseAmp = prefersReducedMotion ? 0 : 0.06 * motionIntensity;
+    const rot = prefersReducedMotion ? 0 : 0.004 * motionIntensity;
 
     nodes.forEach((node, i) => {
       if (!node.data || node.data.type === 'center') return;
-      const offset = i * 0.37;
-      const base = node.mesh.userData._baseY ?? 0;
-      node.mesh.position.y = base + Math.sin(t * 0.9 + offset) * bob;
+      const offset = i * 0.31;
+      const mat = node.mesh.material;
+      if (mat && typeof mat.emissiveIntensity === 'number') {
+        const entry = nodeRegistry.get(node.data.id);
+        if (entry) {
+          const target = entry.presentationEmissive ?? entry.baseEmissive;
+          const breath = 1 + Math.sin(t * 0.55 + offset) * pulseAmp;
+          mat.emissiveIntensity = target * breath;
+        }
+      }
       node.mesh.rotation.y += rot;
     });
 
@@ -1162,34 +1289,39 @@ export function createPalaceScene(container, options = {}) {
 
   function init() {
     scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x0b0f18);
-    scene.fog = new THREE.FogExp2(0x0b0f18, 0.0026);
+    scene.background = new THREE.Color(CONFIG.bg.deep);
+    scene.fog = new THREE.FogExp2(CONFIG.bg.deep, CONFIG.bg.fogDensity);
 
-    camera = new THREE.PerspectiveCamera(58, container.clientWidth / container.clientHeight, 0.1, 1200);
-    camera.position.set(0, 34, 90);
+    camera = new THREE.PerspectiveCamera(54, container.clientWidth / container.clientHeight, 0.1, 1400);
+    camera.position.set(0, 32, 94);
 
     renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' });
     renderer.setSize(container.clientWidth, container.clientHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.05;
+    renderer.toneMappingExposure = 1.02;
     container.appendChild(renderer.domElement);
 
     controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
-    controls.dampingFactor = 0.055;
-    controls.autoRotate = true;
-    controls.autoRotateSpeed = 0.35;
-    controls.maxPolarAngle = Math.PI * 0.495;
+    controls.dampingFactor = 0.06;
+    controls.autoRotate = false;
+    controls.autoRotateSpeed = 0.2;
+    controls.minDistance = 8;
+    controls.maxDistance = 420;
+    controls.maxPolarAngle = Math.PI * 0.52;
 
-    const hemi = new THREE.HemisphereLight(0x64748b, 0x0f172a, 0.85);
+    // Warm-cool two-tone lighting suggests cognitive depth without pushing
+    // hard blue. Hemi is ambient ground-vs-sky; key is warm (thought side),
+    // fill is cool (memory side).
+    const hemi = new THREE.HemisphereLight(0x6d7b93, 0x0a0f1a, 0.78);
     scene.add(hemi);
-    const key = new THREE.DirectionalLight(0xa5b4fc, 1.1);
-    key.position.set(20, 40, 24);
+    const key = new THREE.DirectionalLight(0xf0d9b5, 0.95);
+    key.position.set(24, 42, 26);
     scene.add(key);
-    const fill = new THREE.DirectionalLight(0x38bdf8, 0.35);
-    fill.position.set(-24, 12, -18);
+    const fill = new THREE.DirectionalLight(0x6aa0ff, 0.42);
+    fill.position.set(-28, 14, -20);
     scene.add(fill);
 
     createStars();
@@ -1206,18 +1338,31 @@ export function createPalaceScene(container, options = {}) {
     renderer.domElement.addEventListener('pointermove', onPointerMove);
     renderer.domElement.addEventListener('click', onPointerClick);
     renderer.domElement.addEventListener('pointerleave', onPointerLeave);
-    window.addEventListener('resize', resize);
+    window.addEventListener('resize', scheduleResize);
+    if (typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(scheduleResize);
+      resizeObserver.observe(container);
+    }
 
     animate();
+  }
+
+  function scheduleResize() {
+    if (resizeRafId) return;
+    resizeRafId = requestAnimationFrame(() => {
+      resizeRafId = 0;
+      resize();
+    });
   }
 
   function resize() {
     if (!camera || !renderer) return;
     const w = container.clientWidth;
     const h = container.clientHeight;
+    if (w === 0 || h === 0) return;
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
-    renderer.setSize(w, h);
+    renderer.setSize(w, h, false);
   }
 
   function setData(payload) {
@@ -1231,7 +1376,7 @@ export function createPalaceScene(container, options = {}) {
       tweenCamera(graphDefaultCamera.position.clone(), graphDefaultCamera.target.clone());
       return;
     }
-    tweenCamera(new THREE.Vector3(0, 34, 90), new THREE.Vector3(0, 0, 0));
+    tweenCamera(new THREE.Vector3(0, 32, 94), new THREE.Vector3(0, 0, 0));
   }
 
   function centerOnNodeId(nodeId) {
@@ -1322,7 +1467,14 @@ export function createPalaceScene(container, options = {}) {
   function dispose() {
     cancelAnimationFrame(animationId);
     if (cameraTween) cancelAnimationFrame(cameraTween);
-    window.removeEventListener('resize', resize);
+    if (pointerRafId) cancelAnimationFrame(pointerRafId);
+    if (resizeRafId) cancelAnimationFrame(resizeRafId);
+    pendingPointerEvent = null;
+    if (resizeObserver) {
+      resizeObserver.disconnect();
+      resizeObserver = null;
+    }
+    window.removeEventListener('resize', scheduleResize);
     if (renderer?.domElement) {
       renderer.domElement.removeEventListener('pointermove', onPointerMove);
       renderer.domElement.removeEventListener('click', onPointerClick);
@@ -1333,8 +1485,10 @@ export function createPalaceScene(container, options = {}) {
     selectionPulseTimer = 0;
     if (stars) {
       scene.remove(stars);
-      stars.geometry.dispose();
-      stars.material.dispose();
+      stars.traverse((child) => {
+        if (child.geometry) child.geometry.dispose();
+        if (child.material) child.material.dispose();
+      });
     }
     renderer?.dispose();
     if (renderer?.domElement?.parentNode) renderer.domElement.parentNode.removeChild(renderer.domElement);

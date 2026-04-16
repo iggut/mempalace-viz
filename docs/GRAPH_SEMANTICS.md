@@ -1,6 +1,6 @@
 # Canonical graph semantics (MemPalace viz)
 
-**At a glance:** The 3D graph shows **explicit** MemPalace MCP/API edges (stock: **tunnels** — same room name across wings). The viewer **does not** infer or fabricate links. **Disconnected** components are valid. **KG** statistics are a **different** surface than this palace graph. **Stock MCP** does not support persisting arbitrary room-to-room graph edits. See root **`README.md`** (Graph truth model) and **`MCP_CONNECTION_CAPABILITIES.md`**.
+**At a glance:** The 3D graph shows **explicit** MemPalace MCP/API edges (stock: **tunnels** — same room name across wings). The viewer **does not** infer or fabricate links. **Disconnected** components are valid. **KG** statistics are a **different** surface than this palace graph. **Stock MCP** does not support persisting arbitrary room-to-room graph edits. See the root `README.md` (Graph truth model) and `MCP_CONNECTION_CAPABILITIES.md`.
 
 ## Contract version
 
