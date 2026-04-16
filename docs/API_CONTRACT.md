@@ -125,6 +125,25 @@ Stock MemPalace returns a **JSON array** of tunnel room rows. The Python impleme
 
 ---
 
+## Official MCP passthrough (read + duplicate check)
+
+These routes spawn the same Python MCP server as other `/api/*` calls. Shapes match **`tools/call`** results (JSON in `content[0].text`), not a second invented schema.
+
+| Method | Path | MCP tool | Parameters |
+| --- | --- | --- | --- |
+| `GET` | `/api/mcp-tools` | *(JSON-RPC `tools/list`)* | — |
+| `GET` | `/api/search` | `mempalace_search` | `query` (required), `limit`, `wing`, `room`, `context` |
+| `GET` | `/api/traverse` | `mempalace_traverse` | `start_room` (required), `max_hops` |
+| `GET` | `/api/kg-query` | `mempalace_kg_query` | `entity` (required), `as_of`, `direction` |
+| `GET` | `/api/kg-timeline` | `mempalace_kg_timeline` | optional `entity` |
+| `GET` | `/api/aaak-spec` | `mempalace_get_aaak_spec` | — |
+| `GET` | `/api/diary` | `mempalace_diary_read` | `agent`, `last_n` |
+| `POST` | `/api/check-duplicate` | `mempalace_check_duplicate` | JSON body `{ content, threshold? }` |
+
+CORS allows `POST` for `/api/check-duplicate` only (alongside `GET` / `OPTIONS`).
+
+---
+
 ## Migration notes
 
 ### Older clients

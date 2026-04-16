@@ -52,6 +52,28 @@ test('buildCanonicalEdgesFromTunnels emits resolved cross-wing edges', () => {
   assert.equal(legacy[0].to, makeRoomId('wing_b', 'shared'));
 });
 
+test('buildCanonicalEdgesFromTunnels copies halls and recent into edge metadata', () => {
+  const taxonomy = {
+    wing_a: { shared: 2 },
+    wing_b: { shared: 1 },
+  };
+  const tunnels = [
+    {
+      room: 'shared',
+      wings: ['wing_a', 'wing_b'],
+      count: 4,
+      halls: ['north'],
+      recent: '2026-04-01',
+    },
+  ];
+  const { edgesResolved } = buildCanonicalEdgesFromTunnels(tunnels, taxonomy);
+  assert.equal(edgesResolved.length, 1);
+  const m = edgesResolved[0].metadata || {};
+  assert.deepEqual(m.halls, ['north']);
+  assert.equal(m.recent, '2026-04-01');
+  assert.equal(m.drawerCountInTunnelRoom, 4);
+});
+
 test('buildCanonicalEdgesFromTunnels marks missing taxonomy as unresolved', () => {
   const taxonomy = { wing_a: { only_here: 1 } };
   const tunnels = [{ room: 'shared', wings: ['wing_a', 'wing_b'], count: 1 }];

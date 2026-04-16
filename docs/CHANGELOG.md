@@ -4,6 +4,13 @@ Notable product changes. Newest first. Semver-ish; pre-1.0.
 
 ## Unreleased — release acceptance pass
 
+**Official MCP surface (product + bridge)**
+
+- HTTP bridge: generic JSON-RPC helper + **`GET /api/mcp-tools`** (`tools/list`).
+- Passthrough reads: **`/api/search`**, **`/api/traverse`**, **`/api/kg-query`**, **`/api/kg-timeline`**, **`/api/aaak-spec`**, **`/api/diary`**; **`POST /api/check-duplicate`**.
+- UI: semantic drawer search (left), Memory & knowledge panel (KG / diary / AAAK / duplicate), room inspector **tunnel metadata** (`halls` / `recent` from `find_tunnels`) + **Palace traverse** (`mempalace_traverse`). Footer shows live MCP tool count when available.
+- Scene: subtle **tunnel edge vitality** animation (opacity wobble; respects reduced motion).
+
 **MCP conformance (docs + copy)**
 
 - Documented the official **tool coverage matrix** and intentional out-of-scope tools in `docs/MCP_CONNECTION_CAPABILITIES.md` (aligned with stock `mempalace/mcp_server.py`).

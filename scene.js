@@ -679,10 +679,12 @@ export function createPalaceScene(container, options = {}) {
       if (!searchOk) {
         line.visible = true;
         line.material.opacity = baseOpacity * 0.12;
+        if (isGraphRelationship) line.userData.opacityAnimBase = baseOpacity * 0.12;
         return;
       }
       if (isGraphRelationship && !typeOk) {
         line.visible = false;
+        line.userData.opacityAnimBase = null;
         return;
       }
       line.visible = true;
@@ -731,6 +733,7 @@ export function createPalaceScene(container, options = {}) {
       }
       line.material.opacity = op;
       if (isGraphRelationship) {
+        line.userData.opacityAnimBase = op;
         if (fromId) visibleGraphIncidents.set(fromId, (visibleGraphIncidents.get(fromId) || 0) + 1);
         if (toId) visibleGraphIncidents.set(toId, (visibleGraphIncidents.get(toId) || 0) + 1);
       }
@@ -1282,6 +1285,18 @@ export function createPalaceScene(container, options = {}) {
         mat.opacity = Math.min(1, entry.baseOpacity * (entry.presentationOpacity ?? 1) * distMult);
       });
       applyGraphLabels();
+    }
+
+    if (currentView === 'graph' && !prefersReducedMotion) {
+      const lt = Date.now() * 0.001;
+      linkObjects.forEach((lo) => {
+        if (!lo.isGraphRelationship || !lo.line?.material || !lo.line.visible) return;
+        const base = lo.line.userData.opacityAnimBase;
+        if (base == null) return;
+        const phase = (String(lo.fromId) + String(lo.toId)).length * 0.07;
+        const wobble = 1 + Math.sin(lt * 0.85 + phase) * 0.042;
+        lo.line.material.opacity = Math.min(1, base * wobble);
+      });
     }
 
     renderer.render(scene, camera);

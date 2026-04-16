@@ -27,7 +27,10 @@ Short regression pass before releases or after copy / routing / graph changes. T
 
 ## 4. Search / route / navigation
 
-- [ ] Search focuses the 3D scene as expected.
+- [ ] **Structure** search (`/`) focuses the 3D scene as expected.
+- [ ] **Semantic** search returns drawer hits; clicking a result jumps to Graph when wing/room exists in taxonomy.
+- [ ] **Memory lens** (`GET /api/kg-query`, diary, AAAK, duplicate-check) loads without breaking the scene; KG is not drawn as palace edges.
+- [ ] Room inspector: **Palace traverse** returns JSON; **Tunnel metadata** shows halls/recent when MCP supplied them.
 - [ ] Route uses only visible explicit edges (respects relationship filters).
 - [ ] Route stepping / history coherent when neighbors are missing.
 - [ ] Canvas stays primary; panels don't steal the viewport.
@@ -35,7 +38,7 @@ Short regression pass before releases or after copy / routing / graph changes. T
 ## 5. Visualization feel
 
 - [ ] Wings / rooms render with organic drift, not a perfectly flat ring.
-- [ ] Graph edges are curved (bezier arcs), not straight lines.
+- [ ] Graph edges are curved (bezier arcs), not straight lines; tunnel links have a subtle opacity pulse (unless reduced motion).
 - [ ] No "palace core" sphere at origin.
 - [ ] Breathing emissive pulse is subtle; no jittery vertical bob.
 - [ ] Auto-rotate is off by default.

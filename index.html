@@ -72,6 +72,23 @@
                 aria-describedby="search-mode-hint graph-search-first-hint graph-search-panel"
                 aria-controls="graph-search-panel"
               />
+              <div class="semantic-search-block" aria-label="Semantic drawer search via MemPalace MCP">
+                <label class="search-label search-label--secondary" for="semantic-search">Search drawers (semantic)</label>
+                <input
+                  type="search"
+                  id="semantic-search"
+                  class="search-input search-input--semantic"
+                  placeholder="Keywords or question — official mempalace_search…"
+                  autocomplete="off"
+                  enterkeyhint="search"
+                  aria-describedby="semantic-search-hint"
+                />
+                <p id="semantic-search-hint" class="hint-row semantic-search-hint">
+                  Uses <code>mempalace_search</code> on your palace. Click a result to fly to that wing/room in Graph.
+                </p>
+                <div id="semantic-search-status" class="semantic-search-status" role="status" aria-live="polite"></div>
+                <ul id="semantic-search-results" class="semantic-search-results" aria-label="Semantic search results"></ul>
+              </div>
               <p id="graph-search-first-hint" class="graph-search-first-hint" hidden>
                 In Graph view, matches list below — <kbd>Enter</kbd> to frame, <kbd>Alt+N</kbd> /
                 <kbd>Alt+P</kbd> to step.
@@ -182,6 +199,58 @@
             </div>
             <div id="breadcrumb" class="breadcrumb"></div>
             <div id="inspect-body" role="region" aria-label="Inspector details" tabindex="-1"></div>
+            <details class="memory-lens" id="memory-lens">
+              <summary class="memory-lens__summary">Memory &amp; knowledge (official MCP)</summary>
+              <div class="memory-lens__body">
+                <p class="inspect-muted inspect-muted--tight memory-lens__lead">
+                  Read-only views into the same tools as the MemPalace MCP server. Palace tunnel topology stays on the canvas;
+                  the knowledge graph and diary are separate layers.
+                </p>
+                <section class="memory-lens__section" aria-label="Knowledge graph query">
+                  <h4 class="memory-lens__h">Knowledge graph</h4>
+                  <div class="memory-lens__row">
+                    <input
+                      type="text"
+                      id="kg-entity-input"
+                      class="memory-lens__input"
+                      placeholder="Entity name"
+                      autocomplete="off"
+                      aria-label="KG entity"
+                    />
+                    <button type="button" class="btn btn--ghost btn--sm" id="btn-kg-query">Facts</button>
+                    <button type="button" class="btn btn--ghost btn--sm" id="btn-kg-timeline">Timeline</button>
+                  </div>
+                  <pre id="kg-output" class="memory-lens__pre" aria-live="polite"></pre>
+                </section>
+                <section class="memory-lens__section" aria-label="Agent diary">
+                  <h4 class="memory-lens__h">Diary</h4>
+                  <div class="memory-lens__row">
+                    <input
+                      type="text"
+                      id="diary-agent-input"
+                      class="memory-lens__input"
+                      placeholder="Agent name (default: viewer)"
+                      autocomplete="off"
+                      aria-label="Diary agent name"
+                    />
+                    <button type="button" class="btn btn--ghost btn--sm" id="btn-diary-refresh">Load</button>
+                  </div>
+                  <pre id="diary-output" class="memory-lens__pre" aria-live="polite"></pre>
+                </section>
+                <section class="memory-lens__section" aria-label="AAAK specification">
+                  <h4 class="memory-lens__h">AAAK spec</h4>
+                  <button type="button" class="btn btn--ghost btn--sm" id="btn-aaak-spec">Open compressed-memory spec</button>
+                  <pre id="aaak-output" class="memory-lens__pre memory-lens__pre--collapsed" aria-live="polite" hidden></pre>
+                </section>
+                <section class="memory-lens__section" aria-label="Duplicate check">
+                  <h4 class="memory-lens__h">Duplicate check</h4>
+                  <p class="inspect-muted inspect-muted--tight">Optional filing aid — <code>mempalace_check_duplicate</code></p>
+                  <textarea id="dup-check-input" class="memory-lens__textarea" rows="3" placeholder="Paste content to check…" aria-label="Content to check for duplicates"></textarea>
+                  <button type="button" class="btn btn--ghost btn--sm" id="btn-dup-check">Check</button>
+                  <pre id="dup-output" class="memory-lens__pre" aria-live="polite"></pre>
+                </section>
+              </div>
+            </details>
           </div>
         </aside>
       </div>
@@ -206,8 +275,9 @@
             Shortcuts
           </button>
           <span class="hint-row footer-shortcuts-hint" style="margin: 0">
-            <kbd>1</kbd>–<kbd>3</kbd> view · <kbd>R</kbd> camera · <kbd>/</kbd> search · <kbd>L</kbd> labels ·
-            <kbd>Esc</kbd> clear · graph: <kbd>[</kbd> <kbd>]</kbd> <kbd>U</kbd> · find: <kbd>Alt+N</kbd> <kbd>Alt+P</kbd>
+            <kbd>1</kbd>–<kbd>3</kbd> view · <kbd>R</kbd> camera · <kbd>/</kbd> structure · <kbd>⌘/Ctrl K</kbd> semantic ·
+            <kbd>L</kbd> labels · <kbd>Esc</kbd> clear · graph: <kbd>[</kbd> <kbd>]</kbd> <kbd>U</kbd> · find:
+            <kbd>Alt+N</kbd> <kbd>Alt+P</kbd>
           </span>
         </div>
       </footer>
@@ -235,7 +305,7 @@
         <ul class="help-list" id="help-shortcut-list">
           <li><kbd>1</kbd> / <kbd>2</kbd> / <kbd>3</kbd> — Switch Wings / Rooms / Graph view</li>
           <li><kbd>R</kbd> — Reset camera</li>
-          <li><kbd>/</kbd> — Focus search</li>
+          <li><kbd>/</kbd> — Focus structure search · <kbd>Ctrl</kbd>+<kbd>K</kbd> / <kbd>⌘</kbd>+<kbd>K</kbd> — semantic drawer search</li>
           <li><kbd>L</kbd> — Toggle labels</li>
           <li><kbd>Esc</kbd> — Close this dialog; then clear search; then unpin; then clear selection</li>
           <li><strong>Search</strong> — type a wing or room fragment; <kbd>Enter</kbd> frames in Graph · <kbd>Alt+N</kbd> / <kbd>Alt+P</kbd> next/prev match</li>

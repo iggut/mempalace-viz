@@ -1595,3 +1595,176 @@ kbd {
     flex-direction: column;
   }
 }
+
+/* —— Semantic search (official mempalace_search) —— */
+.semantic-search-block {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.search-label--secondary {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+}
+
+.search-input--semantic {
+  margin-top: 4px;
+}
+
+.semantic-search-hint {
+  margin-top: 6px;
+  font-size: 0.72rem;
+}
+
+.semantic-search-hint code {
+  font-size: 0.68rem;
+}
+
+.semantic-search-status {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 6px;
+  min-height: 1em;
+}
+
+.semantic-search-results {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.semantic-hit {
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text);
+  cursor: pointer;
+  transition:
+    border-color var(--transition),
+    background var(--transition);
+}
+
+.semantic-hit:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-muted);
+}
+
+.semantic-hit__title {
+  display: block;
+  font-weight: 600;
+  font-size: 0.8rem;
+}
+
+.semantic-hit__meta {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--accent);
+}
+
+.semantic-hit__snippet {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-top: 4px;
+  line-height: 1.35;
+}
+
+/* —— Memory lens: KG / diary / AAAK / duplicate check —— */
+.memory-lens {
+  margin-top: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-surface);
+  padding: 0.5rem 0.75rem;
+}
+
+.memory-lens__summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  list-style: none;
+}
+
+.memory-lens__summary::-webkit-details-marker {
+  display: none;
+}
+
+.memory-lens__body {
+  padding-top: 10px;
+}
+
+.memory-lens__lead {
+  font-size: 0.72rem;
+  margin-bottom: 10px;
+}
+
+.memory-lens__section {
+  margin-bottom: 12px;
+}
+
+.memory-lens__h {
+  margin: 0 0 6px;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+}
+
+.memory-lens__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.memory-lens__input {
+  flex: 1;
+  min-width: 120px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-deep);
+  color: var(--text);
+  font-size: 0.78rem;
+}
+
+.memory-lens__textarea {
+  width: 100%;
+  margin-top: 6px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-deep);
+  color: var(--text);
+  font-size: 0.78rem;
+  resize: vertical;
+}
+
+.memory-lens__pre {
+  margin: 8px 0 0;
+  padding: 8px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  font-size: 0.68rem;
+  line-height: 1.35;
+  max-height: 180px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.memory-lens__pre--compact {
+  max-height: 140px;
+  font-size: 0.65rem;
+}

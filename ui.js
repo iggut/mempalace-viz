@@ -8,6 +8,14 @@ import {
   roomExists,
   getPalaceCanonicalEdgesForView,
   getPalaceLegacyGraphEdgesForView,
+  fetchSemanticSearch,
+  fetchMcpToolsList,
+  fetchPalaceTraverse,
+  fetchKgQuery,
+  fetchKgTimeline,
+  fetchAaakSpec,
+  fetchDiaryRead,
+  fetchCheckDuplicate,
 } from './api.js';
 import { makeRoomId } from './canonical.js';
 import { createPalaceScene, wingColorFor } from './scene.js';
@@ -130,6 +138,13 @@ let graphSearchResultIndex = 0;
 /** False until the first jump to a result for the current query string (trimmed). */
 let graphSearchFirstApplyDone = false;
 let graphSearchLastQueryKey = '';
+
+/** @type {Record<string, unknown>} Cached <code>mempalace_traverse</code> JSON by room name */
+let traversePreviewByRoom = {};
+
+let semanticSearchDebounce = null;
+/** @type {Array<{ wing: string, room: string, similarity: number, preview: string }>} */
+let semanticSearchHits = [];
 
 /**
  * Graph route (room → room) — 3D path highlight + inspector context.
@@ -1180,6 +1195,39 @@ function renderRoomInspector(ctx, wingName, roomName, _mode) {
       ? 'Acts as a bridge: at least one cross-wing tunnel edge is incident to this room.'
       : 'No bridge pattern detected (no cross-wing edges on this room).';
 
+  const tunnelMeta = collectTunnelRowMeta(roomKey, edgesResolved);
+  const hasTunnelMeta =
+    tunnelMeta.halls.length > 0 || !!tunnelMeta.recent || tunnelMeta.drawerCount != null;
+  const tunnelMetaInner = hasTunnelMeta
+    ? `
+        <p class="inspect-micro">Tunnel row metadata (mempalace_find_tunnels)</p>
+        <div class="meta-block">
+          ${tunnelMeta.halls.length ? metaRow('Hall metadata (drawers)', escapeHtml(tunnelMeta.halls.join(', '))) : ''}
+          ${tunnelMeta.recent ? metaRow('Most recent drawer date', escapeHtml(tunnelMeta.recent)) : ''}
+          ${tunnelMeta.drawerCount != null ? metaRow('Drawers in this room name', formatNum(tunnelMeta.drawerCount)) : ''}
+        </div>
+        <p class="inspect-muted inspect-muted--tight">Hall fields come from drawer metadata when present; rendered edges still come only from tunnel discovery + taxonomy.</p>`
+    : '';
+
+  const traverseBlock = inspectSection(
+    'Palace traverse (MCP)',
+    `<p class="inspect-muted inspect-muted--tight">Uses <code>mempalace_traverse</code> with <code>start_room</code> = <strong>${escapeHtml(
+      roomName,
+    )}</strong> (room name key in palace graph).</p>
+        <div class="btn-row" style="margin-top:8px;flex-wrap:wrap;gap:6px">
+          <button type="button" class="btn btn--ghost btn--sm" data-mcp-action="traverse-room" data-room="${escapeHtml(
+            roomName,
+          )}">Load neighbors</button>
+        </div>
+        ${
+          traversePreviewByRoom[roomName]
+            ? `<pre class="memory-lens__pre memory-lens__pre--compact">${escapeHtml(
+                JSON.stringify(traversePreviewByRoom[roomName], null, 2),
+              )}</pre>`
+            : ''
+        }`,
+  );
+
   const graphViewNote =
     appState.view === 'graph'
       ? '<p class="inspect-muted inspect-muted--tight">Graph view: layout is force-directed; tunnel metrics match the same resolved edges as Rooms/Wings.</p>'
@@ -1291,11 +1339,158 @@ function renderRoomInspector(ctx, wingName, roomName, _mode) {
         `
           : `<p class="inspect-empty">${escapeHtml(connectionsSectionNoExplicitEdgesLine())}</p>`,
       )}
+      ${hasTunnelMeta ? inspectSection('Tunnel metadata', tunnelMetaInner) : ''}
+      ${traverseBlock}
       ${inspectSection(
         'Insight',
         `<p class="insight-chip">${escapeHtml(insight.label)}</p><p class="inspect-muted inspect-muted--tight">${escapeHtml(insight.detail)}</p>`,
       )}
     </div>`;
+}
+
+async function runTraverseForRoom(roomName) {
+  try {
+    const r = await fetchPalaceTraverse(roomName, 2);
+    traversePreviewByRoom[roomName] = r;
+    renderInspector();
+  } catch (err) {
+    showToast(err?.message || String(err));
+  }
+}
+
+/** Focus graph on a semantic hit (wing + room must exist in taxonomy). */
+function semanticSearchNavigate(wing, room) {
+  closeHelpIfOpen();
+  if (!dataBundle || !wingExists(dataBundle.wingsData, wing) || !roomExists(dataBundle.roomsData, wing, room)) {
+    showToast('That result’s wing/room is not in the taxonomy snapshot — adjust MemPalace or refresh.');
+    return;
+  }
+  if (appState.view !== 'graph') {
+    applyView('graph');
+  }
+  selectRoomFromInspector(wing, room);
+}
+
+function wireSemanticSearch() {
+  const input = $('semantic-search');
+  const status = $('semantic-search-status');
+  const list = $('semantic-search-results');
+  if (!input) return;
+  input.addEventListener('input', () => {
+    clearTimeout(semanticSearchDebounce);
+    semanticSearchDebounce = setTimeout(async () => {
+      const q = input.value.trim();
+      if (q.length < 2) {
+        semanticSearchHits = [];
+        if (list) list.innerHTML = '';
+        if (status) status.textContent = '';
+        return;
+      }
+      if (status) status.textContent = 'Searching…';
+      try {
+        const res = await fetchSemanticSearch(q, { limit: 8 });
+        if (res.error) throw new Error(res.error);
+        const hits = (res.results || []).map((r) => ({
+          wing: r.wing,
+          room: r.room,
+          similarity: r.similarity,
+          preview: String(r.text || '').slice(0, 220),
+        }));
+        semanticSearchHits = hits;
+        if (list) {
+          list.innerHTML = hits
+            .map(
+              (h, i) => `
+            <li><button type="button" class="semantic-hit" data-semantic-ix="${i}">
+              <span class="semantic-hit__title">${escapeHtml(h.wing)} / ${escapeHtml(h.room)}</span>
+              <span class="semantic-hit__meta">${(Number(h.similarity) * 100).toFixed(1)}% match</span>
+              <span class="semantic-hit__snippet">${escapeHtml(h.preview)}</span>
+            </button></li>`,
+            )
+            .join('');
+        }
+        if (status) status.textContent = `${hits.length} result(s)`;
+      } catch (err) {
+        if (status) status.textContent = err?.message || String(err);
+        semanticSearchHits = [];
+        if (list) list.innerHTML = '';
+      }
+    }, 420);
+  });
+  list?.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-semantic-ix]');
+    if (!b) return;
+    const ix = Number(b.getAttribute('data-semantic-ix'));
+    const h = semanticSearchHits[ix];
+    if (!h) return;
+    semanticSearchNavigate(h.wing, h.room);
+  });
+}
+
+function wireMemoryLens() {
+  $('btn-kg-query')?.addEventListener('click', async () => {
+    const entity = $('kg-entity-input')?.value?.trim();
+    const out = $('kg-output');
+    if (!entity) {
+      if (out) out.textContent = 'Enter an entity name.';
+      return;
+    }
+    if (out) out.textContent = 'Loading…';
+    try {
+      const r = await fetchKgQuery(entity, {});
+      if (out) out.textContent = JSON.stringify(r, null, 2);
+    } catch (err) {
+      if (out) out.textContent = err?.message || String(err);
+    }
+  });
+  $('btn-kg-timeline')?.addEventListener('click', async () => {
+    const entity = $('kg-entity-input')?.value?.trim();
+    const out = $('kg-output');
+    if (out) out.textContent = 'Loading…';
+    try {
+      const r = await fetchKgTimeline(entity || undefined);
+      if (out) out.textContent = JSON.stringify(r, null, 2);
+    } catch (err) {
+      if (out) out.textContent = err?.message || String(err);
+    }
+  });
+  $('btn-diary-refresh')?.addEventListener('click', async () => {
+    const agent = $('diary-agent-input')?.value?.trim() || 'viewer';
+    const out = $('diary-output');
+    if (out) out.textContent = 'Loading…';
+    try {
+      const r = await fetchDiaryRead({ agent, last_n: 6 });
+      if (out) out.textContent = JSON.stringify(r, null, 2);
+    } catch (err) {
+      if (out) out.textContent = err?.message || String(err);
+    }
+  });
+  $('btn-aaak-spec')?.addEventListener('click', async () => {
+    const pre = $('aaak-output');
+    if (!pre) return;
+    pre.hidden = false;
+    pre.textContent = 'Loading…';
+    try {
+      const r = await fetchAaakSpec();
+      const text = typeof r?.aaak_spec === 'string' ? r.aaak_spec : JSON.stringify(r, null, 2);
+      pre.textContent = text;
+    } catch (err) {
+      pre.textContent = err?.message || String(err);
+    }
+  });
+  $('btn-dup-check')?.addEventListener('click', async () => {
+    const ta = $('dup-check-input');
+    const out = $('dup-output');
+    const content = ta?.value?.trim() || '';
+    if (!content || !out) return;
+    out.textContent = 'Checking…';
+    try {
+      const r = await fetchCheckDuplicate(content);
+      out.textContent = JSON.stringify(r, null, 2);
+    } catch (err) {
+      out.textContent = err?.message || String(err);
+    }
+  });
 }
 
 function onInspectorClick(e) {
@@ -1314,6 +1509,15 @@ function onInspectorClick(e) {
       const rm = r.getAttribute('data-room');
       if (w && rm) graphRouteSetTarget(`room:${w}:${rm}`);
     } else if (ra === 'clear-route') clearGraphRoute();
+    return;
+  }
+  const mcp = e.target.closest('[data-mcp-action]');
+  if (mcp) {
+    const act = mcp.getAttribute('data-mcp-action');
+    if (act === 'traverse-room') {
+      const rm = mcp.getAttribute('data-room');
+      if (rm) runTraverseForRoom(rm);
+    }
     return;
   }
   const g = e.target.closest('[data-graph-action]');
@@ -2072,6 +2276,26 @@ function metaRow(k, v) {
   return `<div class="meta-row"><span class="meta-k">${escapeHtml(k)}</span><span class="meta-v">${v}</span></div>`;
 }
 
+/**
+ * Halls / recency from MCP tunnel rows, attached to canonical edges (see canonical.js).
+ * @param {string} roomKey canonical `wingId/roomName`
+ * @param {unknown[]} edgesResolved
+ */
+function collectTunnelRowMeta(roomKey, edgesResolved) {
+  const halls = new Set();
+  let recent = '';
+  let drawerCount = null;
+  for (const e of edgesResolved || []) {
+    if (e.relationshipType !== 'tunnel') continue;
+    if (e.sourceRoomId !== roomKey && e.targetRoomId !== roomKey) continue;
+    const m = e.metadata || {};
+    if (Array.isArray(m.halls)) m.halls.forEach((h) => halls.add(String(h)));
+    if (typeof m.recent === 'string' && m.recent) recent = m.recent;
+    if (typeof m.drawerCountInTunnelRoom === 'number') drawerCount = m.drawerCountInTunnelRoom;
+  }
+  return { halls: [...halls], recent, drawerCount };
+}
+
 function positionHoverCard(clientX, clientY, visible) {
   const card = $('hover-card');
   if (!card) return;
@@ -2499,6 +2723,8 @@ function wireControls() {
   wireHelpFocusTrap();
   applyPanelLayoutFromStorage();
   wirePanelCollapse();
+  wireSemanticSearch();
+  wireMemoryLens();
 
   $('graph-view-extras')?.addEventListener('click', (e) => {
     const btn = e.target.closest('[data-rel-type]');
@@ -2562,6 +2788,10 @@ function wireControls() {
     if (e.key === '/' && !e.ctrlKey && !e.metaKey) {
       e.preventDefault();
       focusGraphSearchInput();
+    }
+    if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+      e.preventDefault();
+      $('semantic-search')?.focus();
     }
     if (e.key === 'l' || e.key === 'L') {
       const cb = $('toggle-labels');
@@ -2636,6 +2866,15 @@ async function loadData(preserveContext) {
 
   lastGoodFetchedAt = dataBundle.fetchedAt || new Date().toISOString();
   setConnState('ok', 'Connected', `Last refresh ${formatRelativeRefreshTime(lastGoodFetchedAt)}.`);
+  fetchMcpToolsList()
+    .then((r) => {
+      const n = r?.tools?.length;
+      const detailEl = $('conn-detail');
+      if (n && detailEl) {
+        detailEl.textContent = `Last refresh ${formatRelativeRefreshTime(lastGoodFetchedAt)} · official MCP lists ${n} tools.`;
+      }
+    })
+    .catch(() => {});
   showLoading(false);
 
   if (!preserveContext) {

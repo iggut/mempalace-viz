@@ -14,14 +14,15 @@ This is a concise map of **where graph-related relationship data comes from** in
 
 | Source | Explicit / inferred | Notes |
 | --- | --- | --- |
-| **Tunnel edges** | Explicit (Chroma-backed) | `relationshipType: "tunnel"`, `metadata.origin: "mempalace_find_tunnels"`. |
+| **Tunnel edges** | Explicit (Chroma-backed) | `relationshipType: "tunnel"`, `metadata.origin: "mempalace_find_tunnels"`, plus optional `halls` / `recent` / `drawerCountInTunnelRoom` from MCP tunnel rows. |
 | **Taxonomy adjacency** | *(removed from viz)* | Was a client-side heuristic; the 3D graph now uses **tunnel edges only** from MCP. |
 
-## Not used for room–room graph (yet)
+## Not merged into palace tunnel topology
 
 | Source | Why |
 | --- | --- |
-| **SQLite knowledge graph (`mempalace_kg_*`)** | Entity/triple graph; not keyed to palace `wing`/`room` IDs in a way that yields stable room–room edges without extra projection. Surfaced read-only via `/api/kg-stats` for footer stats. |
+| **SQLite knowledge graph (`mempalace_kg_*`)** | Entity/triple graph — **not** the Chroma palace tunnel graph. Exposed read-only via `/api/kg-stats`, `/api/kg-query`, `/api/kg-timeline`, and the Memory panel — never as fake room–room links. |
+| **Semantic search / traverse / diary** | Official MCP tools (`mempalace_search`, `mempalace_traverse`, `mempalace_diary_read`, …) — HTTP passthrough + UI panels; **do not** add edges to `edgesResolved`. |
 
 ## Cheap vs expensive
 

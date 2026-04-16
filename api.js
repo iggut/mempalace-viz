@@ -171,6 +171,100 @@ export function normalizePalaceBundle(parts) {
  * Load all viz endpoints in parallel. kg-stats is optional; overview is optional.
  * @returns {Promise<object>}
  */
+/**
+ * Official MCP `tools/list` (via HTTP bridge).
+ * @returns {Promise<{ tools?: Array<{ name: string }> }|null>}
+ */
+export async function fetchMcpToolsList() {
+  const base = getApiBase();
+  try {
+    return await fetchJson(`${base}/api/mcp-tools`);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * @param {string} query
+ * @param {{ limit?: number, wing?: string, room?: string }} [opts]
+ */
+export async function fetchSemanticSearch(query, opts = {}) {
+  const base = getApiBase();
+  const u = new URL(`${base}/api/search`);
+  u.searchParams.set('query', query);
+  if (opts.limit != null) u.searchParams.set('limit', String(opts.limit));
+  if (opts.wing) u.searchParams.set('wing', opts.wing);
+  if (opts.room) u.searchParams.set('room', opts.room);
+  return fetchJson(u.toString(), { timeoutMs: 25000 });
+}
+
+/**
+ * @param {string} startRoom — room **name** (MCP traverse uses palace graph room keys)
+ * @param {number} [maxHops]
+ */
+export async function fetchPalaceTraverse(startRoom, maxHops = 2) {
+  const base = getApiBase();
+  const u = new URL(`${base}/api/traverse`);
+  u.searchParams.set('start_room', startRoom);
+  u.searchParams.set('max_hops', String(maxHops));
+  return fetchJson(u.toString(), { timeoutMs: 25000 });
+}
+
+/**
+ * @param {string} entity
+ * @param {{ as_of?: string, direction?: string }} [opts]
+ */
+export async function fetchKgQuery(entity, opts = {}) {
+  const base = getApiBase();
+  const u = new URL(`${base}/api/kg-query`);
+  u.searchParams.set('entity', entity);
+  if (opts.as_of) u.searchParams.set('as_of', opts.as_of);
+  if (opts.direction) u.searchParams.set('direction', opts.direction);
+  return fetchJson(u.toString(), { timeoutMs: 25000 });
+}
+
+/** @param {string} [entity] — omit for full timeline */
+export async function fetchKgTimeline(entity) {
+  const base = getApiBase();
+  const u = new URL(`${base}/api/kg-timeline`);
+  if (entity && entity.trim()) u.searchParams.set('entity', entity.trim());
+  return fetchJson(u.toString(), { timeoutMs: 25000 });
+}
+
+export async function fetchAaakSpec() {
+  const base = getApiBase();
+  return fetchJson(`${base}/api/aaak-spec`, { timeoutMs: 20000 });
+}
+
+/**
+ * @param {{ agent?: string, last_n?: number }} [opts]
+ */
+export async function fetchDiaryRead(opts = {}) {
+  const base = getApiBase();
+  const u = new URL(`${base}/api/diary`);
+  if (opts.agent) u.searchParams.set('agent', opts.agent);
+  if (opts.last_n != null) u.searchParams.set('last_n', String(opts.last_n));
+  return fetchJson(u.toString(), { timeoutMs: 25000 });
+}
+
+/**
+ * @param {string} content
+ * @param {number} [threshold]
+ */
+export async function fetchCheckDuplicate(content, threshold = 0.9) {
+  const base = getApiBase();
+  const res = await fetch(`${base}/api/check-duplicate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ content, threshold }),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(text || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
 export async function loadPalaceData() {
   const base = getApiBase();
   const prefix = `${base}/api`;

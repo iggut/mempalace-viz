@@ -292,6 +292,15 @@ export function buildCanonicalEdgesFromTunnels(tunnelRows, taxonomy) {
 
         const weight = typeof row.count === 'number' && row.count > 0 ? Math.min(32, 1 + Math.log1p(row.count)) : 1;
 
+        /** @type {Record<string, unknown>} */
+        const tunnelMeta = {
+          origin: 'mempalace_find_tunnels',
+          roomName: roomName,
+        };
+        if (Array.isArray(row.halls) && row.halls.length) tunnelMeta.halls = row.halls;
+        if (row.recent) tunnelMeta.recent = row.recent;
+        if (typeof row.count === 'number') tunnelMeta.drawerCountInTunnelRoom = row.count;
+
         edgesResolved.push({
           edgeId: `${sId}__${tId}__tunnel`,
           sourceRoomId: sId,
@@ -301,7 +310,7 @@ export function buildCanonicalEdgesFromTunnels(tunnelRows, taxonomy) {
           crossWing: sW !== tW,
           weight,
           relationshipType: 'tunnel',
-          metadata: { origin: 'mempalace_find_tunnels' },
+          metadata: tunnelMeta,
         });
       }
     }

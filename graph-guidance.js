@@ -112,7 +112,7 @@ export function graphInspectorNoEdgesNoticeLines() {
   return {
     title: 'Graph view',
     body:
-      'No tunnel edges were returned from graph-stats. Wings and rooms can still appear from taxonomy. Edges come only from MemPalace tunnel discovery (mempalace_find_tunnels).',
+      'No tunnel edges were resolved from mempalace_find_tunnels. Wings and rooms can still appear from taxonomy. Rendered links use tunnel discovery + taxonomy — not mempalace_graph_stats.total_edges.',
   };
 }
 

@@ -1,9 +1,12 @@
 /**
  * MemPalace Viz — Node bridge to the Python MemPalace MCP server.
  *
- * Exposes the palace data needed by the 3D viewer:
+ * Exposes palace data and selected official MCP tools over HTTP:
  *   GET /api/status, /api/wings, /api/rooms, /api/taxonomy,
- *       /api/palace, /api/graph-stats, /api/overview, /api/kg-stats
+ *       /api/palace, /api/graph-stats, /api/overview, /api/kg-stats,
+ *       /api/mcp-tools, /api/search, /api/traverse, /api/kg-query,
+ *       /api/kg-timeline, /api/aaak-spec, /api/diary
+ *   POST /api/check-duplicate
  *
  * Every request spawns `mempalace.mcp_server` as a short-lived child process
  * via the venv Python. Palace snapshots fan out MCP calls in parallel and
@@ -92,16 +95,17 @@ class LRUCache {
 const wingsCache = new LRUCache(4);
 
 /**
- * Spawn `mempalace.mcp_server` for one tool call. The Python server speaks
- * JSON-RPC over stdio and wraps results in `content[0].text`; we unwrap.
+ * Spawn `mempalace.mcp_server` for one JSON-RPC round trip (stdio).
+ * @param {string} method e.g. `tools/call`, `tools/list`
+ * @param {object} params method params
  */
-function callMcp(toolName, params = {}, timeout = 10000) {
+function rpcMcp(method, params = {}, timeout = 10000) {
   return new Promise((resolve, reject) => {
     const reqBody = JSON.stringify({
       jsonrpc: '2.0',
       id: Date.now(),
-      method: 'tools/call',
-      params: { name: toolName, arguments: params },
+      method,
+      params,
     });
 
     const proc = spawn(VENV_PYTHON, ['-m', 'mempalace.mcp_server'], {
@@ -114,10 +118,10 @@ function callMcp(toolName, params = {}, timeout = 10000) {
 
     const timeoutId = setTimeout(() => {
       try { proc.kill(); } catch { /* ignore */ }
-      const err = new Error(`MCP server timeout: ${toolName} (${timeout / 1000}s)`);
+      const err = new Error(`MCP server timeout: ${method} (${timeout / 1000}s)`);
       err.stdout = stdout;
       err.stderr = stderr;
-      console.error(`[MCP Timeout] ${toolName}: ${stderr}`);
+      console.error(`[MCP Timeout] ${method}: ${stderr}`);
       reject(err);
     }, timeout);
 
@@ -126,34 +130,26 @@ function callMcp(toolName, params = {}, timeout = 10000) {
 
     proc.on('error', (err) => {
       clearTimeout(timeoutId);
-      console.error(`[MCP Process Error] ${toolName}:`, err);
+      console.error(`[MCP Process Error] ${method}:`, err);
       reject(err);
     });
 
     proc.on('exit', (code) => {
       clearTimeout(timeoutId);
       if (code !== 0 && code !== null) {
-        const err = new Error(`MCP server exited with code ${code} for ${toolName}`);
+        const err = new Error(`MCP server exited with code ${code} for ${method}`);
         err.stdout = stdout;
         err.stderr = stderr;
-        console.error(`[MCP Exit Error] ${toolName} (code ${code}): ${stderr}`);
+        console.error(`[MCP Exit Error] ${method} (code ${code}): ${stderr}`);
         return reject(err);
       }
       try {
         if (!stdout.trim()) throw new Error('MCP server returned empty stdout');
         const response = JSON.parse(stdout);
         if (response.error) return reject(new Error(response.error.message || 'MCP Error'));
-        const result = response.result;
-        if (result && Array.isArray(result.content)) {
-          const text = result.content.find((c) => c.type === 'text');
-          if (text) {
-            try { return resolve(JSON.parse(text.text)); }
-            catch { return resolve(text.text); }
-          }
-        }
-        resolve(result);
+        resolve(response.result);
       } catch (e) {
-        console.error(`[MCP Parse Error] ${toolName}: "${stdout.slice(0, 200)}..."`, e);
+        console.error(`[MCP Parse Error] ${method}: "${stdout.slice(0, 200)}..."`, e);
         reject(e);
       }
     });
@@ -161,6 +157,26 @@ function callMcp(toolName, params = {}, timeout = 10000) {
     proc.stdin.write(reqBody);
     proc.stdin.end();
   });
+}
+
+/**
+ * Spawn `mempalace.mcp_server` for one tool call. Unwraps `content[0].text` JSON.
+ */
+async function callMcp(toolName, params = {}, timeout = 10000) {
+  const result = await rpcMcp('tools/call', { name: toolName, arguments: params }, timeout);
+  if (result && Array.isArray(result.content)) {
+    const text = result.content.find((c) => c.type === 'text');
+    if (text) {
+      try { return JSON.parse(text.text); }
+      catch { return text.text; }
+    }
+  }
+  return result;
+}
+
+/** Official tool catalog (same as MCP `tools/list`). */
+async function listMcpTools(timeout = 8000) {
+  return rpcMcp('tools/list', {}, timeout);
 }
 
 /**
@@ -239,13 +255,33 @@ process.on('unhandledRejection', (error) => {
 
 const server = createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
   if (req.method === 'OPTIONS') {
     res.writeHead(204);
     res.end();
     return;
+  }
+
+  async function readJsonBody() {
+    return new Promise((resolve, reject) => {
+      let data = '';
+      req.on('data', (c) => {
+        data += c;
+        if (data.length > 2_000_000) {
+          reject(new Error('Body too large'));
+        }
+      });
+      req.on('end', () => {
+        try {
+          resolve(data.trim() ? JSON.parse(data) : {});
+        } catch (e) {
+          reject(e);
+        }
+      });
+      req.on('error', reject);
+    });
   }
 
   const requestUrl = new URL(req.url, 'http://localhost');
@@ -268,6 +304,29 @@ const server = createServer(async (req, res) => {
 
   try {
     let result;
+
+    if (pathname === '/api/check-duplicate' && req.method === 'POST') {
+      const body = await readJsonBody();
+      const content = typeof body.content === 'string' ? body.content : '';
+      if (!content.trim()) {
+        res.writeHead(400);
+        res.end(JSON.stringify({ error: 'Missing content' }));
+        return;
+      }
+      result = await callMcp('mempalace_check_duplicate', {
+        content,
+        threshold: typeof body.threshold === 'number' ? body.threshold : 0.9,
+      });
+      res.writeHead(200);
+      res.end(JSON.stringify(result));
+      return;
+    }
+
+    if (req.method !== 'GET') {
+      res.writeHead(405);
+      res.end(JSON.stringify({ error: 'Method not allowed' }));
+      return;
+    }
 
     switch (pathname) {
       case '/api/status':
@@ -356,6 +415,74 @@ const server = createServer(async (req, res) => {
         result = await callMcp('mempalace_kg_stats');
         break;
 
+      case '/api/mcp-tools':
+        result = await listMcpTools();
+        break;
+
+      case '/api/search': {
+        const q = (requestUrl.searchParams.get('query') || '').trim();
+        if (!q) {
+          res.writeHead(400);
+          res.end(JSON.stringify({ error: 'query parameter required' }));
+          return;
+        }
+        const limit = Math.min(24, Math.max(1, Number(requestUrl.searchParams.get('limit') || 8)));
+        const wing = requestUrl.searchParams.get('wing') || undefined;
+        const room = requestUrl.searchParams.get('room') || undefined;
+        const context = requestUrl.searchParams.get('context') || undefined;
+        result = await callMcp(
+          'mempalace_search',
+          { query: q, limit, wing, room, context },
+          20000,
+        );
+        break;
+      }
+
+      case '/api/traverse': {
+        const startRoom = (requestUrl.searchParams.get('start_room') || '').trim();
+        if (!startRoom) {
+          res.writeHead(400);
+          res.end(JSON.stringify({ error: 'start_room parameter required' }));
+          return;
+        }
+        const maxHops = Math.min(6, Math.max(1, Number(requestUrl.searchParams.get('max_hops') || 2)));
+        result = await callMcp('mempalace_traverse', { start_room: startRoom, max_hops: maxHops }, 20000);
+        break;
+      }
+
+      case '/api/kg-query': {
+        const entity = (requestUrl.searchParams.get('entity') || '').trim();
+        if (!entity) {
+          res.writeHead(400);
+          res.end(JSON.stringify({ error: 'entity parameter required' }));
+          return;
+        }
+        const asOf = requestUrl.searchParams.get('as_of') || undefined;
+        const direction = requestUrl.searchParams.get('direction') || 'both';
+        result = await callMcp('mempalace_kg_query', { entity, as_of: asOf, direction }, 20000);
+        break;
+      }
+
+      case '/api/kg-timeline': {
+        const entity = requestUrl.searchParams.get('entity')?.trim() || undefined;
+        result = await callMcp('mempalace_kg_timeline', entity ? { entity } : {}, 20000);
+        break;
+      }
+
+      case '/api/aaak-spec':
+        result = await callMcp('mempalace_get_aaak_spec');
+        break;
+
+      case '/api/diary': {
+        const agentName =
+          requestUrl.searchParams.get('agent')?.trim() ||
+          process.env.MEMPALACE_VIZ_DIARY_AGENT ||
+          'viewer';
+        const lastN = Math.min(40, Math.max(1, Number(requestUrl.searchParams.get('last_n') || 6)));
+        result = await callMcp('mempalace_diary_read', { agent_name: agentName, last_n: lastN }, 20000);
+        break;
+      }
+
       default:
         res.writeHead(404);
         res.end(JSON.stringify({ error: 'Not found' }));
@@ -379,7 +506,9 @@ server.listen(PORT, HOST, () => {
   console.log(`MemPalace Viz API running at http://${HOST}:${PORT}`);
   console.log('  Static: /, /viz, /3d, /palace3d  →  index.html');
   console.log('  API:    /api/status, /api/wings, /api/rooms, /api/taxonomy,');
-  console.log('          /api/palace, /api/graph-stats, /api/overview, /api/kg-stats');
+  console.log('          /api/palace, /api/graph-stats, /api/overview, /api/kg-stats,');
+  console.log('          /api/mcp-tools, /api/search, /api/traverse, /api/kg-query,');
+  console.log('          /api/kg-timeline, /api/aaak-spec, /api/diary, POST /api/check-duplicate');
   console.log('  Set HOST=127.0.0.1 to restrict to local-only access.');
   if (AUTO_EXIT_MS > 0) {
     console.log(`  Auto-exit enabled after ${AUTO_EXIT_MS}ms (dev restart mode).`);
