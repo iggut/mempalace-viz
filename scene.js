@@ -306,26 +306,75 @@ export function createPalaceScene(container, options = {}) {
     stars.userData = { innerMat, outerMat };
   }
 
+  // Label sprites: rendered to an offscreen canvas at devicePixelRatio for crispness,
+  // then scaled into world space while preserving the canvas's pixel aspect ratio.
+  // FRAGILE: sprite world-scale MUST mirror canvas (cssW : cssH) or labels appear as
+  // stretched blue blocks. See README/QA notes on label rendering.
   function makeLabelSprite(text, color = '#e2e8f0') {
+    const dpr = Math.min(typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1, 2);
+    const fontSize = 20;
+    const padX = 12;
+    const padY = 6;
+    const fontDecl = `500 ${fontSize}px ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`;
+
+    const measure = document.createElement('canvas').getContext('2d');
+    measure.font = fontDecl;
+    const textW = Math.ceil(measure.measureText(text).width);
+
+    const cssW = textW + padX * 2;
+    const cssH = fontSize + padY * 2;
+
     const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(cssW * dpr));
+    canvas.height = Math.max(1, Math.round(cssH * dpr));
+
     const ctx = canvas.getContext('2d');
-    const pad = 16;
-    ctx.font = '500 22px ui-sans-serif, system-ui, sans-serif';
-    const w = Math.ceil(ctx.measureText(text).width) + pad * 2;
-    canvas.width = w;
-    canvas.height = 44;
-    ctx.font = '500 22px ui-sans-serif, system-ui, sans-serif';
-    ctx.fillStyle = 'rgba(15,23,42,0.88)';
-    ctx.fillRect(4, 4, w - 8, 36);
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, cssW, cssH);
+
+    const r = Math.min(8, cssH / 2);
+    ctx.beginPath();
+    ctx.moveTo(r, 0);
+    ctx.lineTo(cssW - r, 0);
+    ctx.quadraticCurveTo(cssW, 0, cssW, r);
+    ctx.lineTo(cssW, cssH - r);
+    ctx.quadraticCurveTo(cssW, cssH, cssW - r, cssH);
+    ctx.lineTo(r, cssH);
+    ctx.quadraticCurveTo(0, cssH, 0, cssH - r);
+    ctx.lineTo(0, r);
+    ctx.quadraticCurveTo(0, 0, r, 0);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(10, 15, 24, 0.62)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(124, 156, 255, 0.28)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    ctx.font = fontDecl;
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'left';
     ctx.fillStyle = color;
-    ctx.fillText(text, pad, 28);
+    ctx.fillText(text, padX, cssH / 2 + 0.5);
+
     const tex = new THREE.CanvasTexture(canvas);
+    tex.minFilter = THREE.LinearFilter;
+    tex.magFilter = THREE.LinearFilter;
+    tex.generateMipmaps = false;
+    tex.anisotropy = 4;
     tex.needsUpdate = true;
-    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false });
+
+    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, depthTest: true });
     const sprite = new THREE.Sprite(mat);
-    const scale = 0.022 * w;
-    sprite.scale.set(scale, 11, 1);
-    sprite.userData.labelBaseScale = { x: scale, y: 11, z: 1 };
+
+    // World-space sprite size: pick a target world-height per label, then derive
+    // width from the actual canvas aspect ratio so text is never stretched.
+    const targetWorldHeight = 2.6;
+    const aspect = cssW / cssH;
+    const sx = targetWorldHeight * aspect;
+    const sy = targetWorldHeight;
+    sprite.scale.set(sx, sy, 1);
+    sprite.userData.labelBaseScale = { x: sx, y: sy, z: 1 };
+    sprite.renderOrder = 10;
     return sprite;
   }
 
@@ -1409,7 +1458,11 @@ export function createPalaceScene(container, options = {}) {
     if (w === 0 || h === 0) return;
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
-    renderer.setSize(w, h, false);
+    // FRAGILE: pass `true` (updateStyle) so the canvas' CSS size tracks the
+    // container after side panels collapse/expand. With `false` the canvas
+    // keeps stale inline width/height and visually overflows the column,
+    // which used to look like a large dark-blue dead region on the right.
+    renderer.setSize(w, h, true);
   }
 
   function setData(payload) {

@@ -2687,6 +2687,40 @@ function wireHelpFocusTrap() {
   });
 }
 
+function syncPanelRestoreVisibility(leftCollapsed, rightCollapsed) {
+  const restoreLeft = $('panel-restore-left');
+  const restoreRight = $('panel-restore-right');
+  if (restoreLeft) restoreLeft.hidden = !leftCollapsed;
+  if (restoreRight) restoreRight.hidden = !rightCollapsed;
+}
+
+function setPanelCollapsed(side, collapsed) {
+  const main = $('app-main-grid');
+  if (!main) return;
+  if (side === 'left') {
+    main.classList.toggle('has-left-collapsed', collapsed);
+    $('panel-left')?.classList.toggle('panel--collapsed', collapsed);
+    $('btn-collapse-left')?.setAttribute('aria-expanded', String(!collapsed));
+    setPanelInteractiveState('panel-left', 'panel-left-body', collapsed);
+  } else {
+    main.classList.toggle('has-right-collapsed', collapsed);
+    $('panel-right')?.classList.toggle('panel--collapsed', collapsed);
+    $('btn-collapse-right')?.setAttribute('aria-expanded', String(!collapsed));
+    setPanelInteractiveState('panel-right', 'panel-right-body', collapsed);
+  }
+  const leftCollapsed = main.classList.contains('has-left-collapsed');
+  const rightCollapsed = main.classList.contains('has-right-collapsed');
+  syncPanelRestoreVisibility(leftCollapsed, rightCollapsed);
+  persistPanelLayout();
+  // Tell the renderer the canvas may have a new size; ResizeObserver usually
+  // catches this, but call explicitly so the camera aspect updates immediately.
+  try { sceneApi?.resize?.(); } catch { /* ignore */ }
+  if (!collapsed) {
+    const focusTarget = side === 'left' ? $('btn-collapse-left') : $('btn-collapse-right');
+    focusTarget?.focus?.({ preventScroll: true });
+  }
+}
+
 function applyPanelLayoutFromStorage() {
   let leftCollapsed = false;
   let rightCollapsed = false;
@@ -2711,6 +2745,7 @@ function applyPanelLayoutFromStorage() {
   $('btn-collapse-right')?.setAttribute('aria-expanded', String(!rightCollapsed));
   setPanelInteractiveState('panel-left', 'panel-left-body', leftCollapsed);
   setPanelInteractiveState('panel-right', 'panel-right-body', rightCollapsed);
+  syncPanelRestoreVisibility(leftCollapsed, rightCollapsed);
 }
 
 function persistPanelLayout() {
@@ -2745,21 +2780,16 @@ function wireMiningOverlay() {
 function wirePanelCollapse() {
   const main = $('app-main-grid');
   $('btn-collapse-left')?.addEventListener('click', () => {
-    main?.classList.toggle('has-left-collapsed');
-    $('panel-left')?.classList.toggle('panel--collapsed');
-    const collapsed = main?.classList.contains('has-left-collapsed');
-    $('btn-collapse-left')?.setAttribute('aria-expanded', String(!collapsed));
-    setPanelInteractiveState('panel-left', 'panel-left-body', collapsed);
-    persistPanelLayout();
+    const collapsed = !main?.classList.contains('has-left-collapsed');
+    setPanelCollapsed('left', collapsed);
   });
   $('btn-collapse-right')?.addEventListener('click', () => {
-    main?.classList.toggle('has-right-collapsed');
-    $('panel-right')?.classList.toggle('panel--collapsed');
-    const collapsed = main?.classList.contains('has-right-collapsed');
-    $('btn-collapse-right')?.setAttribute('aria-expanded', String(!collapsed));
-    setPanelInteractiveState('panel-right', 'panel-right-body', collapsed);
-    persistPanelLayout();
+    const collapsed = !main?.classList.contains('has-right-collapsed');
+    setPanelCollapsed('right', collapsed);
   });
+  // Edge restore handles — always-visible affordance when a panel is collapsed.
+  $('panel-restore-left')?.addEventListener('click', () => setPanelCollapsed('left', false));
+  $('panel-restore-right')?.addEventListener('click', () => setPanelCollapsed('right', false));
 }
 
 function wireControls() {

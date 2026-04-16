@@ -177,6 +177,30 @@
         </nav>
 
         <main class="canvas-column" id="main-canvas-wrap">
+          <button
+            type="button"
+            id="panel-restore-left"
+            class="panel-restore panel-restore--left"
+            aria-label="Show explore panel"
+            aria-controls="panel-left"
+            title="Show explore panel"
+            hidden
+          >
+            <span class="panel-restore__icon" aria-hidden="true">›</span>
+            <span class="panel-restore__label">Explore</span>
+          </button>
+          <button
+            type="button"
+            id="panel-restore-right"
+            class="panel-restore panel-restore--right"
+            aria-label="Show inspector panel"
+            aria-controls="panel-right"
+            title="Show inspector panel"
+            hidden
+          >
+            <span class="panel-restore__icon" aria-hidden="true">‹</span>
+            <span class="panel-restore__label">Inspector</span>
+          </button>
           <div id="loading-overlay" class="overlay-state">
             <div class="spinner" aria-hidden="true"></div>
             <p style="color: #94a3b8; font-size: 0.85rem">Loading palace data…</p>
