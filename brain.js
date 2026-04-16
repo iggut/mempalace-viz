@@ -1,5 +1,4 @@
-import * as THREE from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { THREE, OrbitControls } from './three-runtime.js';
 
 const API = '';
 const SELF_STATE_COLORS = {

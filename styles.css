@@ -87,10 +87,6 @@ body {
   }
 }
 
-:focus {
-  outline: none;
-}
-
 :focus-visible {
   outline: 2px solid rgba(124, 156, 255, 0.65);
   outline-offset: 2px;
@@ -161,6 +157,35 @@ a {
   align-items: center;
   gap: 10px;
   flex-shrink: 0;
+}
+
+.header-connection {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.status-detail {
+  margin: 0;
+  max-width: 320px;
+  font-size: 0.76rem;
+  color: var(--text-muted);
+  text-align: right;
+}
+
+.search-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.search-mode-hint {
+  margin: 8px 0 0;
+  font-size: 0.75rem;
+  color: var(--text-muted);
 }
 
 .status-pill {

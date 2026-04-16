@@ -1,13 +1,7 @@
 /**
  * Three.js scene — wings / rooms / graph with focus, filter, and selection visuals.
  */
-import * as THREE from 'three';
-// OrbitControls import - works with v164+ addons path (default) and older examples path
-const isOlderThree = typeof window !== 'undefined' && window.THREE?.examples;
-const controlsModule = isOlderThree 
-  ? await import('three/examples/jsm/controls/OrbitControls.js')
-  : await import('three/addons/controls/OrbitControls.js');
-export const { OrbitControls } = controlsModule.default || controlsModule;
+import { THREE, OrbitControls } from './three-runtime.js';
 import { makeRoomId } from './canonical.js';
 import { getEdgeRelationshipType, getStyleForRelationshipType } from './graph-relationships.js';
 import {

@@ -107,6 +107,7 @@ const appState = {
 
 let sceneApi = null;
 let dataBundle = null;
+let lastGoodFetchedAt = null;
 let searchDebounce = null;
 let pendingPersist = null;
 /** @type {HTMLElement | null} */
@@ -1394,6 +1395,7 @@ function selectRoomFromInspector(wing, room) {
   sceneApi?.centerOnNodeId(id);
   setActiveViewButtons();
   $('view-helper-text').textContent = VIEWS.find((v) => v.id === 'rooms')?.hint || '';
+  updateSearchModeCopy();
   updateGraphViewChrome();
   updateMetrics();
   renderInspector();
@@ -1481,14 +1483,54 @@ function syncScenePresentation() {
   });
 }
 
-function setConnState(state, label) {
+function setConnState(state, label, detail = '') {
   const el = $('conn-status');
   if (!el) return;
   el.dataset.state = state;
   el.textContent = label;
+  const detailEl = $('conn-detail');
+  if (detailEl) detailEl.textContent = detail;
+}
+
+function formatRelativeRefreshTime(iso) {
+  if (!iso) return '';
+  const ms = Date.parse(iso);
+  if (!Number.isFinite(ms)) return '';
+  const deltaSec = Math.max(0, Math.round((Date.now() - ms) / 1000));
+  if (deltaSec < 5) return 'just now';
+  if (deltaSec < 60) return `${deltaSec}s ago`;
+  if (deltaSec < 3600) return `${Math.floor(deltaSec / 60)}m ago`;
+  return `${Math.floor(deltaSec / 3600)}h ago`;
+}
+
+function updateBusyState(show) {
+  $('app-main-grid')?.setAttribute('aria-busy', String(!!show));
+  $('inspect-body')?.setAttribute('aria-busy', String(!!show));
+}
+
+function updateSearchModeCopy() {
+  const label = $('search-wings-label');
+  const input = $('search-wings');
+  const hint = $('search-mode-hint');
+  if (!label || !input || !hint) return;
+  const graphMode = appState.view === 'graph';
+  label.textContent = graphMode ? 'Find graph nodes' : 'Filter wings and rooms';
+  input.placeholder = graphMode ? 'Find a room or wing in Graph…' : 'Filter wings and rooms…';
+  hint.innerHTML = graphMode
+    ? 'Graph view: <kbd>Enter</kbd> frames the active match · <kbd>Alt+N</kbd> / <kbd>Alt+P</kbd> steps through results.'
+    : 'Wings/Rooms view: filters the explorer and dims non-matching nodes.';
+}
+
+function setPanelInteractiveState(panelId, bodyId, collapsed) {
+  $(panelId)?.setAttribute('aria-hidden', String(!!collapsed));
+  const body = $(bodyId);
+  if (!body) return;
+  body.hidden = !!collapsed;
+  if ('inert' in body) body.inert = !!collapsed;
 }
 
 function showLoading(show) {
+  updateBusyState(show);
   $('loading-overlay')?.classList.toggle('is-hidden', !show);
 }
 
@@ -1583,17 +1625,8 @@ function updateMetrics() {
     foot.textContent = line;
   }
 
-  if (kg && typeof kg === 'object' && !kg.error) {
-    const parts = [];
-    for (const [k, v] of Object.entries(kg)) {
-      if (k === 'error') continue;
-      if (typeof v === 'number') parts.push(`${k}: ${formatNum(v)}`);
-      else if (typeof v === 'string') parts.push(`${k}: ${v}`);
-    }
-    $('metric-kg').textContent = parts.length ? parts.slice(0, 8).join(' · ') : '—';
-  } else {
-    $('metric-kg').textContent = '—';
-  }
+  const refreshedEl = $('metric-refreshed');
+  if (refreshedEl) refreshedEl.textContent = formatRelativeRefreshTime(dataBundle?.fetchedAt || lastGoodFetchedAt) || '—';
 
   updateFooterContextLine(appState.selected, ctx);
 }
@@ -1930,6 +1963,7 @@ function goAllWings() {
   syncScenePresentation();
   setActiveViewButtons();
   $('view-helper-text').textContent = VIEWS.find((v) => v.id === 'wings')?.hint || '';
+  updateSearchModeCopy();
   updateGraphViewChrome();
   updateMetrics();
   renderInspector();
@@ -1948,6 +1982,7 @@ function navigateToWing(wing) {
   syncScenePresentation();
   setActiveViewButtons();
   $('view-helper-text').textContent = VIEWS.find((v) => v.id === 'rooms')?.hint || '';
+  updateSearchModeCopy();
   updateGraphViewChrome();
   updateMetrics();
   renderInspector();
@@ -2119,6 +2154,7 @@ function applyView(view) {
   syncScenePresentation();
   setActiveViewButtons();
   $('view-helper-text').textContent = VIEWS.find((v) => v.id === view)?.hint || '';
+  updateSearchModeCopy();
   updateGraphViewChrome();
   updateMetrics();
   renderInspector();
@@ -2170,6 +2206,7 @@ function handleSceneClick(ud) {
     syncScenePresentation();
     setActiveViewButtons();
     $('view-helper-text').textContent = VIEWS.find((v) => v.id === 'rooms')?.hint || '';
+  updateSearchModeCopy();
     updateGraphViewChrome();
     updateMetrics();
     renderInspector();
@@ -2304,6 +2341,8 @@ function applyPanelLayoutFromStorage() {
   pr?.classList.toggle('panel--collapsed', rightCollapsed);
   $('btn-collapse-left')?.setAttribute('aria-expanded', String(!leftCollapsed));
   $('btn-collapse-right')?.setAttribute('aria-expanded', String(!rightCollapsed));
+  setPanelInteractiveState('panel-left', 'panel-left-body', leftCollapsed);
+  setPanelInteractiveState('panel-right', 'panel-right-body', rightCollapsed);
 }
 
 function persistPanelLayout() {
@@ -2328,6 +2367,7 @@ function wirePanelCollapse() {
     $('panel-left')?.classList.toggle('panel--collapsed');
     const collapsed = main?.classList.contains('has-left-collapsed');
     $('btn-collapse-left')?.setAttribute('aria-expanded', String(!collapsed));
+    setPanelInteractiveState('panel-left', 'panel-left-body', collapsed);
     persistPanelLayout();
   });
   $('btn-collapse-right')?.addEventListener('click', () => {
@@ -2335,6 +2375,7 @@ function wirePanelCollapse() {
     $('panel-right')?.classList.toggle('panel--collapsed');
     const collapsed = main?.classList.contains('has-right-collapsed');
     $('btn-collapse-right')?.setAttribute('aria-expanded', String(!collapsed));
+    setPanelInteractiveState('panel-right', 'panel-right-body', collapsed);
     persistPanelLayout();
   });
 }
@@ -2586,7 +2627,13 @@ async function loadData(preserveContext) {
   const previousBundle = dataBundle;
 
   showLoading(true);
-  setConnState('loading', 'Connecting…');
+  setConnState(
+    'loading',
+    'Connecting…',
+    preserveContext && lastGoodFetchedAt
+      ? `Refreshing snapshot from ${formatRelativeRefreshTime(lastGoodFetchedAt)} while keeping the current scene visible.`
+      : 'Loading the latest palace snapshot.',
+  );
   const ov = $('loading-overlay');
   if (ov) {
     ov.innerHTML = `<div class="spinner"></div><p style="color:#94a3b8;font-size:0.85rem;">Loading palace data…</p>`;
@@ -2597,18 +2644,23 @@ async function loadData(preserveContext) {
   if (dataBundle.error) {
     if (preserveContext && previousBundle && !previousBundle.error) {
       dataBundle = previousBundle;
-      setConnState('stale', 'Offline (cached)');
+      setConnState(
+        'stale',
+        'Offline (cached)',
+        lastGoodFetchedAt ? `Last successful snapshot: ${formatRelativeRefreshTime(lastGoodFetchedAt)}.` : 'Showing previously loaded data.',
+      );
       showToast('Refresh failed — showing last loaded data. Check the API and try again.');
       showLoading(false);
       renderInspector();
       return;
     }
-    setConnState('error', 'Disconnected');
+    setConnState('error', 'Disconnected', 'Unable to reach the MemPalace API bridge.');
     showError(dataBundle.error.message || String(dataBundle.error), getApiBase() || '(same origin)');
     return;
   }
 
-  setConnState('ok', 'Connected');
+  lastGoodFetchedAt = dataBundle.fetchedAt || new Date().toISOString();
+  setConnState('ok', 'Connected', `Last refresh ${formatRelativeRefreshTime(lastGoodFetchedAt)}.`);
   showLoading(false);
 
   if (!preserveContext) {
@@ -2674,6 +2726,7 @@ async function loadData(preserveContext) {
 
   setActiveViewButtons();
   $('view-helper-text').textContent = VIEWS.find((v) => v.id === appState.view)?.hint || '';
+  updateSearchModeCopy();
 
   if (!Object.keys(dataBundle.wingsData || {}).length) {
     $('view-helper-text').textContent = 'No wings returned — check MCP backend.';
@@ -2726,6 +2779,10 @@ function main() {
   setupScene();
   wireControls();
   wireInspectorDelegation();
+  updateSearchModeCopy();
+  window.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && dataBundle && !dataBundle.error) loadData(true);
+  });
   loadData(false);
 }
 

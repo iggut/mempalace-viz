@@ -58,3 +58,43 @@ test('normalizePalaceBundle falls back to tunnels when no edgesResolved', () => 
   assert.equal(bundle.graphEdges.length, 1);
   assert.equal(bundle.graphEdges[0].from, 'w/x');
 });
+
+test('normalizePalaceBundle preserves fetchedAt and contract version', () => {
+  const bundle = normalizePalaceBundle({
+    fetchedAt: '2026-04-16T08:00:00.000Z',
+    status: {},
+    wingsRaw: {},
+    taxonomyRaw: { taxonomy: {} },
+    graphStats: {
+      graphContractVersion: 2,
+      edgesResolved: [],
+      edgesUnresolved: [],
+      summary: { resolvedEdgeCount: 0 },
+    },
+    kgResult: null,
+    overviewBundle: { graphContractVersion: 2, stats: {} },
+  });
+
+  assert.equal(bundle.fetchedAt, '2026-04-16T08:00:00.000Z');
+  assert.equal(bundle.graphContractVersion, 2);
+});
+
+test('normalizePalaceBundle rejects unsupported graph contract versions', () => {
+  assert.throws(
+    () =>
+      normalizePalaceBundle({
+        status: {},
+        wingsRaw: {},
+        taxonomyRaw: { taxonomy: {} },
+        graphStats: {
+          graphContractVersion: 1,
+          edgesResolved: [],
+          edgesUnresolved: [],
+          summary: { resolvedEdgeCount: 0 },
+        },
+        kgResult: null,
+        overviewBundle: null,
+      }),
+    /Unsupported palace graph contract version/,
+  );
+});

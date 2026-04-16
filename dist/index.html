@@ -4,9 +4,17 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MemPalace 3D Visualization</title>
-    <script type="module" crossorigin src="/assets/index-Diq0L4VD.js"></script>
-    <link rel="modulepreload" crossorigin href="/assets/three.module-Dcy-k0TW.js">
-    <link rel="stylesheet" crossorigin href="/assets/index-B5ncdzvh.css">
+
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+          "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+      }
+    </script>
+    <script type="module" crossorigin src="/assets/index-D6QrtLxD.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-Dxsfuz3j.css">
   </head>
   <body>
     <a href="#main-canvas-wrap" class="skip-link">Skip to 3D view</a>
@@ -17,15 +25,18 @@
           <p class="tagline">Wings, rooms, and explicit tunnel links from MemPalace MCP (same room name across wings)</p>
         </div>
         <div class="header-actions">
-          <div
-            id="conn-status"
-            class="status-pill"
-            data-state="loading"
-            role="status"
-            aria-live="polite"
-            aria-atomic="true"
-          >
-            Connecting…
+          <div class="header-connection">
+            <div
+              id="conn-status"
+              class="status-pill"
+              data-state="loading"
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+            >
+              Connecting…
+            </div>
+            <p id="conn-detail" class="status-detail">Loading the latest palace snapshot.</p>
           </div>
           <button type="button" id="btn-refresh" class="btn btn--ghost" aria-label="Reload palace data from the API">
             Refresh
@@ -53,22 +64,23 @@
               Tip: use <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> to switch views, <kbd>R</kbd> to reset the camera.
             </p>
             <div class="search-wrap">
-              <label class="visually-hidden" for="search-wings">Search wings and rooms</label>
+              <label id="search-wings-label" class="search-label" for="search-wings">Filter wings and rooms</label>
               <input
                 type="search"
                 id="search-wings"
                 class="search-input"
-                placeholder="Search wings &amp; rooms · Enter jumps in Graph…"
+                placeholder="Filter wings &amp; rooms…"
                 autocomplete="off"
                 enterkeyhint="search"
-                aria-describedby="graph-search-first-hint graph-search-panel"
+                aria-describedby="search-mode-hint graph-search-first-hint graph-search-panel"
                 aria-controls="graph-search-panel"
               />
               <p id="graph-search-first-hint" class="graph-search-first-hint" hidden>
                 In Graph view, matches list below — <kbd>Enter</kbd> to frame, <kbd>Alt+N</kbd> /
                 <kbd>Alt+P</kbd> to step.
               </p>
-              <div id="graph-search-panel" class="graph-search-panel" role="listbox" aria-label="Graph search matches" hidden>
+              <p id="search-mode-hint" class="search-mode-hint">Wings/Rooms view: filters the explorer and dims non-matching nodes.</p>
+              <div id="graph-search-panel" class="graph-search-panel" role="region" aria-label="Graph search matches" hidden>
                 <div class="graph-search-panel__meta">
                   <span id="graph-search-meta" class="graph-search-meta" aria-live="polite"></span>
                   <div id="graph-search-nav" class="graph-search-nav" hidden>
@@ -150,7 +162,7 @@
           <div
             id="canvas-container"
             class="canvas-container"
-            role="application"
+            role="region"
             aria-label="MemPalace three-dimensional view. Use mouse to orbit; keyboard shortcuts in footer."
             tabindex="0"
           ></div>
@@ -211,7 +223,7 @@
             <span class="metric"><span class="metric__k">Rooms</span> <span id="metric-rooms" class="metric__v">—</span></span>
             <span class="metric"><span class="metric__k">Resolved edges</span> <span id="metric-tunnels" class="metric__v">—</span></span>
             <span class="metric"><span class="metric__k">Cross-wing</span> <span id="metric-cross" class="metric__v">—</span></span>
-            <span class="metric"><span class="metric__k">KG stats (API)</span> <span id="metric-kg" class="metric__v">—</span></span>
+            <span class="metric"><span class="metric__k">Last refresh</span> <span id="metric-refreshed" class="metric__v">—</span></span>
             <span class="metric metric--context" id="metric-context-wrap" hidden
               ><span class="metric__k">Focus</span> <span id="metric-context" class="metric__v"></span
             ></span>

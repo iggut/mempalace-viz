@@ -44,6 +44,7 @@ const STATIC_FILES = {
   '/graph-search.js': 'graph-search.js',
   '/state-utils.js': 'state-utils.js',
   '/debug.js': 'debug.js',
+  '/three-runtime.js': 'three-runtime.js',
 };
 
 const MIME_TYPES = {
@@ -607,6 +608,59 @@ class LRUCache {
 
 const wingsCache = new LRUCache(100);
 
+async function buildPalaceSnapshot() {
+  const fetchedAt = new Date().toISOString();
+  const [status, wingsRaw, taxonomyRaw, tunnelsResult, rawGraphStats, kgStats] = await Promise.all([
+    callMcp('mempalace_status'),
+    callMcp('mempalace_list_wings'),
+    callMcp('mempalace_get_taxonomy'),
+    callMcp('mempalace_find_tunnels'),
+    callMcp('mempalace_graph_stats'),
+    callMcp('mempalace_kg_stats').catch(() => null),
+  ]);
+
+  const wingsData = normalizeWingsPayload(wingsRaw);
+  const enriched = buildEnrichedGraphFromTaxonomyAndTunnels(taxonomyRaw, tunnelsResult);
+  const { taxonomy, rooms, wings, roomsData, edgesResolved, edgesInferred, edgesUnresolved, summary, graphMeta } = enriched;
+  const stats = buildOverviewSummary(wingsData, rooms, edgesResolved, summary, status, edgesInferred);
+  const metrics = computeRoomGraphMetrics(edgesResolved);
+  const roomsEnriched = enrichRoomsWithGraphMetrics(rooms, metrics);
+  const legacyGraphEdges = toLegacyGraphEdges(edgesResolved);
+  const tunnelsAdj = {};
+  for (const e of legacyGraphEdges) {
+    if (!tunnelsAdj[e.from]) tunnelsAdj[e.from] = {};
+    tunnelsAdj[e.from][e.to] = e.targetWingId;
+  }
+
+  return {
+    graphContractVersion: 2,
+    fetchedAt,
+    status,
+    wingsData,
+    taxonomy,
+    roomsData,
+    wings,
+    rooms,
+    graph: {
+      rooms: roomsEnriched,
+      edgesResolved,
+      edgesInferred,
+      edgesUnresolved,
+      summary,
+      summaryInferred: enriched.summaryInferred,
+      graphMeta: {
+        ...(graphMeta && typeof graphMeta === 'object' ? graphMeta : {}),
+        fetchedAt,
+      },
+      legacyGraphEdges,
+      tunnels: tunnelsAdj,
+      rawGraphStats,
+    },
+    overviewStats: stats,
+    kgStats,
+  };
+}
+
 async function callMcp(toolName, params = {}, timeout = 10000) {
   return new Promise((resolve, reject) => {
     const reqBody = JSON.stringify({
@@ -892,75 +946,47 @@ const server = createServer(async (req, res) => {
         };
         break;
       }
+      case '/api/palace': {
+        result = await buildPalaceSnapshot();
+        break;
+      }
       case '/api/graph-stats': {
-        const [rawStats, taxonomyRaw, tunnelsResult] = await Promise.all([
-          callMcp('mempalace_graph_stats'),
-          callMcp('mempalace_get_taxonomy'),
-          callMcp('mempalace_find_tunnels'),
-        ]);
-        const enriched = buildEnrichedGraphFromTaxonomyAndTunnels(taxonomyRaw, tunnelsResult);
-        const { edgesResolved, edgesInferred, edgesUnresolved, summary, graphMeta, rooms: taxonomyRooms } = enriched;
-        const metrics = computeRoomGraphMetrics(edgesResolved);
-        const roomsEnriched = enrichRoomsWithGraphMetrics(taxonomyRooms, metrics);
-        const legacyGraphEdges = toLegacyGraphEdges(edgesResolved);
-        const tunnelsAdj = {};
-        for (const e of legacyGraphEdges) {
-          if (!tunnelsAdj[e.from]) tunnelsAdj[e.from] = {};
-          tunnelsAdj[e.from][e.to] = e.targetWingId;
-        }
+        const snapshot = await buildPalaceSnapshot();
         result = {
-          ...rawStats,
-          graphContractVersion: 2,
-          rooms: roomsEnriched,
-          edgesResolved,
-          edgesInferred,
-          edgesUnresolved,
-          summary,
-          summaryInferred: enriched.summaryInferred,
-          graphMeta,
-          legacyGraphEdges,
-          tunnels: tunnelsAdj,
+          graphContractVersion: snapshot.graphContractVersion,
+          fetchedAt: snapshot.fetchedAt,
+          ...snapshot.graph.rawGraphStats,
+          rooms: snapshot.graph.rooms,
+          edgesResolved: snapshot.graph.edgesResolved,
+          edgesInferred: snapshot.graph.edgesInferred,
+          edgesUnresolved: snapshot.graph.edgesUnresolved,
+          summary: snapshot.graph.summary,
+          summaryInferred: snapshot.graph.summaryInferred,
+          graphMeta: snapshot.graph.graphMeta,
+          legacyGraphEdges: snapshot.graph.legacyGraphEdges,
+          tunnels: snapshot.graph.tunnels,
         };
         break;
       }
       case '/api/overview': {
-        const [status, wingsRaw, taxonomyRaw, tunnelsResult, rawGraphStats] = await Promise.all([
-          callMcp('mempalace_status'),
-          callMcp('mempalace_list_wings'),
-          callMcp('mempalace_get_taxonomy'),
-          callMcp('mempalace_find_tunnels'),
-          callMcp('mempalace_graph_stats'),
-        ]);
-        const wingsData = normalizeWingsPayload(wingsRaw);
-        const enriched = buildEnrichedGraphFromTaxonomyAndTunnels(taxonomyRaw, tunnelsResult);
-        const {
-          taxonomy,
-          rooms,
-          wings,
-          roomsData,
-          edgesResolved,
-          edgesInferred,
-          edgesUnresolved,
-          summary,
-          graphMeta,
-        } = enriched;
-        const stats = buildOverviewSummary(wingsData, rooms, edgesResolved, summary, status, edgesInferred);
+        const snapshot = await buildPalaceSnapshot();
         result = {
-          graphContractVersion: 2,
-          status,
-          wingsData,
-          taxonomy,
-          roomsData,
-          wings,
-          rooms,
-          edgesResolved,
-          edgesInferred,
-          edgesUnresolved,
-          summary,
-          summaryInferred: enriched.summaryInferred,
-          graphMeta,
-          stats,
-          rawGraphStats,
+          graphContractVersion: snapshot.graphContractVersion,
+          fetchedAt: snapshot.fetchedAt,
+          status: snapshot.status,
+          wingsData: snapshot.wingsData,
+          taxonomy: snapshot.taxonomy,
+          roomsData: snapshot.roomsData,
+          wings: snapshot.wings,
+          rooms: snapshot.rooms,
+          edgesResolved: snapshot.graph.edgesResolved,
+          edgesInferred: snapshot.graph.edgesInferred,
+          edgesUnresolved: snapshot.graph.edgesUnresolved,
+          summary: snapshot.graph.summary,
+          summaryInferred: snapshot.graph.summaryInferred,
+          graphMeta: snapshot.graph.graphMeta,
+          stats: snapshot.overviewStats,
+          rawGraphStats: snapshot.graph.rawGraphStats,
         };
         break;
       }

@@ -30,13 +30,22 @@ export function getApiBase() {
   return 'http://localhost:8767';
 }
 
-async function fetchJson(url) {
-  const res = await fetch(url, { headers: { Accept: 'application/json' } });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(text || `HTTP ${res.status}`);
+async function fetchJson(url, { timeoutMs = 12000 } = {}) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { headers: { Accept: 'application/json' }, signal: controller.signal });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(text || `HTTP ${res.status}`);
+    }
+    return res.json();
+  } catch (error) {
+    if (error?.name === 'AbortError') throw new Error(`Request timed out after ${timeoutMs}ms`);
+    throw error;
+  } finally {
+    clearTimeout(timer);
   }
-  return res.json();
 }
 
 /**
@@ -94,10 +103,15 @@ export function findRoomRowByRoomId(roomsData, roomId) {
  * @returns {object}
  */
 export function normalizePalaceBundle(parts) {
-  const { status, wingsRaw, taxonomyRaw, graphStats, kgResult, overviewBundle } = parts;
+  const { fetchedAt, status, wingsRaw, taxonomyRaw, graphStats, kgResult, overviewBundle } = parts;
 
   const wingsData = normalizeWingsPayload(wingsRaw);
   const { taxonomy, roomsData, rooms, wings } = parseTaxonomyCanonical(taxonomyRaw);
+
+  const graphContractVersion = overviewBundle?.graphContractVersion ?? graphStats?.graphContractVersion ?? null;
+  if (graphContractVersion != null && graphContractVersion !== 2) {
+    throw new Error(`Unsupported palace graph contract version: ${graphContractVersion}`);
+  }
 
   const edgesResolved = Array.isArray(graphStats?.edgesResolved) ? graphStats.edgesResolved : [];
   const edgesInferred = Array.isArray(graphStats?.edgesInferred) ? graphStats.edgesInferred : [];
@@ -123,20 +137,19 @@ export function normalizePalaceBundle(parts) {
   }
 
   const kgStats = kgResult && !kgResult.error ? kgResult : null;
-
-  const overviewStats =
-    overviewBundle?.stats && typeof overviewBundle.stats === 'object' ? overviewBundle.stats : null;
-
+  const overviewStats = overviewBundle?.stats && typeof overviewBundle.stats === 'object' ? overviewBundle.stats : null;
   const graphMeta = graphStats?.graphMeta ?? overviewBundle?.graphMeta ?? null;
 
   return {
     status,
+    fetchedAt: fetchedAt ?? overviewBundle?.fetchedAt ?? graphMeta?.fetchedAt ?? null,
     wingsData,
     taxonomy,
     roomsData,
     rooms,
     wings,
     graphStats,
+    graphContractVersion,
     graph: {
       edgesResolved,
       edgesInferred,
@@ -162,25 +175,39 @@ export async function loadPalaceData() {
   const base = getApiBase();
   const prefix = `${base}/api`;
   try {
-    const [status, wingsRaw, taxonomyRaw, graphStats, kgResult, overviewBundle] = await Promise.all([
-      fetchJson(`${prefix}/status`),
-      fetchJson(`${prefix}/wings`),
-      fetchJson(`${prefix}/taxonomy`),
-      fetchJson(`${prefix}/graph-stats`),
-      fetchJson(`${prefix}/kg-stats`).catch(() => null),
-      fetchJson(`${prefix}/overview`).catch(() => null),
-    ]);
+    const snapshot = await fetchJson(`${prefix}/palace`);
+    const graphStats = {
+      graphContractVersion: snapshot.graphContractVersion,
+      fetchedAt: snapshot.fetchedAt,
+      ...(snapshot.graph || {}),
+    };
+    const overviewBundle = {
+      graphContractVersion: snapshot.graphContractVersion,
+      fetchedAt: snapshot.fetchedAt,
+      graphMeta: snapshot.graph?.graphMeta ?? null,
+      stats: snapshot.overviewStats ?? null,
+    };
 
-    return normalizePalaceBundle({ status, wingsRaw, taxonomyRaw, graphStats, kgResult, overviewBundle });
+    return normalizePalaceBundle({
+      fetchedAt: snapshot.fetchedAt,
+      status: snapshot.status,
+      wingsRaw: snapshot.wingsData,
+      taxonomyRaw: { taxonomy: snapshot.taxonomy },
+      graphStats,
+      kgResult: snapshot.kgStats ?? null,
+      overviewBundle,
+    });
   } catch (error) {
     return {
       status: null,
+      fetchedAt: null,
       wingsData: {},
       taxonomy: {},
       roomsData: {},
       rooms: [],
       wings: [],
       graphStats: null,
+      graphContractVersion: null,
       graph: { edgesResolved: [], edgesInferred: [], edgesUnresolved: [], summary: null, summaryInferred: null, graphMeta: null },
       graphEdges: [],
       overviewBundle: null,
