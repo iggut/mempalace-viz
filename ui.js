@@ -406,6 +406,8 @@ function graphFocusBack() {
   appState.currentRoom = prev.currentRoom;
   syncScenePresentation();
   sceneApi?.centerOnNodeId(prev.selected.id);
+  updateMetrics();
+  updateGraphViewChrome();
   renderInspector();
   persistState();
 }

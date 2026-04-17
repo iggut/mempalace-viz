@@ -307,18 +307,31 @@ export function labelOpacityDistanceFactor(cameraDistanceNorm, role = {}) {
 }
 
 /**
+ * Pointer-move budget before a press+release is treated as a drag (not a click).
+ * Touch/finger needs more slack than mouse; trackpad is reported as mouse in most browsers.
+ * @param {string} [pointerType] `PointerEvent.pointerType`
+ * @returns {number}
+ */
+export function pointerMoveThresholdPx(pointerType) {
+  if (pointerType === 'touch') return 12;
+  if (pointerType === 'pen') return 10;
+  return 9;
+}
+
+/**
  * Canonical pointer release classification for select vs drag/pan.
  * @param {{
  *  maxMoveSq: number,
  *  cameraMovedSq: number,
  *  moveThresholdPx?: number,
+ *  pointerType?: string,
  *  cameraMoveEpsSq?: number,
  *  cameraInteractionActive?: boolean,
  * }} p
  * @returns {{ shouldSelect: boolean, reason: 'click'|'pointer-drag'|'camera-drag'|'camera-interaction' }}
  */
 export function classifyPointerRelease(p) {
-  const moveThresholdPx = p.moveThresholdPx ?? 8;
+  const moveThresholdPx = p.moveThresholdPx ?? pointerMoveThresholdPx(p.pointerType);
   const cameraMoveEpsSq = p.cameraMoveEpsSq ?? 2.5e-5;
   if (p.cameraInteractionActive) {
     return { shouldSelect: false, reason: 'camera-interaction' };
@@ -337,18 +350,35 @@ export function classifyPointerRelease(p) {
  * Greedy rectangle overlap culling for label legibility in dense clusters.
  * @param {Array<{ id: string, x: number, y: number, w: number, h: number, priority: number }>} labels
  * @param {number} [paddingPx]
+ * @param {{ quantizePx?: number, lastKept?: Set<string> }} [options]
+ *   `quantizePx` — snap projected label centers to reduce flicker during slow camera motion.
+ *   `lastKept` — ids kept last frame get a tiny priority bump so borderline overlaps do not swap every frame.
  * @returns {Set<string>}
  */
-export function chooseNonOverlappingLabels(labels, paddingPx = 6) {
-  const sorted = [...(labels || [])].sort((a, b) => b.priority - a.priority);
+export function chooseNonOverlappingLabels(labels, paddingPx = 6, options = {}) {
+  const quantizePx = options.quantizePx ?? 0;
+  const lastKept = options.lastKept instanceof Set ? options.lastKept : null;
+  const sorted = [...(labels || [])].sort((a, b) => {
+    const sa = a.priority * 1000 + (lastKept?.has(a.id) ? 1 : 0);
+    const sb = b.priority * 1000 + (lastKept?.has(b.id) ? 1 : 0);
+    if (sb !== sa) return sb - sa;
+    return String(a.id).localeCompare(String(b.id));
+  });
   /** @type {Array<{ x0: number, y0: number, x1: number, y1: number }>} */
   const boxes = [];
   const keep = new Set();
   for (const l of sorted) {
-    const x0 = l.x - l.w * 0.5 - paddingPx;
-    const y0 = l.y - l.h * 0.5 - paddingPx;
-    const x1 = l.x + l.w * 0.5 + paddingPx;
-    const y1 = l.y + l.h * 0.5 + paddingPx;
+    let cx = l.x;
+    let cy = l.y;
+    if (quantizePx > 0) {
+      const q = quantizePx;
+      cx = Math.round(cx / q) * q;
+      cy = Math.round(cy / q) * q;
+    }
+    const x0 = cx - l.w * 0.5 - paddingPx;
+    const y0 = cy - l.h * 0.5 - paddingPx;
+    const x1 = cx + l.w * 0.5 + paddingPx;
+    const y1 = cy + l.h * 0.5 + paddingPx;
     const hit = boxes.some((b) => !(x1 < b.x0 || x0 > b.x1 || y1 < b.y0 || y0 > b.y1));
     if (hit) continue;
     boxes.push({ x0, y0, x1, y1 });

@@ -19,11 +19,13 @@ import {
   focusWingIdFromSceneSelection,
   framingTargetOffset,
   graphSceneNodeIdForLayoutNode,
+  hash01,
   labelOpacityDistanceFactor,
   labelSpriteScaleMultiplier,
   maxRadiusFromFocus,
   neighborIdsForFocus,
   normalizeCameraDistanceForLabels,
+  pointerMoveThresholdPx,
   runGraphForceLayout,
   seedWingClusteredLayout,
   separateGraphNodes,
@@ -146,6 +148,8 @@ export function createPalaceScene(container, options = {}) {
   let focusRepeatIndex = 0;
   /** @type {string[]} interaction-only labels (FIFO evict) */
   let dynamicLabelQueue = [];
+  /** @type {Set<string>} prior frame overlap pass — mild hysteresis vs. greedy churn */
+  let labelOverlapLastKept = new Set();
   /** @type {{ id: string, at: number } | null} brief emissive pulse on successful pick */
   let selectionPulse = null;
   let selectionPulseTimer = 0;
@@ -198,14 +202,14 @@ export function createPalaceScene(container, options = {}) {
   let resizeRafId = 0;
   let resizeObserver = null;
 
-  /** Primary-button press → release: distinguish click from orbit/pan/zoom so OrbitControls never triggers selection. */
-  const CLICK_MOVE_THRESHOLD_PX = 8;
   /** World-space squared; ignores float noise but catches real orbit/pan camera motion during the gesture. */
   const CAMERA_MOVE_EPS_SQ = 2.5e-5;
 
   const pointerGesture = {
     active: false,
     pointerId: -1,
+    /** @type {string} */
+    pointerType: 'mouse',
     startX: 0,
     startY: 0,
     maxMoveSq: 0,
@@ -310,6 +314,7 @@ export function createPalaceScene(container, options = {}) {
     if (stars?.userData?.outerMat) stars.userData.outerMat.opacity = 0.22;
     nodeRegistry.clear();
     labelByNodeId.clear();
+    labelOverlapLastKept = new Set();
   }
 
   /**
@@ -599,10 +604,14 @@ export function createPalaceScene(container, options = {}) {
             ? 800_000
             : role.neighbor
               ? 40_000
-              : Math.floor(opBase * 1000);
+              : Math.floor(opBase * 1000) + hash01(id) * 0.001;
       overlapCandidates.push({ id, x, y, w, h, priority });
     });
-    const kept = chooseNonOverlappingLabels(overlapCandidates, 4);
+    const kept = chooseNonOverlappingLabels(overlapCandidates, 6, {
+      quantizePx: 1,
+      lastKept: labelOverlapLastKept,
+    });
+    labelOverlapLastKept = new Set(kept);
     labelByNodeId.forEach((sprite, id) => {
       if (sprite.visible && !kept.has(id)) sprite.visible = false;
     });
@@ -1406,6 +1415,7 @@ export function createPalaceScene(container, options = {}) {
     if (!camera || event.button !== 0) return;
     pointerGesture.active = true;
     pointerGesture.pointerId = event.pointerId;
+    pointerGesture.pointerType = event.pointerType || 'mouse';
     pointerGesture.startX = event.clientX;
     pointerGesture.startY = event.clientY;
     pointerGesture.maxMoveSq = 0;
@@ -1430,7 +1440,8 @@ export function createPalaceScene(container, options = {}) {
     const release = classifyPointerRelease({
       maxMoveSq: pointerGesture.maxMoveSq,
       cameraMovedSq,
-      moveThresholdPx: CLICK_MOVE_THRESHOLD_PX,
+      moveThresholdPx: pointerMoveThresholdPx(pointerGesture.pointerType),
+      pointerType: pointerGesture.pointerType,
       cameraMoveEpsSq: CAMERA_MOVE_EPS_SQ,
       cameraInteractionActive,
     });
@@ -1548,7 +1559,10 @@ export function createPalaceScene(container, options = {}) {
     controls.maxPolarAngle = Math.PI * 0.52;
     controlsStartHandler = () => {
       cameraInteractionActive = true;
-      if (pointerGesture.active) pointerGesture.maxMoveSq = Math.max(pointerGesture.maxMoveSq, CLICK_MOVE_THRESHOLD_PX ** 2 + 1);
+      if (pointerGesture.active) {
+        const t = pointerMoveThresholdPx(pointerGesture.pointerType);
+        pointerGesture.maxMoveSq = Math.max(pointerGesture.maxMoveSq, t * t + 1);
+      }
       clearHoverState();
     };
     controlsEndHandler = () => {

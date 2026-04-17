@@ -22,6 +22,7 @@ import {
   normalizeCameraDistanceForLabels,
   hash01,
   maxRadiusFromFocus,
+  pointerMoveThresholdPx,
   normalizeLayoutParams,
   separateGraphNodes,
   splitGraphFocusIds,
@@ -323,6 +324,60 @@ test('chooseNonOverlappingLabels keeps highest-priority labels in dense clusters
   assert.ok(keep.has('selected'));
   assert.ok(keep.has('far'));
   assert.ok(!keep.has('nearby-a') || !keep.has('nearby-b'));
+});
+
+test('chooseNonOverlappingLabels tie-breaks equal priority by id (stable)', () => {
+  const k = chooseNonOverlappingLabels(
+    [
+      { id: 'z-last', x: 100, y: 100, w: 50, h: 16, priority: 500 },
+      { id: 'a-first', x: 104, y: 100, w: 50, h: 16, priority: 500 },
+    ],
+    6,
+  );
+  assert.ok(k.has('a-first'));
+  assert.ok(!k.has('z-last'));
+});
+
+test('chooseNonOverlappingLabels lastKept gives mild continuity preference', () => {
+  const last = new Set(['z-last']);
+  const k = chooseNonOverlappingLabels(
+    [
+      { id: 'z-last', x: 100, y: 100, w: 50, h: 16, priority: 500 },
+      { id: 'a-first', x: 104, y: 100, w: 50, h: 16, priority: 500 },
+    ],
+    6,
+    { lastKept: last },
+  );
+  assert.ok(k.has('z-last'));
+  assert.ok(!k.has('a-first'));
+});
+
+test('pointerMoveThresholdPx by pointer type', () => {
+  assert.equal(pointerMoveThresholdPx('touch'), 12);
+  assert.equal(pointerMoveThresholdPx('pen'), 10);
+  assert.equal(pointerMoveThresholdPx('mouse'), 9);
+  assert.equal(pointerMoveThresholdPx(undefined), 9);
+});
+
+test('classifyPointerRelease uses pointer type when moveThresholdPx omitted', () => {
+  assert.equal(
+    classifyPointerRelease({
+      maxMoveSq: 13 * 13,
+      cameraMovedSq: 0,
+      pointerType: 'touch',
+      cameraInteractionActive: false,
+    }).reason,
+    'pointer-drag',
+  );
+  assert.equal(
+    classifyPointerRelease({
+      maxMoveSq: 8 * 8,
+      cameraMovedSq: 0,
+      pointerType: 'mouse',
+      cameraInteractionActive: false,
+    }).shouldSelect,
+    true,
+  );
 });
 
 test('focusWingIdFromSceneSelection', () => {

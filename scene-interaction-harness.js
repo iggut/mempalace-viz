@@ -1,4 +1,4 @@
-import { classifyPointerRelease } from './graph-scene-helpers.js';
+import { classifyPointerRelease, pointerMoveThresholdPx } from './graph-scene-helpers.js';
 
 /**
  * Lightweight deterministic harness for scene-like pointer interactions.
@@ -13,12 +13,13 @@ export function createSceneInteractionHarness(options = {}) {
   const pickAtClient = options.pickAtClient || (() => null);
   const hoverAtClient = options.hoverAtClient || (() => null);
 
-  const moveThresholdPx = options.moveThresholdPx ?? 8;
+  const moveThresholdPx = options.moveThresholdPx;
   const cameraMoveEpsSq = options.cameraMoveEpsSq ?? 2.5e-5;
 
   const pointerGesture = {
     active: false,
     pointerId: -1,
+    pointerType: 'mouse',
     startX: 0,
     startY: 0,
     maxMoveSq: 0,
@@ -39,6 +40,7 @@ export function createSceneInteractionHarness(options = {}) {
     if (!event || event.button !== 0) return;
     pointerGesture.active = true;
     pointerGesture.pointerId = event.pointerId;
+    pointerGesture.pointerType = event.pointerType || 'mouse';
     pointerGesture.startX = event.clientX;
     pointerGesture.startY = event.clientY;
     pointerGesture.maxMoveSq = 0;
@@ -67,7 +69,8 @@ export function createSceneInteractionHarness(options = {}) {
   function controlsStart() {
     cameraInteractionActive = true;
     if (pointerGesture.active) {
-      pointerGesture.maxMoveSq = Math.max(pointerGesture.maxMoveSq, moveThresholdPx ** 2 + 1);
+      const t = moveThresholdPx ?? pointerMoveThresholdPx(pointerGesture.pointerType);
+      pointerGesture.maxMoveSq = Math.max(pointerGesture.maxMoveSq, t * t + 1);
     }
     clearHover();
   }
@@ -85,6 +88,7 @@ export function createSceneInteractionHarness(options = {}) {
       maxMoveSq: pointerGesture.maxMoveSq,
       cameraMovedSq,
       moveThresholdPx,
+      pointerType: pointerGesture.pointerType,
       cameraMoveEpsSq,
       cameraInteractionActive,
     });
