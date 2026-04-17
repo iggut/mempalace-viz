@@ -356,6 +356,15 @@ export function createPalaceScene(container, options = {}) {
     stars.userData = { innerMat, outerMat };
   }
 
+  /** World height of label sprites; must match `targetWorldHeight` in makeLabelSprite. */
+  const LABEL_SPRITE_WORLD_HEIGHT = 1.85;
+  /** Gap between sphere top and label bottom (sprite center is half height above that). */
+  const LABEL_CLEARANCE_ABOVE_SPHERE = 0.22;
+
+  function labelYAboveSphere(centerY, sphereRadius) {
+    return centerY + sphereRadius + LABEL_SPRITE_WORLD_HEIGHT * 0.5 + LABEL_CLEARANCE_ABOVE_SPHERE;
+  }
+
   // Label sprites: rendered to an offscreen canvas at devicePixelRatio for crispness,
   // then scaled into world space while preserving the canvas's pixel aspect ratio.
   // FRAGILE: sprite world-scale MUST mirror canvas (cssW : cssH) or labels appear as
@@ -418,10 +427,9 @@ export function createPalaceScene(container, options = {}) {
 
     // World-space sprite size: pick a target world-height per label, then derive
     // width from the actual canvas aspect ratio so text is never stretched.
-    const targetWorldHeight = 1.85;
     const aspect = cssW / cssH;
-    const sx = targetWorldHeight * aspect;
-    const sy = targetWorldHeight;
+    const sx = LABEL_SPRITE_WORLD_HEIGHT * aspect;
+    const sy = LABEL_SPRITE_WORLD_HEIGHT;
     sprite.scale.set(sx, sy, 1);
     sprite.userData.labelBaseScale = { x: sx, y: sy, z: 1 };
     sprite.renderOrder = 10;
@@ -442,10 +450,17 @@ export function createPalaceScene(container, options = {}) {
     mesh.userData.nodeId = id;
   }
 
-  function addLabelForNode(nodeId, text, x, y, z, color) {
+  /**
+   * @param {number} [sphereRadius] — mesh sphere radius; label sits above the surface. Omit only for legacy paths.
+   */
+  function addLabelForNode(nodeId, text, x, y, z, color, sphereRadius) {
     const sprite = makeLabelSprite(text, color);
     sprite.visible = labelsVisible;
-    sprite.position.set(x, y + 2.45, z);
+    const lift =
+      sphereRadius != null
+        ? labelYAboveSphere(y, sphereRadius)
+        : labelYAboveSphere(y, CONFIG.nodeSizes.roomMin + 0.2);
+    sprite.position.set(x, lift, z);
     scene.add(sprite);
     labelSprites.push({ sprite, nodeId });
     labelByNodeId.set(nodeId, sprite);
@@ -494,7 +509,8 @@ export function createPalaceScene(container, options = {}) {
     if (dynamicLabelQueue.length >= MAX_DYNAMIC_GRAPH_LABELS) return;
     const { mesh, data } = entry;
     const p = mesh.position;
-    addLabelForNode(nodeId, data.name, p.x, p.y, p.z, '#94a3b8');
+    const r = entry.mesh.geometry?.parameters?.radius ?? CONFIG.nodeSizes.roomMin + 0.2;
+    addLabelForNode(nodeId, data.name, p.x, p.y, p.z, '#94a3b8', r);
     dynamicLabelQueue.push(nodeId);
   }
 
@@ -1011,7 +1027,7 @@ export function createPalaceScene(container, options = {}) {
       const drawerCount = wingsData[wing] || 1;
       const size = THREE.MathUtils.mapLinear(drawerCount, 1, 200, CONFIG.nodeSizes.wingMin, CONFIG.nodeSizes.wingMax);
       createWingNode(wing, x, y, z, size);
-      addLabelForNode(`wing:${wing}`, wing, x, y, z, '#e8edf0');
+      addLabelForNode(`wing:${wing}`, wing, x, y, z, '#e8edf0', size);
     });
 
     // Soft neighbor tethers between adjacent wings on the dome — gives the
@@ -1039,7 +1055,7 @@ export function createPalaceScene(container, options = {}) {
     const rooms = roomsData[focusWing] || [];
     const wingSize = CONFIG.nodeSizes.wingMin + 1.2;
     createWingNode(focusWing, 0, 0, 0, wingSize);
-    addLabelForNode(`wing:${focusWing}`, focusWing, 0, 0, 0, '#e8edf0');
+    addLabelForNode(`wing:${focusWing}`, focusWing, 0, 0, 0, '#e8edf0', wingSize);
 
     const roomRadius = CONFIG.spacing.roomRadius;
     const n = Math.max(rooms.length, 1);
@@ -1059,7 +1075,7 @@ export function createPalaceScene(container, options = {}) {
         toId: `room:${focusWing}:${room.name}`,
         baseOpacity: 0.2,
       });
-      addLabelForNode(`room:${focusWing}:${room.name}`, room.name, rx, ry, rz, '#aab4c3');
+      addLabelForNode(`room:${focusWing}:${room.name}`, room.name, rx, ry, rz, '#aab4c3', size);
     });
 
     tweenCamera(new THREE.Vector3(0, 36, 74), new THREE.Vector3(0, 0, 0));
@@ -1082,7 +1098,7 @@ export function createPalaceScene(container, options = {}) {
       const wingY = stableNoise(wing, 11) * drift;
 
       createWingNode(wing, wingX, wingY, wingZ, CONFIG.nodeSizes.wingMin);
-      addLabelForNode(`wing:${wing}`, wing, wingX, wingY, wingZ, '#d6dde6');
+      addLabelForNode(`wing:${wing}`, wing, wingX, wingY, wingZ, '#d6dde6', CONFIG.nodeSizes.wingMin);
 
       const rooms = roomsData[wing] || [];
       const roomAngleStep = (Math.PI * 2) / Math.max(rooms.length, 1);
@@ -1102,7 +1118,7 @@ export function createPalaceScene(container, options = {}) {
           toId: `room:${wing}:${room.name}`,
           baseOpacity: 0.16,
         });
-        addLabelForNode(`room:${wing}:${room.name}`, room.name, roomX, roomY, roomZ, '#aab4c3');
+        addLabelForNode(`room:${wing}:${room.name}`, room.name, roomX, roomY, roomZ, '#aab4c3', size);
       });
     });
 
@@ -1232,12 +1248,12 @@ export function createPalaceScene(container, options = {}) {
       const size = isWing ? CONFIG.nodeSizes.wingMin + 0.4 : CONFIG.nodeSizes.roomMin + 0.2;
       if (isWing) {
         createWingNode(nodeData.name, nodeData.x, nodeData.y, nodeData.z, size);
-        addLabelForNode(`wing:${nodeData.name}`, nodeData.name, nodeData.x, nodeData.y, nodeData.z, '#cbd5e1');
+        addLabelForNode(`wing:${nodeData.name}`, nodeData.name, nodeData.x, nodeData.y, nodeData.z, '#cbd5e1', size);
       } else {
         const rid = `room:${nodeData.wing}:${nodeData.name}`;
         createRoomNode(nodeData.name, nodeData.wing, nodeData.x, nodeData.y, nodeData.z, size);
         if (roomLabelAllow.has(rid)) {
-          addLabelForNode(rid, nodeData.name, nodeData.x, nodeData.y, nodeData.z, '#94a3b8');
+          addLabelForNode(rid, nodeData.name, nodeData.x, nodeData.y, nodeData.z, '#94a3b8', size);
         }
       }
     });
