@@ -2118,9 +2118,28 @@ input[type="radio"] {
   overflow: hidden;
 }
 
+.metric--context {
+  min-width: 0;
+  max-width: min(38ch, 100%);
+}
+
 .metric--context .metric__v {
+  display: inline-block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
   color: var(--accent-bright);
   font-weight: 500;
+}
+
+.metric--context--idle .metric__v {
+  color: var(--text);
+  font-weight: 600;
+  overflow: visible;
+  text-overflow: clip;
 }
 
 .metrics {

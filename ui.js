@@ -2094,13 +2094,14 @@ function updateFooterContextLine(subject, ctx) {
   const wrap = $('metric-context-wrap');
   if (!el || !wrap) return;
 
-  if (!subject || !ctx) {
-    wrap.hidden = true;
-    el.textContent = '';
+  const idle = !subject || !ctx;
+  wrap.classList.toggle('metric--context--idle', idle);
+
+  if (idle) {
+    el.textContent = '—';
     return;
   }
 
-  wrap.hidden = false;
   if (subject.type === 'wing') {
     const dr = rankWingsByDrawers(ctx.wingsData).find((x) => x.wing === subject.name);
     el.textContent = dr ? `Selected wing · ${ordinal(dr.rank)} by drawers` : 'Selected wing';
