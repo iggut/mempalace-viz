@@ -61,6 +61,7 @@ const STATIC_FILES = {
   '/graph-search.js': 'graph-search.js',
   '/state-utils.js': 'state-utils.js',
   '/nav-focus.js': 'nav-focus.js',
+  '/nav-dev-invariants.js': 'nav-dev-invariants.js',
   '/debug.js': 'debug.js',
   '/three-runtime.js': 'three-runtime.js',
 };
