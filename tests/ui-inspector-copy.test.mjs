@@ -48,3 +48,14 @@ test('terminology favors user-facing language over debug phrasing', async () => 
   assert.ok(!src.includes('Structural readout (tunnels)'));
   assert.ok(!src.includes('Most connected rooms'));
 });
+
+test('graph mode exposes task-oriented workflow copy and structure jump', async () => {
+  const src = await readUiSource();
+  assert.ok(src.includes('Local neighborhood'));
+  assert.ok(src.includes('Connections detail'));
+  assert.ok(src.includes('graph-selection-workflow'));
+  assert.ok(src.includes('Wing / room layout'));
+  assert.ok(src.includes('graphJumpToStructureView'));
+  assert.ok(src.includes('Graph workflow'));
+  assert.ok(src.includes('summarizeGraphRoomNeighborhood'));
+});

@@ -84,6 +84,10 @@ import {
   stepRouteIndex,
 } from './graph-route.js';
 import {
+  summarizeGraphRoomNeighborhood,
+  summarizeGraphWingNeighborhood,
+} from './graph-workflow.js';
+import {
   actionableWorkflowBullets,
   connectionsSectionNoExplicitEdgesLine,
   graphInspectorNoEdgesNoticeLines,
@@ -117,7 +121,7 @@ const VIEWS = [
   {
     id: 'graph',
     title: 'Graph',
-    hint: 'Relationship view: explicit MCP tunnel edges between rooms (not the same as folder layout in Wings/Rooms).',
+    hint: 'How rooms connect (MCP links). Click a node first — then inspect, step links, or jump to folder layout in Rooms.',
   },
 ];
 
@@ -351,8 +355,20 @@ function graphExploreStripHtml() {
     : showRouteMode
       ? `<div class="graph-route-strip graph-route-strip--mode-only" role="group" aria-label="Route mode">${modeChips}<span class="graph-route-strip__hint">Applies when you route to a target.</span></div>`
       : '';
-  return `${routeStrip}<div class="graph-explore-strip" role="group" aria-label="Graph exploration">
-    <button type="button" class="btn btn--ghost btn--sm" data-graph-action="frame-nbr" title="Re-frame camera on selection and its neighbors">Frame neighborhood</button>
+  return `${routeStrip}
+  <div class="graph-selection-workflow" role="region" aria-label="Graph selection actions">
+    <p class="graph-selection-workflow__lead">
+      <strong>Inspector is locked</strong> on this node — the scene spotlights its neighborhood. Compare relationships here;
+      use <strong>Wing / room layout</strong> for where it lives in the palace tree.
+    </p>
+    <div class="graph-selection-workflow__primary btn-row" style="margin-top: 8px; flex-wrap: wrap; gap: 6px">
+      <button type="button" class="btn btn--ghost btn--sm" data-graph-action="frame-nbr" title="Re-center on this node and its visible links">Frame neighborhood</button>
+      <button type="button" class="btn btn--ghost btn--sm" data-graph-action="open-structure" title="Open Rooms view — same wing in folder layout (taxonomy)">Wing / room layout</button>
+      <button type="button" class="btn btn--ghost btn--sm" data-graph-action="clear-focus" title="Clear selection (same as Clear in the toolbar)">Clear selection</button>
+    </div>
+  </div>
+  <div class="graph-explore-strip" role="group" aria-label="Step along links or back out">
+    <span class="graph-explore-strip__label">Move</span>
     <span class="graph-explore-strip__nav">
       <button type="button" class="btn btn--ghost btn--sm" data-graph-action="prev" ${hasNbr && !routeOk ? '' : 'disabled'} title="Previous connected room ([)">◀</button>
       <button type="button" class="btn btn--ghost btn--sm" data-graph-action="next" ${hasNbr && !routeOk ? '' : 'disabled'} title="Next connected room (])">▶</button>
@@ -360,13 +376,36 @@ function graphExploreStripHtml() {
     <button type="button" class="btn btn--ghost btn--sm" data-graph-action="back"${
       graphFocusHistory.length > 0 ? '' : ' disabled'
     } title="Prior graph focus (U)">Back</button>
-    <span class="graph-explore-strip__meta" aria-hidden="true">${n} link${n === 1 ? '' : 's'}</span>
+    <span class="graph-explore-strip__meta">${n} neighbor link${n === 1 ? '' : 's'}</span>
   </div>`;
 }
 
 function graphFrameNeighborhood() {
   if (appState.view !== 'graph' || !appState.selected?.id) return;
   sceneApi?.centerOnNodeId(appState.selected.id);
+}
+
+/** Leave graph view while keeping the same wing/room — taxonomy (Rooms) vs relationship (Graph). */
+function graphJumpToStructureView() {
+  if (appState.view !== 'graph' || !appState.selected || appState.selected.type === 'center') return;
+  const sel = appState.selected;
+  closeHelpIfOpen();
+  if (sel.type === 'room') {
+    appState.currentWing = sel.wing;
+    appState.currentRoom = sel.name;
+    appState.pinned = false;
+    applyView('rooms');
+    sceneApi?.centerOnNodeId(sel.id);
+    syncScenePresentation();
+    showToast('Rooms view — folder-shaped layout for this wing. Press 3 for Graph again.', 5200);
+    return;
+  }
+  if (sel.type === 'wing') {
+    graphFocusHistory.length = 0;
+    clearGraphRoute();
+    navigateToWing(sel.name);
+    showToast('Rooms view — folder-shaped layout for this wing. Press 3 for Graph again.', 5200);
+  }
 }
 
 function graphStepNeighbor(delta) {
@@ -931,6 +970,15 @@ function renderOverviewInspector(ctx) {
       ? `<div class="inspect-card inspect-card--hint" role="status"><strong>Graph filters active</strong><p class="inspect-muted inspect-muted--tight">Visible: ${formatNum(ctx.visibleGraphSummary.visibleEdgeCount)} edges (${formatRelationshipTypeCounts(ctx.visibleGraphSummary.visibleByType) || '—'}). Inspector “visible” rows match the scene. Footer and resolved totals above remain global.</p></div>`
       : '';
 
+  const graphOverviewWorkflow =
+    appState.view === 'graph'
+      ? `<div class="inspect-card inspect-card--hint graph-overview-workflow" role="region" aria-label="How to use graph view">
+        <strong>Graph workflow</strong>
+        <p class="inspect-muted inspect-muted--tight"><strong>Wings / Rooms</strong> — palace folder layout (where things live). <strong>Graph</strong> — how rooms link via MCP (relationships). Start by clicking a room or wing on the canvas; the inspector locks and the scene spotlights that neighborhood.</p>
+        <p class="inspect-muted inspect-muted--tight">Then: step links with <kbd>[</kbd> <kbd>]</kbd>, back up with <kbd>U</kbd> or <strong>Back</strong>, or open <strong>Wing / room layout</strong> after a selection to see the same wing in Rooms. <kbd>Esc</kbd> clears search first, then walks back navigation.</p>
+      </div>`
+      : '';
+
   return `
     <div class="inspect-stack">
       <div class="inspect-card inspect-card--hero">
@@ -938,6 +986,7 @@ function renderOverviewInspector(ctx) {
         <p class="inspect-lead">${escapeHtml(om.viewHint)}</p>
         <p class="inspect-muted">${escapeHtml(palaceBlurb)}</p>
       </div>
+      ${graphOverviewWorkflow}
       ${graphGuidanceBlocksHtml(ctx)}
       ${graphExplorerNote}
       ${inspectSection(
@@ -1127,14 +1176,36 @@ function renderWingInspector(ctx, wingName, _mode) {
       ${smallest && smallest.name !== largest?.name ? metaRow('Smallest room', `${smallest.name} (${formatNum(smallest.drawers)})`) : ''}
     `;
 
-  const graphViewNote =
-    appState.view === 'graph'
-      ? '<p class="inspect-muted inspect-muted--tight">Graph view: node positions are layout-only; drawer ranks use taxonomy and wings API.</p>'
-      : '';
+  const graphWingNeighborhoodSection =
+    appState.view === 'graph' && ga.hasResolvableEdges
+      ? (() => {
+          const g = summarizeGraphWingNeighborhood({
+            wVis,
+            graphFilterNarrowed: ctx.graphFilterNarrowed,
+            tunnelFull: tunnel,
+          });
+          return inspectSection(
+            'Local neighborhood',
+            `<div class="meta-block">
+          ${metaRow('Cross-wing touches (visible)', formatNum(wVis.crossWingTouches))}
+          ${metaRow('Relationship mix (visible)', formatRelationshipTypeCounts(wVis.byType) || '—')}
+          ${ctx.graphFilterNarrowed ? metaRow('Relationship mix (global)', formatRelationshipTypeCounts(wFull.byType) || '—') : ''}
+        </div>
+        <p class="inspect-muted inspect-muted--tight">${escapeHtml(g.roleLine)}</p>
+        <p class="inspect-muted inspect-muted--tight">${escapeHtml(g.shapeLine)}</p>
+        ${g.mixLine ? `<p class="inspect-muted inspect-muted--tight">${escapeHtml(g.mixLine)}</p>` : ''}
+        <p class="inspect-muted inspect-muted--tight">Drawer counts and ranks below are taxonomy (structure). Link counts are graph (relationships).</p>`,
+          );
+        })()
+      : appState.view === 'graph'
+        ? `<div class="inspect-card inspect-card--hint" role="status"><strong>Graph context</strong><p class="inspect-muted inspect-muted--tight">No resolvable edges in this snapshot — switch to Wings/Rooms for structure-only navigation.</p></div>`
+        : '';
+
+  const wingKeyRelTitle = appState.view === 'graph' ? 'Connections detail' : 'Key relationships';
 
   return `
     <div class="inspect-stack">
-      ${graphViewNote}
+      ${graphWingNeighborhoodSection}
       <div class="inspect-card inspect-card--hero">
         <span class="badge">Wing</span>
         <div class="inspect-title">${escapeHtml(wingName)}</div>
@@ -1152,7 +1223,7 @@ function renderWingInspector(ctx, wingName, _mode) {
         </div>`,
       )}
       ${inspectSection(
-        'Key relationships',
+        wingKeyRelTitle,
         ga.hasResolvableEdges
           ? `<div class="meta-block">
           ${metaRow('Relationship mix', formatRelationshipTypeCounts(wFull.byType) || '—')}
@@ -1324,11 +1395,39 @@ function renderRoomInspector(ctx, wingName, roomName, _mode) {
         }`,
   );
 
-  const graphViewNote =
-    appState.view === 'graph'
-      ? `<p class="inspect-muted inspect-muted--tight"><strong>Relationship view.</strong> Lines are resolved MCP tunnel edges (declared links between rooms). Brightness and the inspector below describe this room’s neighborhood — not wing/folder hierarchy.</p>
-        <p class="inspect-muted inspect-muted--tight">Use <kbd>[</kbd> / <kbd>]</kbd> to step linked rooms, <kbd>U</kbd> for prior focus, and <strong>Frame neighborhood</strong> in Explore to re-center the camera.</p>`
-      : '';
+  const keyRelTitle = appState.view === 'graph' ? 'Connections detail' : 'Key relationships';
+
+  const graphLocalNeighborhoodSection =
+    appState.view === 'graph' && graphAvailable && slice
+      ? (() => {
+          const g = summarizeGraphRoomNeighborhood({
+            visRoomInc,
+            fullRoomInc,
+            slice,
+            graphFilterNarrowed: ctx.graphFilterNarrowed,
+          });
+          const lines = [g.roleLine, g.balanceLine, g.medianLine, g.filterLine, g.dominantTypes ? `Dominant link types (visible): ${g.dominantTypes}` : ''].filter(
+            Boolean,
+          );
+          const topN =
+            g.topNeighbors.length > 0
+              ? `<p class="inspect-micro">Strongest neighbors (by link count)</p><p class="inspect-muted inspect-muted--tight">${escapeHtml(g.topNeighbors.join(' · '))}</p>`
+              : '';
+          return inspectSection(
+            'Local neighborhood',
+            `<div class="meta-block">
+          ${metaRow('Visible links (edges)', formatNum(visRoomInc.degree))}
+          ${metaRow('Same-wing links', formatNum(visRoomInc.intraWingLinks))}
+          ${metaRow('Cross-wing links', formatNum(visRoomInc.crossWingLinks))}
+          ${ctx.graphFilterNarrowed ? metaRow('Links (global, unfiltered)', formatNum(fullRoomInc.degree)) : ''}
+        </div>
+        ${lines.map((l) => `<p class="inspect-muted inspect-muted--tight">${escapeHtml(l)}</p>`).join('')}
+        ${topN}`,
+          );
+        })()
+      : appState.view === 'graph'
+        ? `<div class="inspect-card inspect-card--hint" role="status"><strong>Graph context</strong><p class="inspect-muted inspect-muted--tight">${escapeHtml(connectionsSectionNoExplicitEdgesLine())}</p></div>`
+        : '';
 
   const sceneRoomId = `room:${wingName}:${roomName}`;
   const startPr = graphRoute.startSceneId ? parseRoomSceneId(graphRoute.startSceneId) : null;
@@ -1384,7 +1483,7 @@ function renderRoomInspector(ctx, wingName, roomName, _mode) {
 
   return `
     <div class="inspect-stack">
-      ${graphViewNote}
+      ${graphLocalNeighborhoodSection}
       ${routeBlock}
       <div class="inspect-card inspect-card--hero">
         <span class="badge">Room</span>
@@ -1413,7 +1512,7 @@ function renderRoomInspector(ctx, wingName, roomName, _mode) {
           : '<p class="inspect-empty">Room-level drawer breakdown is not available for this wing.</p>',
       )}
       ${inspectSection(
-        'Key relationships',
+        keyRelTitle,
         graphAvailable && slice
           ? `
         <div class="meta-block">
@@ -1622,6 +1721,8 @@ function onInspectorClick(e) {
   if (g) {
     const act = g.getAttribute('data-graph-action');
     if (act === 'frame-nbr') graphFrameNeighborhood();
+    else if (act === 'open-structure') graphJumpToStructureView();
+    else if (act === 'clear-focus') clearSelection();
     else if (act === 'next') graphStepNeighbor(1);
     else if (act === 'prev') graphStepNeighbor(-1);
     else if (act === 'back') graphFocusBack();
@@ -2720,8 +2821,8 @@ function applyView(view) {
   if (view === 'graph' && !sessionStorage.getItem('mempalace-graph-enter-hint')) {
     sessionStorage.setItem('mempalace-graph-enter-hint', '1');
     showToast(
-      'Graph = tunnel links between rooms. Drag to orbit · click a node to lock the inspector · [ ] steps along links · U back · Wings/Rooms for folder layout.',
-      8500,
+      'Graph shows how rooms link (not the folder tree). First: click any node — inspector locks, scene spotlights neighbors. [ ] step links · U back · “Wing / room layout” for taxonomy · 1–2 for structure views.',
+      9600,
     );
   }
   const focusWing = view === 'rooms' ? appState.currentWing : null;

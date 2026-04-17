@@ -733,7 +733,7 @@ export function buildOverviewModel(ctx, viewId) {
       ? `Focused on “${ctx.focusWing}”: rooms orbit the wing. Click another wing in “all rooms” layout or use search.`
       : 'Each cluster is a wing; rooms orbit their wing. Click a room to inspect and center.',
     graph:
-      'Force-directed graph. Edges are explicit MCP tunnel links from MemPalace tunnel discovery only.',
+      'Relationship map: edges are explicit MCP links (tunnel discovery). Click a node to lock the inspector and read its neighborhood — not the same as folder layout in Wings/Rooms.',
   };
 
   let graphBlurb = '';

@@ -1371,6 +1371,29 @@ input[type="radio"] {
   color: var(--text);
 }
 
+.graph-selection-workflow {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(143, 169, 255, 0.2);
+  background: linear-gradient(180deg, rgba(143, 169, 255, 0.06), rgba(10, 14, 22, 0.2));
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
+.graph-selection-workflow__lead {
+  margin: 0;
+  color: var(--text-dim);
+}
+
+.graph-selection-workflow__lead strong {
+  color: var(--text);
+}
+
+.graph-overview-workflow strong {
+  color: var(--text);
+}
+
 .graph-explore-strip {
   display: flex;
   flex-wrap: wrap;
@@ -1382,6 +1405,14 @@ input[type="radio"] {
   border: 1px solid var(--hairline);
   background: var(--surface-1);
   font-size: 0.72rem;
+}
+
+.graph-explore-strip__label {
+  color: var(--text-dim);
+  font-size: 0.66rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin-right: 2px;
 }
 
 .graph-explore-strip__nav {

@@ -137,11 +137,12 @@
 
             <div id="graph-view-extras" class="graph-view-extras" hidden>
               <section class="graph-mode-intro" aria-label="What graph view shows">
-                <p class="graph-mode-intro__title">Links, not the folder tree</p>
+                <p class="graph-mode-intro__title">Relationships first — structure when you need it</p>
                 <p class="graph-mode-intro__body">
-                  <strong>Wings / Rooms</strong> = taxonomy structure. <strong>Graph</strong> = resolved MCP edges only
-                  (what connects in data). Click a room to focus its neighborhood; drag to orbit. <kbd>Back</kbd> or
-                  <kbd>U</kbd> steps focus.
+                  <strong>Wings / Rooms</strong> = where drawers live (folder layout). <strong>Graph</strong> = how rooms
+                  connect (MCP tunnel edges only). <strong>Start:</strong> click a node — inspector locks, neighbors
+                  spotlight. Then use <kbd>[</kbd>/<kbd>]</kbd> to walk links, <strong>Wing / room layout</strong> for
+                  taxonomy, <kbd>U</kbd>/<strong>Back</strong> to step out. Drag to orbit.
                 </p>
               </section>
               <div id="graph-status-pill" class="graph-status-pill" role="status" aria-live="polite"></div>
@@ -394,6 +395,10 @@
           <li><strong>Click</strong> wing (Wings) — Enter that wing’s rooms</li>
           <li><strong>Click</strong> room (Rooms) — Select &amp; center</li>
           <li><strong>Click</strong> node (Graph) — Focus (inspector lock) &amp; frame</li>
+          <li>
+            <strong>Wing / room layout</strong> (Graph inspector strip) — Opens the same wing or room in Rooms (taxonomy).
+            Press <kbd>3</kbd> to return to Graph.
+          </li>
           <li>
             <kbd>[</kbd> / <kbd>]</kbd> — With an active route: step hops on the highlighted path; otherwise step along connected
             rooms (graph) · <kbd>U</kbd> — Prior focus
