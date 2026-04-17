@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  assessRetrievalEvidence,
   formatRetrievalContextForPrompt,
   retrieveMemoriesForChat,
 } from '../memories-chat-retrieval.js';
@@ -57,4 +58,22 @@ test('formatRetrievalContextForPrompt lists memories', () => {
   assert.match(block, /Memory 1/);
   assert.match(block, /A \/ B/);
   assert.match(block, /body/);
+});
+
+test('assessRetrievalEvidence flags sparse and weak matches', () => {
+  const thin = assessRetrievalEvidence([
+    { wing: 'W', room: 'R', drawerId: 'a', excerpt: 'x', similarity: 0.2 },
+  ]);
+  assert.equal(thin.sparse, true);
+  assert.equal(thin.weakMatch, true);
+  assert.equal(thin.showBanner, true);
+
+  const strong = assessRetrievalEvidence([
+    { wing: 'W', room: 'R', drawerId: 'a', excerpt: 'x', similarity: 0.9 },
+    { wing: 'W', room: 'R2', drawerId: 'b', excerpt: 'y', similarity: 0.85 },
+    { wing: 'W', room: 'R3', drawerId: 'c', excerpt: 'z', similarity: 0.8 },
+  ]);
+  assert.equal(strong.sparse, false);
+  assert.equal(strong.weakMatch, false);
+  assert.equal(strong.showBanner, false);
 });

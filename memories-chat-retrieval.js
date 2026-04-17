@@ -151,6 +151,45 @@ export async function retrieveMemoriesForChat({
 }
 
 /**
+ * Summarizes how strong retrieval is for UI trust messaging (per-turn, from search scores).
+ * Similarity is treated as a 0–1 style score when present; sparse = few hits.
+ *
+ * @param {RetrievedMemorySource[]} sources
+ * @returns {{
+ *   count: number,
+ *   maxSimilarity: number | null,
+ *   sparse: boolean,
+ *   weakMatch: boolean,
+ *   showBanner: boolean,
+ * }}
+ */
+export function assessRetrievalEvidence(sources) {
+  const count = Array.isArray(sources) ? sources.length : 0;
+  if (count === 0) {
+    return {
+      count: 0,
+      maxSimilarity: null,
+      sparse: true,
+      weakMatch: true,
+      showBanner: false,
+    };
+  }
+  const sims = sources
+    .map((s) =>
+      typeof s.similarity === 'number' && Number.isFinite(s.similarity) ? s.similarity : null,
+    )
+    .filter((x) => x != null);
+  const maxSimilarity = sims.length ? Math.max(...sims) : null;
+  const sparse = count <= 2;
+  const weakMatch =
+    maxSimilarity != null
+      ? maxSimilarity < 0.33 || (sparse && maxSimilarity < 0.45)
+      : sparse;
+  const showBanner = sparse || weakMatch;
+  return { count, maxSimilarity, sparse, weakMatch, showBanner };
+}
+
+/**
  * Builds a single user-visible block for the model (no secrets).
  * @param {RetrievedMemorySource[]} sources
  */
