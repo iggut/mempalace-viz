@@ -285,10 +285,10 @@ export function effectiveLabelBudgetForCamera(baseBudget, cameraDistanceNorm, de
  */
 export function labelSpriteScaleMultiplier(cameraDistanceNorm, role = {}) {
   const z = Math.max(0, Math.min(1, cameraDistanceNorm));
-  let m = 0.74 + z * 0.38;
-  if (role.pinned) m *= 1.12;
-  else if (role.selected) m *= 1.08;
-  else if (role.hovered) m *= 1.05;
+  let m = 0.6 + z * 0.34;
+  if (role.pinned) m *= 1.08;
+  else if (role.selected) m *= 1.06;
+  else if (role.hovered) m *= 1.04;
   return m;
 }
 
@@ -299,11 +299,11 @@ export function labelSpriteScaleMultiplier(cameraDistanceNorm, role = {}) {
  */
 export function labelOpacityDistanceFactor(cameraDistanceNorm, role = {}) {
   const z = Math.max(0, Math.min(1, cameraDistanceNorm));
-  let o = 0.52 + z * 0.46;
-  if (role.selected) o = Math.max(o, 0.94);
-  if (role.hovered) o = Math.max(o, 0.9);
-  if (role.neighbor) o = Math.max(o, 0.62 + z * 0.28);
-  return Math.max(0.35, Math.min(1, o));
+  let o = 0.42 + z * 0.4;
+  if (role.selected) o = Math.max(o, 0.9);
+  if (role.hovered) o = Math.max(o, 0.86);
+  if (role.neighbor) o = Math.max(o, 0.52 + z * 0.26);
+  return Math.max(0.28, Math.min(0.96, o));
 }
 
 /**

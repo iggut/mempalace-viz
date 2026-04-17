@@ -47,6 +47,15 @@ Short regression pass before releases or after copy / routing / graph changes. T
 - [ ] Clicking a node: the scale bump + emissive pulse are clearly visible (selection registers without ambiguity).
 - [ ] Hover card: left rule color shifts between wing (blue) and room (teal).
 
+### 5b. Graph 3D — picking vs camera (regression)
+
+- [ ] **Click** a node with minimal movement → selection + inspector update (intentional pick).
+- [ ] **Drag / orbit** the camera (left button) → **no** selection on pointer release; hover may update during drag but release must not change selection.
+- [ ] **Pan** (if enabled / right-drag or middle) → **no** accidental node selection on release.
+- [ ] **Tiny pointer jitter** (a few pixels) on press/release still counts as a click when the camera did not move.
+- [ ] **Dense graph**: labels stay readable (not oversized pills); overlapping clusters remain scannable.
+- [ ] **Zoom** in and out: labels stay legible without dominating the frame (subtle chips, not billboards).
+
 ## 6. Performance sanity
 
 - [ ] Rapid mouse drag across the canvas: no visible hover lag or stutter.

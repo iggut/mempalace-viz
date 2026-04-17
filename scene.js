@@ -196,6 +196,56 @@ export function createPalaceScene(container, options = {}) {
   let resizeRafId = 0;
   let resizeObserver = null;
 
+  /** Primary-button press → release: distinguish click from orbit/pan/zoom so OrbitControls never triggers selection. */
+  const CLICK_MOVE_THRESHOLD_PX = 10;
+  /** World-space squared; ignores float noise but catches real orbit/pan camera motion during the gesture. */
+  const CAMERA_MOVE_EPS_SQ = 2.5e-5;
+
+  const pointerGesture = {
+    active: false,
+    pointerId: -1,
+    startX: 0,
+    startY: 0,
+    maxMoveSq: 0,
+    camPosStart: new THREE.Vector3(),
+    targetStart: new THREE.Vector3(),
+  };
+  let globalPointerEndAttached = false;
+
+  function attachGlobalPointerEnd() {
+    if (globalPointerEndAttached) return;
+    document.addEventListener('pointerup', onGlobalPointerEnd, true);
+    document.addEventListener('pointercancel', onGlobalPointerEnd, true);
+    globalPointerEndAttached = true;
+  }
+
+  function detachGlobalPointerEnd() {
+    if (!globalPointerEndAttached) return;
+    document.removeEventListener('pointerup', onGlobalPointerEnd, true);
+    document.removeEventListener('pointercancel', onGlobalPointerEnd, true);
+    globalPointerEndAttached = false;
+  }
+
+  /**
+   * @param {number} clientX
+   * @param {number} clientY
+   * @returns {import('three').Object3D | null} mesh with scene node userData, or null
+   */
+  function findHoveredNodeMeshAtClient(clientX, clientY) {
+    const rect = renderer.domElement.getBoundingClientRect();
+    pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+    pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+    raycaster.setFromCamera(pointer, camera);
+    const meshes = nodes.map((n) => n.mesh).filter(Boolean);
+    const intersects = raycaster.intersectObjects(meshes, true);
+    for (let i = 0; i < intersects.length; i += 1) {
+      let obj = intersects[i].object;
+      while (obj && !obj.userData?.type) obj = obj.parent;
+      if (obj && obj.userData?.type && obj.userData.type !== 'center') return obj;
+    }
+    return null;
+  }
+
   function tweenCamera(targetPos, lookAt, duration = 850) {
     const startPos = camera.position.clone();
     const startLook = controls.target.clone();
@@ -310,12 +360,12 @@ export function createPalaceScene(container, options = {}) {
   // then scaled into world space while preserving the canvas's pixel aspect ratio.
   // FRAGILE: sprite world-scale MUST mirror canvas (cssW : cssH) or labels appear as
   // stretched blue blocks. See README/QA notes on label rendering.
-  function makeLabelSprite(text, color = '#e2e8f0') {
+  function makeLabelSprite(text, color = '#e8eaef') {
     const dpr = Math.min(typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1, 2);
-    const fontSize = 20;
-    const padX = 12;
-    const padY = 6;
-    const fontDecl = `500 ${fontSize}px ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`;
+    const fontSize = 15;
+    const padX = 8;
+    const padY = 4;
+    const fontDecl = `450 ${fontSize}px ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`;
 
     const measure = document.createElement('canvas').getContext('2d');
     measure.font = fontDecl;
@@ -332,7 +382,7 @@ export function createPalaceScene(container, options = {}) {
     ctx.scale(dpr, dpr);
     ctx.clearRect(0, 0, cssW, cssH);
 
-    const r = Math.min(8, cssH / 2);
+    const r = Math.min(5, cssH / 2);
     ctx.beginPath();
     ctx.moveTo(r, 0);
     ctx.lineTo(cssW - r, 0);
@@ -344,9 +394,9 @@ export function createPalaceScene(container, options = {}) {
     ctx.lineTo(0, r);
     ctx.quadraticCurveTo(0, 0, r, 0);
     ctx.closePath();
-    ctx.fillStyle = 'rgba(10, 15, 24, 0.62)';
+    ctx.fillStyle = 'rgba(5, 7, 12, 0.44)';
     ctx.fill();
-    ctx.strokeStyle = 'rgba(124, 156, 255, 0.28)';
+    ctx.strokeStyle = 'rgba(110, 122, 150, 0.16)';
     ctx.lineWidth = 1;
     ctx.stroke();
 
@@ -368,7 +418,7 @@ export function createPalaceScene(container, options = {}) {
 
     // World-space sprite size: pick a target world-height per label, then derive
     // width from the actual canvas aspect ratio so text is never stretched.
-    const targetWorldHeight = 2.6;
+    const targetWorldHeight = 1.85;
     const aspect = cssW / cssH;
     const sx = targetWorldHeight * aspect;
     const sy = targetWorldHeight;
@@ -395,7 +445,7 @@ export function createPalaceScene(container, options = {}) {
   function addLabelForNode(nodeId, text, x, y, z, color) {
     const sprite = makeLabelSprite(text, color);
     sprite.visible = labelsVisible;
-    sprite.position.set(x, y + 2.2, z);
+    sprite.position.set(x, y + 2.45, z);
     scene.add(sprite);
     labelSprites.push({ sprite, nodeId });
     labelByNodeId.set(nodeId, sprite);
@@ -920,7 +970,7 @@ export function createPalaceScene(container, options = {}) {
         if (!data) return;
         const match = nodeMatchesSearch(data, q);
         sprite.visible = labelsVisible;
-        sprite.material.opacity = match ? (id === sid ? 1 : 0.92) : 0.2;
+        sprite.material.opacity = match ? (id === sid ? 0.98 : 0.82) : 0.16;
       });
     }
   }
@@ -1268,26 +1318,23 @@ export function createPalaceScene(container, options = {}) {
   }
 
   function processPointerMove(event) {
-    const rect = renderer.domElement.getBoundingClientRect();
-    pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-    pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-    raycaster.setFromCamera(pointer, camera);
-    const meshes = nodes.map((n) => n.mesh).filter(Boolean);
-    const intersects = raycaster.intersectObjects(meshes, true);
+    if (pointerGesture.active && event.pointerId === pointerGesture.pointerId) {
+      const dx = event.clientX - pointerGesture.startX;
+      const dy = event.clientY - pointerGesture.startY;
+      const d2 = dx * dx + dy * dy;
+      if (d2 > pointerGesture.maxMoveSq) pointerGesture.maxMoveSq = d2;
+    }
 
-    for (let i = 0; i < intersects.length; i += 1) {
-      let obj = intersects[i].object;
-      while (obj && !obj.userData?.type) obj = obj.parent;
-      if (obj && obj.userData?.type && obj.userData.type !== 'center') {
-        const hid = obj.userData.id || null;
-        const hoverChanged = hoveredMesh !== obj || presentation.hoveredId !== hid;
-        hoveredMesh = obj;
-        presentation.hoveredId = hid;
-        renderer.domElement.style.cursor = 'pointer';
-        if (hoverChanged) syncVisualPresentation();
-        callbacks.onHover({ ...obj.userData }, { x: event.clientX, y: event.clientY });
-        return;
-      }
+    const obj = findHoveredNodeMeshAtClient(event.clientX, event.clientY);
+    if (obj) {
+      const hid = obj.userData.id || null;
+      const hoverChanged = hoveredMesh !== obj || presentation.hoveredId !== hid;
+      hoveredMesh = obj;
+      presentation.hoveredId = hid;
+      renderer.domElement.style.cursor = 'pointer';
+      if (hoverChanged) syncVisualPresentation();
+      callbacks.onHover({ ...obj.userData }, { x: event.clientX, y: event.clientY });
+      return;
     }
     const wasHovering = presentation.hoveredId != null;
     hoveredMesh = null;
@@ -1297,14 +1344,42 @@ export function createPalaceScene(container, options = {}) {
     callbacks.onHover(null, { x: event.clientX, y: event.clientY });
   }
 
-  function onPointerClick() {
-    if (!hoveredMesh) {
+  function onPointerDown(event) {
+    if (!camera || event.button !== 0) return;
+    pointerGesture.active = true;
+    pointerGesture.pointerId = event.pointerId;
+    pointerGesture.startX = event.clientX;
+    pointerGesture.startY = event.clientY;
+    pointerGesture.maxMoveSq = 0;
+    pointerGesture.camPosStart.copy(camera.position);
+    pointerGesture.targetStart.copy(controls.target);
+    attachGlobalPointerEnd();
+  }
+
+  function onGlobalPointerEnd(event) {
+    if (!pointerGesture.active || event.pointerId !== pointerGesture.pointerId) return;
+    detachGlobalPointerEnd();
+    pointerGesture.active = false;
+    if (event.type === 'pointercancel') return;
+    if (event.button !== 0) return;
+
+    const movedPx = Math.sqrt(pointerGesture.maxMoveSq);
+    const pointerDragged = movedPx > CLICK_MOVE_THRESHOLD_PX;
+    // During programmatic tweens the camera moves without user orbit; don't treat that as a suppressing drag.
+    const camMovedByUser =
+      !cameraTween &&
+      (camera.position.distanceToSquared(pointerGesture.camPosStart) > CAMERA_MOVE_EPS_SQ ||
+        controls.target.distanceToSquared(pointerGesture.targetStart) > CAMERA_MOVE_EPS_SQ);
+    if (pointerDragged || camMovedByUser) return;
+
+    const pick = findHoveredNodeMeshAtClient(event.clientX, event.clientY);
+    if (!pick) {
       selectionPulse = null;
       callbacks.onBackgroundClick();
       callbacks.onClick(null);
       return;
     }
-    const data = { ...hoveredMesh.userData };
+    const data = { ...pick.userData };
     if (data.id && data.type !== 'center') {
       if (selectionPulseTimer) clearTimeout(selectionPulseTimer);
       selectionPulse = { id: data.id, at: performance.now() };
@@ -1432,7 +1507,7 @@ export function createPalaceScene(container, options = {}) {
     }
 
     renderer.domElement.addEventListener('pointermove', onPointerMove);
-    renderer.domElement.addEventListener('click', onPointerClick);
+    renderer.domElement.addEventListener('pointerdown', onPointerDown);
     renderer.domElement.addEventListener('pointerleave', onPointerLeave);
     window.addEventListener('resize', scheduleResize);
     if (typeof ResizeObserver !== 'undefined') {
@@ -1583,9 +1658,10 @@ export function createPalaceScene(container, options = {}) {
       resizeObserver = null;
     }
     window.removeEventListener('resize', scheduleResize);
+    detachGlobalPointerEnd();
     if (renderer?.domElement) {
       renderer.domElement.removeEventListener('pointermove', onPointerMove);
-      renderer.domElement.removeEventListener('click', onPointerClick);
+      renderer.domElement.removeEventListener('pointerdown', onPointerDown);
       renderer.domElement.removeEventListener('pointerleave', onPointerLeave);
     }
     clearSceneContent();
