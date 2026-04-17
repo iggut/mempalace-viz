@@ -115,14 +115,14 @@ function disposeMeshTree(mesh) {
     line.material?.dispose();
   }
 
-  function disposeLinkEntry(entry) {
+  function disposeLinkEntry(sceneRef, entry) {
     if (!entry) return;
     if (entry.line) {
-      scene.remove(entry.line);
+      sceneRef.remove(entry.line);
       disposeLine(entry.line);
     }
     if (entry.glowLine) {
-      scene.remove(entry.glowLine);
+      sceneRef.remove(entry.glowLine);
       disposeLine(entry.glowLine);
     }
   }
@@ -301,7 +301,7 @@ export function createPalaceScene(container, options = {}) {
       scene.remove(mesh);
       disposeMeshTree(mesh);
     });
-    linkObjects.forEach((entry) => disposeLinkEntry(entry));
+    linkObjects.forEach((entry) => disposeLinkEntry(scene, entry));
     routePulses.forEach((p) => {
       scene.remove(p.sprite);
       p.sprite.material.map?.dispose();
