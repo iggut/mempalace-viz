@@ -3854,7 +3854,10 @@ function wireControls() {
 
   initMemoriesChat({
     navigateToRoom: (wing, room) => selectRoomFromInspector(wing, room),
-    openDrawerInRoom: (drawerId) => roomContentOpenDrawer(drawerId),
+    openDrawerInRoom: (drawerId, meta) => {
+      if (meta?.wing && meta?.room) selectRoomFromInspector(meta.wing, meta.room);
+      roomContentOpenDrawer(drawerId);
+    },
     ensureInspectorVisible: () => setPanelCollapsed('right', false),
   });
 

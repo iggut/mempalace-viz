@@ -7,7 +7,10 @@ import {
   loadMemoriesChatConfig,
   saveMemoriesChatConfig,
 } from './memories-chat-config.js';
-import { openAiChatCompletions, testOpenAiCompatibleConnection } from './memories-chat-llm.js';
+import {
+  completeOpenAiChatWithStreamFallback,
+  testOpenAiCompatibleConnection,
+} from './memories-chat-llm.js';
 import { buildOpenAiMessagesFromThread } from './memories-chat-prompt.js';
 import {
   formatRetrievalContextForPrompt,
@@ -30,9 +33,26 @@ function $(id) {
 }
 
 /**
+ * @param {import('./memories-chat-retrieval.js').RetrievedMemorySource} s
+ */
+export function buildQuoteFromMemorySource(s) {
+  const wing = s.wing || '';
+  const room = s.room || '';
+  const loc = wing && room ? `${wing} / ${room}` : wing || room || 'Unknown location';
+  const idLine = s.drawerId ? ` — drawer ${s.drawerId}` : '';
+  const raw = (s.excerpt || s.contentForModel || '').trim();
+  const ex = raw.slice(0, 2000);
+  const quoted = ex
+    .split('\n')
+    .map((line) => `> ${line}`)
+    .join('\n');
+  return `[Memory evidence — ${loc}${idLine}]\n${quoted}\n\n`;
+}
+
+/**
  * @typedef {{
  *   navigateToRoom: (wing: string, room: string) => void,
- *   openDrawerInRoom: (drawerId: string) => void,
+ *   openDrawerInRoom: (drawerId: string, meta?: { wing?: string, room?: string }) => void,
  *   ensureInspectorVisible?: () => void,
  *   onModeChange?: (mode: 'explore' | 'memchat') => void,
  * }} MemoriesChatHooks
@@ -78,11 +98,27 @@ export function initMemoriesChat(hooks) {
   /** @type {'explore' | 'memchat'} */
   let mode = 'explore';
 
-  /** @type {Array<{ role: string, content: string, sources?: unknown, error?: string }>} */
+  /** @type {Array<{ role: string, content: string, sources?: unknown[], error?: string }>} */
   let thread = loadThread();
 
   /** @type {AbortController | null} */
   let activeSend = null;
+
+  /** @type {{ content: string, sources: Array<Record<string, unknown>> } | null} */
+  let streamingAssistant = null;
+
+  /** @type {number | null} */
+  let streamRaf = null;
+
+  let stickToBottom = true;
+  messagesEl.addEventListener(
+    'scroll',
+    () => {
+      const el = messagesEl;
+      stickToBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 72;
+    },
+    { passive: true },
+  );
 
   function setMode(next) {
     mode = next;
@@ -91,7 +127,7 @@ export function initMemoriesChat(hooks) {
     memBtn.setAttribute('aria-selected', isExplore ? 'false' : 'true');
     explorePane.hidden = !isExplore;
     memPane.hidden = isExplore;
-    if (titleEl) titleEl.textContent = isExplore ? 'Explore' : 'Memory chat';
+    if (titleEl) titleEl.textContent = isExplore ? 'Explore' : 'Chat with memories';
     hooks.onModeChange?.(next);
   }
 
@@ -156,7 +192,36 @@ export function initMemoriesChat(hooks) {
     }
   }
 
-  function renderSourcesBlock(sources) {
+  function maybeScrollToBottom() {
+    if (!stickToBottom) return;
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+
+  function flushStreamingDom() {
+    if (streamRaf != null) {
+      cancelAnimationFrame(streamRaf);
+      streamRaf = null;
+    }
+    const el = $('memchat-streaming-text');
+    if (el && streamingAssistant) {
+      el.textContent = streamingAssistant.content;
+    }
+    maybeScrollToBottom();
+  }
+
+  function scheduleStreamingDomUpdate() {
+    if (streamRaf != null) return;
+    streamRaf = requestAnimationFrame(() => {
+      streamRaf = null;
+      flushStreamingDom();
+    });
+  }
+
+  /**
+   * @param {import('./memories-chat-retrieval.js').RetrievedMemorySource[]} sources
+   * @param {number} msgIdx — index in thread, or -1 for in-flight stream
+   */
+  function renderSourcesBlock(sources, msgIdx) {
     if (!Array.isArray(sources) || !sources.length) {
       return '<p class="memchat-sources-empty">No source excerpts attached.</p>';
     }
@@ -167,6 +232,7 @@ export function initMemoriesChat(hooks) {
           const room = s.room || '';
           const did = s.drawerId ? String(s.drawerId) : '';
           const ex = escapeHtml((s.excerpt || '').slice(0, 360));
+          const long = (s.excerpt || '').length > 360;
           const sim =
             typeof s.similarity === 'number' && Number.isFinite(s.similarity)
               ? `${(s.similarity * 100).toFixed(1)}%`
@@ -178,7 +244,7 @@ export function initMemoriesChat(hooks) {
               <span class="memchat-source-card__sim">${escapeHtml(sim)} match</span>
             </div>
             ${did ? `<div class="memchat-source-card__id"><code>${escapeHtml(did)}</code></div>` : ''}
-            <p class="memchat-source-card__excerpt">${ex}${(s.excerpt || '').length > 360 ? '…' : ''}</p>
+            <p class="memchat-source-card__excerpt">${ex}${long ? '…' : ''}</p>
             <div class="memchat-source-card__actions">
               ${
                 wing && room
@@ -187,9 +253,10 @@ export function initMemoriesChat(hooks) {
               }
               ${
                 did
-                  ? `<button type="button" class="btn btn--ghost btn--sm memchat-open-drawer" data-drawer-id="${escapeHtml(did)}">Open drawer</button>`
+                  ? `<button type="button" class="btn btn--ghost btn--sm memchat-open-drawer" data-drawer-id="${escapeHtml(did)}" data-wing="${escapeHtml(wing)}" data-room="${escapeHtml(room)}">Open drawer</button>`
                   : ''
               }
+              <button type="button" class="btn btn--ghost btn--sm memchat-quote" data-msg-idx="${msgIdx}" data-src-idx="${i}">Quote</button>
             </div>
           </li>`;
         })
@@ -199,8 +266,8 @@ export function initMemoriesChat(hooks) {
 
   function renderMessages() {
     if (!messagesEl) return;
-    messagesEl.innerHTML = thread
-      .map((m) => {
+    const html = thread
+      .map((m, mi) => {
         if (m.role === 'user') {
           return `<div class="memchat-msg memchat-msg--user" role="article"><div class="memchat-msg__bubble">${escapeHtml(m.content)}</div></div>`;
         }
@@ -211,14 +278,27 @@ export function initMemoriesChat(hooks) {
             : '';
           const src =
             m.sources && !m.error
-              ? `<div class="memchat-msg__sources"><div class="memchat-msg__sources-title">Supporting memories</div>${renderSourcesBlock(m.sources)}</div>`
+              ? `<div class="memchat-msg__sources"><div class="memchat-msg__sources-title">Supporting memories</div>${renderSourcesBlock(m.sources, mi)}</div>`
               : '';
           return `<div class="memchat-msg memchat-msg--assistant" role="article">${err}${body}${src}</div>`;
         }
         return '';
       })
       .join('');
-    messagesEl.scrollTop = messagesEl.scrollHeight;
+
+    const streamBlock =
+      streamingAssistant != null
+        ? `<div class="memchat-msg memchat-msg--assistant memchat-msg--streaming" role="article">
+            <div class="memchat-msg__bubble memchat-msg__bubble--assistant memchat-msg__bubble--streaming">
+              <span id="memchat-streaming-text" class="memchat-streaming-text"></span><span class="memchat-streaming-caret" aria-hidden="true">▍</span>
+            </div>
+            <div class="memchat-msg__sources"><div class="memchat-msg__sources-title">Supporting memories</div>${renderSourcesBlock(streamingAssistant.sources, -1)}</div>
+          </div>`
+        : '';
+
+    messagesEl.innerHTML = html + streamBlock;
+    flushStreamingDom();
+    maybeScrollToBottom();
   }
 
   messagesEl.addEventListener('click', (e) => {
@@ -235,16 +315,42 @@ export function initMemoriesChat(hooks) {
     const od = e.target.closest('.memchat-open-drawer');
     if (od) {
       const id = od.getAttribute('data-drawer-id') || '';
+      const wing = od.getAttribute('data-wing') || '';
+      const room = od.getAttribute('data-room') || '';
       if (id) {
         hooks.ensureInspectorVisible?.();
-        hooks.openDrawerInRoom(id);
+        hooks.openDrawerInRoom(id, { wing: wing || undefined, room: room || undefined });
       }
+      return;
+    }
+    const q = e.target.closest('.memchat-quote');
+    if (q) {
+      const mi = Number(q.getAttribute('data-msg-idx'));
+      const si = Number(q.getAttribute('data-src-idx'));
+      const list =
+        mi === -1 && streamingAssistant?.sources
+          ? streamingAssistant.sources
+          : Number.isFinite(mi) && thread[mi]?.sources
+            ? thread[mi].sources
+            : null;
+      if (!list || !Number.isFinite(si) || !list[si]) return;
+      const quote = buildQuoteFromMemorySource(/** @type {any} */ (list[si]));
+      const ta = inputEl;
+      const start = ta.selectionStart ?? ta.value.length;
+      const end = ta.selectionEnd ?? ta.value.length;
+      const before = ta.value.slice(0, start);
+      const after = ta.value.slice(end);
+      ta.value = before + quote + after;
+      const caret = start + quote.length;
+      ta.selectionStart = ta.selectionEnd = caret;
+      ta.focus();
     }
   });
 
   clearBtn?.addEventListener('click', () => {
     if (activeSend) activeSend.abort();
     activeSend = null;
+    streamingAssistant = null;
     thread = [];
     persistThread();
     renderMessages();
@@ -255,10 +361,6 @@ export function initMemoriesChat(hooks) {
 
   stopBtn?.addEventListener('click', () => {
     if (activeSend) activeSend.abort();
-    activeSend = null;
-    if (sendStatusEl) sendStatusEl.textContent = 'Stopped.';
-    sendBtn.disabled = false;
-    stopBtn.disabled = true;
   });
 
   async function send() {
@@ -335,8 +437,11 @@ export function initMemoriesChat(hooks) {
     const evidence = formatRetrievalContextForPrompt(retrieval.sources);
     const messages = buildOpenAiMessagesFromThread(thread, evidence);
 
+    streamingAssistant = { content: '', sources: retrieval.sources };
+    renderMessages();
+
     try {
-      const { content } = await openAiChatCompletions({
+      const r = await completeOpenAiChatWithStreamFallback({
         endpointInput: cfg.endpoint,
         apiKey: cfg.apiKey,
         model: cfg.model,
@@ -345,16 +450,51 @@ export function initMemoriesChat(hooks) {
         maxTokens: 1400,
         signal: ac.signal,
         timeoutMs: 120000,
+        onDelta: (_d, accumulated) => {
+          if (streamingAssistant) {
+            streamingAssistant.content = accumulated;
+            scheduleStreamingDomUpdate();
+          }
+        },
       });
-      if (ac.signal.aborted) return;
+      if (ac.signal.aborted) {
+        const partial = streamingAssistant?.content?.trim() ?? '';
+        streamingAssistant = null;
+        if (partial) {
+          thread.push({
+            role: 'assistant',
+            content: partial,
+            sources: retrieval.sources,
+          });
+        }
+        persistThread();
+        renderMessages();
+        sendBtn.disabled = false;
+        stopBtn.disabled = true;
+        if (sendStatusEl) sendStatusEl.textContent = 'Stopped.';
+        activeSend = null;
+        return;
+      }
       thread.push({
         role: 'assistant',
-        content,
+        content: r.content,
         sources: retrieval.sources,
       });
+      streamingAssistant = null;
     } catch (e) {
       if (e?.name === 'AbortError') {
+        const partial = streamingAssistant?.content?.trim() ?? '';
+        streamingAssistant = null;
+        if (partial) {
+          thread.push({
+            role: 'assistant',
+            content: partial,
+            sources: retrieval.sources,
+          });
+        }
         if (sendStatusEl) sendStatusEl.textContent = 'Stopped.';
+        persistThread();
+        renderMessages();
         sendBtn.disabled = false;
         stopBtn.disabled = true;
         activeSend = null;
@@ -365,6 +505,7 @@ export function initMemoriesChat(hooks) {
         content: '',
         error: e?.message || String(e),
       });
+      streamingAssistant = null;
     }
 
     persistThread();

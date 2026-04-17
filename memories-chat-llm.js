@@ -6,6 +6,100 @@
 import { chatCompletionsUrl, modelsListUrl, normalizeOpenAiApiRoot } from './memories-chat-config.js';
 
 /**
+ * Parse a single SSE `data:` line payload (OpenAI chat completions stream).
+ * @param {string} line — full line, e.g. `data: {...}` or `data: [DONE]`
+ * @returns {{ kind: 'skip' } | { kind: 'done' } | { kind: 'delta', text: string }}
+ */
+export function parseOpenAiChatSseLine(line) {
+  const s = String(line ?? '').trimEnd();
+  if (!s || s.startsWith(':')) return { kind: 'skip' };
+  if (!s.startsWith('data:')) return { kind: 'skip' };
+  const payload = s.slice(5).trimStart();
+  if (payload === '[DONE]') return { kind: 'done' };
+  try {
+    const j = JSON.parse(payload);
+    const ch = j?.choices?.[0];
+    if (!ch) return { kind: 'delta', text: '' };
+    const d = ch.delta;
+    if (d && typeof d.content === 'string') return { kind: 'delta', text: d.content };
+    if (d && Array.isArray(d.content)) {
+      let out = '';
+      for (const part of d.content) {
+        if (part?.type === 'text' && typeof part.text === 'string') out += part.text;
+      }
+      return { kind: 'delta', text: out };
+    }
+    if (typeof ch.text === 'string') return { kind: 'delta', text: ch.text };
+    return { kind: 'delta', text: '' };
+  } catch {
+    return { kind: 'delta', text: '' };
+  }
+}
+
+/**
+ * @param {ReadableStream<Uint8Array> | null | undefined} body
+ * @param {AbortSignal} signal
+ * @param {(delta: string, accumulated: string) => void} onDelta
+ * @returns {Promise<string>}
+ */
+export async function consumeOpenAiSseChatStream(body, signal, onDelta) {
+  if (!body) throw new Error('Response missing body for streaming.');
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buf = '';
+  let acc = '';
+  try {
+    while (true) {
+      let readResult;
+      try {
+        readResult = await reader.read();
+      } catch (readErr) {
+        if (signal.aborted || readErr?.name === 'AbortError') {
+          try {
+            await reader.cancel();
+          } catch {
+            /* ignore */
+          }
+          const err = new Error('aborted');
+          err.name = 'AbortError';
+          throw err;
+        }
+        throw readErr;
+      }
+      const { done, value } = readResult;
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const lines = buf.split(/\r?\n/);
+      buf = lines.pop() ?? '';
+      for (const line of lines) {
+        const p = parseOpenAiChatSseLine(line);
+        if (p.kind === 'skip') continue;
+        if (p.kind === 'done') return acc;
+        if (p.text) {
+          acc += p.text;
+          onDelta?.(p.text, acc);
+        }
+      }
+    }
+    if (buf.trim()) {
+      const p = parseOpenAiChatSseLine(buf);
+      if (p.kind === 'done') return acc;
+      if (p.kind === 'delta' && p.text) {
+        acc += p.text;
+        onDelta?.(p.text, acc);
+      }
+    }
+    return acc;
+  } finally {
+    try {
+      reader.releaseLock();
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+/**
  * @param {string} endpointInput — raw user endpoint field
  * @param {{ apiKey?: string, signal?: AbortSignal, timeoutMs?: number }} [opts]
  * @returns {Promise<{ ok: true, status: number, data?: unknown } | { ok: false, error: string }>}
@@ -164,6 +258,165 @@ export async function openAiChatCompletions({
     throw new Error('Response missing assistant message content — check model and API shape.');
   }
   return { content, raw: json };
+}
+
+/**
+ * Streaming chat completions (OpenAI-compatible). Falls back to {@link openAiChatCompletions} when
+ * streaming fails for reasons other than user abort.
+ *
+ * @param {object} params
+ * @param {string} params.endpointInput
+ * @param {string} [params.apiKey]
+ * @param {string} [params.model]
+ * @param {Array<{ role: string, content: string }>} params.messages
+ * @param {number} [params.temperature]
+ * @param {number} [params.maxTokens]
+ * @param {AbortSignal} [params.signal]
+ * @param {number} [params.timeoutMs]
+ * @param {(delta: string, accumulated: string) => void} [params.onDelta]
+ * @returns {Promise<{ content: string, raw: unknown | null, mode: 'stream' | 'json' }>}
+ */
+export async function completeOpenAiChatWithStreamFallback({
+  endpointInput,
+  apiKey = '',
+  model = '',
+  messages,
+  temperature = 0.25,
+  maxTokens = 1200,
+  signal,
+  timeoutMs = 120000,
+  onDelta,
+}) {
+  try {
+    const r = await openAiChatCompletionsStreamRequest({
+      endpointInput,
+      apiKey,
+      model,
+      messages,
+      temperature,
+      maxTokens,
+      signal,
+      timeoutMs,
+      onDelta,
+    });
+    return { content: r.content, raw: r.raw, mode: 'stream' };
+  } catch (e) {
+    if (e?.name === 'AbortError') throw e;
+    const r = await openAiChatCompletions({
+      endpointInput,
+      apiKey,
+      model,
+      messages,
+      temperature,
+      maxTokens,
+      signal,
+      timeoutMs,
+    });
+    if (typeof onDelta === 'function' && r.content) onDelta(r.content, r.content);
+    return { content: r.content, raw: r.raw, mode: 'json' };
+  }
+}
+
+/**
+ * @param {object} params
+ * @param {string} params.endpointInput
+ * @param {string} [params.apiKey]
+ * @param {string} [params.model]
+ * @param {Array<{ role: string, content: string }>} params.messages
+ * @param {number} [params.temperature]
+ * @param {number} [params.maxTokens]
+ * @param {AbortSignal} [params.signal]
+ * @param {number} [params.timeoutMs]
+ * @param {(delta: string, accumulated: string) => void} [params.onDelta]
+ * @returns {Promise<{ content: string, raw: unknown | null }>}
+ */
+export async function openAiChatCompletionsStreamRequest({
+  endpointInput,
+  apiKey = '',
+  model = '',
+  messages,
+  temperature = 0.25,
+  maxTokens = 1200,
+  signal,
+  timeoutMs = 120000,
+  onDelta,
+}) {
+  const n = normalizeOpenAiApiRoot(endpointInput);
+  if (!n.ok) throw new Error(n.error);
+  const url = chatCompletionsUrl(n.apiRoot);
+  const headers = {
+    Accept: 'application/json, text/event-stream',
+    'Content-Type': 'application/json',
+  };
+  const key = typeof apiKey === 'string' ? apiKey.trim() : '';
+  if (key) headers.Authorization = `Bearer ${key}`;
+
+  const body = {
+    model: model.trim() || undefined,
+    messages,
+    stream: true,
+    temperature: Number.isFinite(temperature) ? temperature : 0.25,
+    max_tokens: Number.isFinite(maxTokens) ? maxTokens : 1200,
+  };
+  if (!body.model) delete body.model;
+
+  const controller = new AbortController();
+  const t = setTimeout(() => controller.abort(), timeoutMs);
+  const merged = signal ? combineAbortSignals(signal, controller.signal) : controller.signal;
+
+  let res;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+      signal: merged,
+    });
+  } catch (e) {
+    if (e?.name === 'AbortError') throw e;
+    throw e;
+  } finally {
+    clearTimeout(t);
+  }
+
+  if (!res.ok) {
+    const textErr = await res.text();
+    let json;
+    try {
+      json = textErr ? JSON.parse(textErr) : null;
+    } catch {
+      json = null;
+    }
+    throw new Error(httpErrorLine(res.status, json));
+  }
+
+  const ct = (res.headers.get('content-type') || '').toLowerCase();
+  if (ct.includes('application/json')) {
+    const textBody = await res.text();
+    let json;
+    try {
+      json = textBody ? JSON.parse(textBody) : null;
+    } catch {
+      throw new Error(`Unexpected non-JSON body (${res.status})`);
+    }
+    const content = extractAssistantContent(json);
+    if (content == null) {
+      throw new Error('Response missing assistant message content — check model and API shape.');
+    }
+    onDelta?.(content, content);
+    return { content, raw: json };
+  }
+
+  const stream = res.body;
+  if (!stream) {
+    throw new Error('Streaming response had no body.');
+  }
+
+  const acc = await consumeOpenAiSseChatStream(stream, merged, (d, a) => onDelta?.(d, a));
+  if (!String(acc ?? '').trim()) {
+    throw new Error('Empty assistant stream — the model may not support streaming; retrying.');
+  }
+  return { content: acc, raw: null };
 }
 
 /**

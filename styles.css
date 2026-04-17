@@ -3102,6 +3102,34 @@ kbd {
   color: var(--text);
 }
 
+.memchat-msg--streaming .memchat-msg__bubble--streaming {
+  border-color: rgba(143, 169, 255, 0.28);
+  box-shadow: 0 0 0 1px rgba(135, 180, 255, 0.08);
+}
+
+.memchat-streaming-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.memchat-streaming-caret {
+  display: inline-block;
+  margin-left: 2px;
+  animation: memchat-caret-pulse 1s ease-in-out infinite;
+  color: var(--accent-bright);
+  font-size: 0.85em;
+}
+
+@keyframes memchat-caret-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
 .memchat-msg__err {
   padding: 12px 14px;
   border-radius: var(--radius-sm);
