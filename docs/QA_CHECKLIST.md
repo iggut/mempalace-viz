@@ -47,6 +47,29 @@ Short regression pass before releases or after copy / routing / graph changes. T
 - [ ] Clicking a node: the scale bump + emissive pulse are clearly visible (selection registers without ambiguity).
 - [ ] Hover card: left rule color shifts between wing (blue) and room (teal).
 
+### 5c. Premium spatial UI pass
+
+- [ ] Overall shell reads as dark glass — panels feel layered, not like opaque slabs glued on top of the scene.
+- [ ] Header is slim/translucent, tagline reads as secondary; brand does not dominate.
+- [ ] Side panels have hairline borders, no all-caps "enterprise" header bars.
+- [ ] Inspector cards/sections feel lighter; the hero card is subtly tinted, section chrome is quiet.
+- [ ] Footer is translucent; metrics breathe without feeling like a status bar.
+- [ ] Collapsed side panels show refined edge tabs (glass + subtle accent glow on hover).
+- [ ] Buttons / chips / pills share a unified radius scale; no mismatched shapes.
+- [ ] Canvas has a soft radial vignette that draws focus to the active cluster without crushing contrast.
+
+### 5d. Relationship rendering (first-class)
+
+- [ ] Default graph edges read as quiet luminous threads (additive glow, not flat wires).
+- [ ] Hovering a node lifts its incident edges via a soft glow pass; neighbor edges get a lighter halo.
+- [ ] Selecting a node makes its edges clearly the "active constellation" — glow pulses gently.
+- [ ] Route mode: path edges glow stronger and a traveling pulse mote visibly moves along each segment.
+- [ ] Cross-wing tunnel edges remain distinguishable from intra-wing tethers.
+- [ ] Un-emphasized edges fade back politely when a focus is active; they never disappear entirely unless filtered.
+- [ ] Selected node shows an elegant additive ring halo that breathes; it faces the camera as you orbit.
+- [ ] Reduced-motion mode disables glow pulsing, route travel, and ring breath (still renders the glow statically).
+- [ ] Dense graph: effects stay performant — no noticeable FPS drop when hovering across many rooms.
+
 ### 5b. Graph 3D — picking vs camera (regression)
 
 - [ ] **Click** a node with minimal movement → selection + inspector update (intentional pick).

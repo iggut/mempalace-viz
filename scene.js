@@ -110,10 +110,22 @@ function disposeMeshTree(mesh) {
   });
 }
 
-function disposeLine(line) {
-  line.geometry?.dispose();
-  line.material?.dispose();
-}
+  function disposeLine(line) {
+    line.geometry?.dispose();
+    line.material?.dispose();
+  }
+
+  function disposeLinkEntry(entry) {
+    if (!entry) return;
+    if (entry.line) {
+      scene.remove(entry.line);
+      disposeLine(entry.line);
+    }
+    if (entry.glowLine) {
+      scene.remove(entry.glowLine);
+      disposeLine(entry.glowLine);
+    }
+  }
 
 export function createPalaceScene(container, options = {}) {
   let scene;
@@ -162,6 +174,10 @@ export function createPalaceScene(container, options = {}) {
   // breath/pulse motion keeps the scene from feeling static.
   let autoRotateUser = false;
 
+  /** @type {Array<{ sprite: THREE.Sprite, from: THREE.Vector3, to: THREE.Vector3, mid: THREE.Vector3, offset: number, color: THREE.Color }>} */
+  let routePulses = [];
+  /** @type {THREE.Mesh|null} additive-blended ring halo around the selected node */
+  let selectionRing = null;
   let hoveredMesh = null;
   /** @type {{ active: boolean, pathSceneIds: string[], stepIndex: number, segmentTypes: string[], bridgeSceneIds: string[] }} */
   const defaultRoutePresentation = () => ({
@@ -285,10 +301,19 @@ export function createPalaceScene(container, options = {}) {
       scene.remove(mesh);
       disposeMeshTree(mesh);
     });
-    linkObjects.forEach(({ line }) => {
-      scene.remove(line);
-      disposeLine(line);
+    linkObjects.forEach((entry) => disposeLinkEntry(entry));
+    routePulses.forEach((p) => {
+      scene.remove(p.sprite);
+      p.sprite.material.map?.dispose();
+      p.sprite.material.dispose();
     });
+    routePulses = [];
+    if (selectionRing) {
+      scene.remove(selectionRing);
+      selectionRing.material?.dispose();
+      selectionRing.geometry?.dispose();
+      selectionRing = null;
+    }
     labelSprites.forEach(({ sprite }) => {
       scene.remove(sprite);
       sprite.material.map?.dispose();
@@ -637,17 +662,48 @@ export function createPalaceScene(container, options = {}) {
 
     const curve = new THREE.QuadraticBezierCurve3(a, mid, b);
     const segments = dist > 40 ? 24 : dist > 16 ? 16 : 10;
-    const geometry = new THREE.BufferGeometry().setFromPoints(curve.getPoints(segments));
+    const pts = curve.getPoints(segments);
+    const geometry = new THREE.BufferGeometry().setFromPoints(pts);
+
+    const isGraphRel = !!meta.isGraphRelationship;
+    // Graph relationship lines use additive blending so they read as luminous
+    // threads in the dark scene. Structural wing tethers stay on normal blend
+    // so they don't wash out behind rooms.
     const material = new THREE.LineBasicMaterial({
       color: colorHex,
       transparent: true,
       opacity,
+      depthWrite: false,
+      blending: isGraphRel ? THREE.AdditiveBlending : THREE.NormalBlending,
     });
     const line = new THREE.Line(geometry, material);
-    line.userData = meta;
+    line.userData = { ...meta };
     scene.add(line);
-    linkObjects.push({ line, ...meta });
-    return line;
+
+    let glowLine = null;
+    if (isGraphRel) {
+      // Paired "glow" pass on the same curve — whitish tinted, additive,
+      // and kept near-invisible at rest. syncVisualPresentation raises its
+      // opacity for neighborhood / selection / route edges; animate() pulses
+      // it softly so connected relationships feel alive.
+      const glowGeom = new THREE.BufferGeometry().setFromPoints(pts);
+      const tint = new THREE.Color(colorHex).lerp(new THREE.Color(0xffffff), 0.38);
+      const glowMat = new THREE.LineBasicMaterial({
+        color: tint,
+        transparent: true,
+        opacity: 0,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+      });
+      glowLine = new THREE.Line(glowGeom, glowMat);
+      glowLine.renderOrder = 2;
+      glowLine.userData = { isGlow: true, baseColorHex: colorHex };
+      scene.add(glowLine);
+    }
+
+    const entry = { line, glowLine, curvePts: pts, ...meta };
+    linkObjects.push(entry);
+    return entry;
   }
 
   function createWingNode(wingName, x, y, z, size) {
@@ -811,6 +867,110 @@ export function createPalaceScene(container, options = {}) {
     );
   }
 
+  function makePulseTexture() {
+    const size = 64;
+    const c = document.createElement('canvas');
+    c.width = size;
+    c.height = size;
+    const ctx = c.getContext('2d');
+    const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+    g.addColorStop(0, 'rgba(255,255,255,1)');
+    g.addColorStop(0.45, 'rgba(200,220,255,0.65)');
+    g.addColorStop(1, 'rgba(120,160,255,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, size, size);
+    const tex = new THREE.CanvasTexture(c);
+    tex.minFilter = THREE.LinearFilter;
+    tex.magFilter = THREE.LinearFilter;
+    tex.generateMipmaps = false;
+    return tex;
+  }
+
+  function rebuildRoutePulses() {
+    // Clear previous pulses
+    routePulses.forEach((p) => {
+      scene.remove(p.sprite);
+      p.sprite.material.map?.dispose();
+      p.sprite.material.dispose();
+    });
+    routePulses = [];
+
+    const route = presentation.route || defaultRoutePresentation();
+    if (currentView !== 'graph' || !route.active || !Array.isArray(route.pathSceneIds)) return;
+    if (route.pathSceneIds.length < 2) return;
+
+    for (let i = 0; i < route.pathSceneIds.length - 1; i += 1) {
+      const a = nodeRegistry.get(route.pathSceneIds[i]);
+      const b = nodeRegistry.get(route.pathSceneIds[i + 1]);
+      if (!a || !b) continue;
+      const from = a.mesh.position.clone();
+      const to = b.mesh.position.clone();
+      const mid = from.clone().add(to).multiplyScalar(0.5);
+      const dist = from.distanceTo(to);
+      const arc = Math.min(8, Math.max(0.6, dist * 0.18));
+      mid.y += arc;
+      const offset = Math.min(4, dist * 0.05);
+      mid.x += offset * (Math.sign(to.z - from.z) || 1) * 0.2;
+
+      const tex = makePulseTexture();
+      const mat = new THREE.SpriteMaterial({
+        map: tex,
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        color: 0xbfd4ff,
+      });
+      const sprite = new THREE.Sprite(mat);
+      sprite.scale.setScalar(Math.max(0.9, Math.min(1.6, dist * 0.045)));
+      sprite.renderOrder = 8;
+      scene.add(sprite);
+      routePulses.push({
+        sprite,
+        from,
+        to,
+        mid,
+        offset: (i * 0.35) % 1,
+        color: mat.color,
+      });
+    }
+  }
+
+  function rebuildSelectionRing() {
+    if (selectionRing) {
+      scene.remove(selectionRing);
+      selectionRing.material?.dispose();
+      selectionRing.geometry?.dispose();
+      selectionRing = null;
+    }
+    const sid = presentation.selectedId;
+    if (!sid) return;
+    const entry = nodeRegistry.get(sid);
+    if (!entry) return;
+    const r = entry.mesh.geometry?.parameters?.radius ?? 1.2;
+    const ringGeom = new THREE.RingGeometry(r * 1.42, r * 1.55, 48);
+    const color = entry.mesh.material?.color
+      ? entry.mesh.material.color.clone().lerp(new THREE.Color(0xffffff), 0.35)
+      : new THREE.Color(0xbfd4ff);
+    const ringMat = new THREE.MeshBasicMaterial({
+      color,
+      transparent: true,
+      opacity: 0.35,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+    const ring = new THREE.Mesh(ringGeom, ringMat);
+    ring.userData.baseScale = 1;
+    // Make ring face the camera by updating in animate? For simplicity, use a
+    // billboard-ish behavior via sprite-like update: attach as child so it
+    // inherits node position, and orient toward camera each frame would be
+    // ideal. Here we keep it flat and let the slight breath sell it.
+    ring.position.copy(entry.mesh.position);
+    ring.lookAt(0, 0, 0);
+    scene.add(ring);
+    selectionRing = ring;
+  }
+
   function syncVisualPresentation() {
     const q = (presentation.searchQuery || '').trim().toLowerCase();
     const hid = presentation.hoveredId;
@@ -846,9 +1006,19 @@ export function createPalaceScene(container, options = {}) {
     const adjMult = graphSceneMetrics?.adjacencyOpacityMult ?? 1;
     const tunnelEm = graphSceneMetrics?.tunnelEmphasisMult ?? 1;
 
+    // Pre-compute the primary focus neighborhood once; used both for edge
+    // glow layering and the downstream node emphasis pass below.
+    const primaryFocusInfo = splitGraphFocusIds(sid, hid);
+    const neighborFocusSet =
+      primaryFocusInfo.primaryId && currentView === 'graph'
+        ? neighborIdsForFocus(primaryFocusInfo.primaryId, graphNeighborMap)
+        : null;
+    const nbrFocusRef = { forEdges: neighborFocusSet };
+
     linkObjects.forEach((lo) => {
       const {
         line,
+        glowLine,
         fromId,
         toId,
         baseOpacity = 0.28,
@@ -864,6 +1034,12 @@ export function createPalaceScene(container, options = {}) {
       if (isGraphRelationship && relVis != null) {
         const rt = relationshipType || 'tunnel';
         typeOk = relVis.has(rt);
+      }
+
+      if (glowLine) {
+        glowLine.visible = false;
+        glowLine.material.opacity = 0;
+        glowLine.userData.glowAnimBase = 0;
       }
 
       if (!searchOk) {
@@ -927,11 +1103,43 @@ export function createPalaceScene(container, options = {}) {
         if (fromId) visibleGraphIncidents.set(fromId, (visibleGraphIncidents.get(fromId) || 0) + 1);
         if (toId) visibleGraphIncidents.set(toId, (visibleGraphIncidents.get(toId) || 0) + 1);
       }
+
+      // Layered glow pass — makes relationship lines feel alive when a node
+      // is hovered, selected, or on an active route. Quiet otherwise.
+      if (glowLine && isGraphRelationship) {
+        const touchesSid = sid && (fromId === sid || toId === sid);
+        const touchesHid = hid && (fromId === hid || toId === hid);
+        const nbr = nbrFocusRef?.forEdges;
+        const neighborEdge =
+          !touchesSid && !touchesHid && nbr && fromId && toId && (nbr.has(fromId) || nbr.has(toId));
+        let glowOp = 0;
+        if (touchesSid) glowOp = 0.55;
+        else if (touchesHid) glowOp = 0.38;
+        else if (neighborEdge) glowOp = 0.16;
+        if (routeActive && fromId && toId) {
+          const pk = undirectedPairKey(fromId, toId);
+          if (routePairKeys.has(pk)) {
+            glowOp = Math.max(glowOp, 0.6);
+            if (stepSceneId && (fromId === stepSceneId || toId === stepSceneId)) {
+              glowOp = 0.85;
+            }
+          } else {
+            glowOp *= 0.35;
+          }
+        }
+        // Respect search dimming — only fully quiet if primary line was already dim.
+        if (q) glowOp *= 0.4;
+        const hex = styleColorHex ?? (glowLine.userData?.baseColorHex ?? 0xffffff);
+        const baseC = new THREE.Color(hex).lerp(new THREE.Color(0xffffff), 0.45);
+        glowLine.material.color.copy(baseC);
+        glowLine.material.opacity = glowOp;
+        glowLine.visible = glowOp > 0.001;
+        glowLine.userData.glowAnimBase = glowOp;
+      }
     });
 
-    const { primaryId } = splitGraphFocusIds(sid, hid);
-    const nbrFocus =
-      primaryId && currentView === 'graph' ? neighborIdsForFocus(primaryId, graphNeighborMap) : null;
+    const { primaryId } = primaryFocusInfo;
+    const nbrFocus = neighborFocusSet;
 
     nodeRegistry.forEach((entry, id) => {
       const { mesh, data, baseOpacity, baseEmissive } = entry;
@@ -1523,13 +1731,53 @@ export function createPalaceScene(container, options = {}) {
     if (currentView === 'graph' && !prefersReducedMotion) {
       const lt = Date.now() * 0.001;
       linkObjects.forEach((lo) => {
-        if (!lo.isGraphRelationship || !lo.line?.material || !lo.line.visible) return;
-        const base = lo.line.userData.opacityAnimBase;
-        if (base == null) return;
-        const phase = (String(lo.fromId) + String(lo.toId)).length * 0.07;
-        const wobble = 1 + Math.sin(lt * 0.85 + phase) * 0.042;
-        lo.line.material.opacity = Math.min(1, base * wobble);
+        if (!lo.isGraphRelationship) return;
+        if (lo.line?.material && lo.line.visible) {
+          const base = lo.line.userData.opacityAnimBase;
+          if (base != null) {
+            const phase = (String(lo.fromId) + String(lo.toId)).length * 0.07;
+            const wobble = 1 + Math.sin(lt * 0.85 + phase) * 0.042;
+            lo.line.material.opacity = Math.min(1, base * wobble);
+          }
+        }
+        // Soft bloom pulse on emphasized edges only — keeps neutral graph calm.
+        if (lo.glowLine?.material && lo.glowLine.visible) {
+          const gbase = lo.glowLine.userData.glowAnimBase ?? 0;
+          if (gbase > 0.001) {
+            const phase = (String(lo.fromId) + String(lo.toId)).length * 0.09;
+            const pulse = 1 + Math.sin(lt * 1.8 + phase) * 0.28;
+            lo.glowLine.material.opacity = Math.min(1, gbase * pulse);
+          }
+        }
       });
+
+      // Route pulses — small additive motes travel from start toward end.
+      if (routePulses.length) {
+        const travelT = (lt * 0.35) % 1;
+        routePulses.forEach((p) => {
+          const t = (travelT + p.offset) % 1;
+          // Quadratic bezier sample with the same mid we used when laying the line
+          const one = 1 - t;
+          const x = one * one * p.from.x + 2 * one * t * p.mid.x + t * t * p.to.x;
+          const y = one * one * p.from.y + 2 * one * t * p.mid.y + t * t * p.to.y;
+          const z = one * one * p.from.z + 2 * one * t * p.mid.z + t * t * p.to.z;
+          p.sprite.position.set(x, y, z);
+          const env = Math.sin(t * Math.PI); // fade in/out at ends
+          p.sprite.material.opacity = 0.78 * env;
+        });
+      }
+    }
+
+    // Selection ring — face the camera and breathe softly so the focused
+    // node is unmistakable without brute-force scaling.
+    if (selectionRing) {
+      selectionRing.quaternion.copy(camera.quaternion);
+      if (!prefersReducedMotion) {
+        const rt = Date.now() * 0.001;
+        const breath = 1 + Math.sin(rt * 1.4) * 0.08;
+        selectionRing.scale.setScalar(selectionRing.userData.baseScale * breath);
+        selectionRing.material.opacity = 0.32 + Math.sin(rt * 1.4) * 0.08;
+      }
     }
 
     renderer.render(scene, camera);
@@ -1736,7 +1984,13 @@ export function createPalaceScene(container, options = {}) {
       callbacks.onHover(null, { x: 0, y: 0 });
     }
     if (presentationEqual(presentation, next)) return;
+    const prevRoute = presentation.route || defaultRoutePresentation();
+    const prevSelId = presentation.selectedId;
     presentation = next;
+    const nextRoute = presentation.route || defaultRoutePresentation();
+    const routeChanged = !routePresentationEqual(prevRoute, nextRoute);
+    if (routeChanged) rebuildRoutePulses();
+    if (prevSelId !== presentation.selectedId) rebuildSelectionRing();
     syncVisualPresentation();
   }
 
@@ -1747,6 +2001,7 @@ export function createPalaceScene(container, options = {}) {
 
   function clearPin() {
     presentation.selectedId = null;
+    rebuildSelectionRing();
     syncVisualPresentation();
   }
 
