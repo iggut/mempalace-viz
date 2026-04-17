@@ -1294,48 +1294,73 @@ input[type="radio"] {
   opacity: 0.85;
 }
 
-/* Graph route strip (appears inside inspector) */
-.graph-route-strip {
+/* Route comparison note — scrolls with inspector body (sticky bar stays minimal) */
+.graph-route-scroll-extra {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px dashed rgba(143, 169, 255, 0.22);
+  font-size: 0.64rem;
+  color: var(--text-dim);
+  line-height: 1.45;
+}
+
+/* Compact in-sticky route row (mode chips + hop nav stay visible while scrolling details) */
+.graph-route-compact {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 12px;
-  padding: 10px 12px;
-  border-radius: var(--radius);
-  border: 1px solid rgba(143, 169, 255, 0.22);
-  background: linear-gradient(180deg, rgba(143, 169, 255, 0.07), rgba(143, 169, 255, 0.02));
-  font-size: 0.72rem;
+  gap: 6px 10px;
+  margin: 0 0 8px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(143, 169, 255, 0.2);
+  background: rgba(143, 169, 255, 0.05);
+  font-size: 0.68rem;
 }
 
-.graph-route-strip__nav {
+.graph-route-compact .graph-route-mode {
   display: inline-flex;
   flex-wrap: wrap;
   gap: 4px;
   align-items: center;
+  width: auto;
+  flex-basis: auto;
+  margin: 0;
 }
 
-.graph-route-strip__meta {
+.graph-route-compact__status {
   color: var(--text-dim);
-  margin-right: 6px;
+  font-variant-numeric: tabular-nums;
 }
 
-.graph-route-strip--mode-only {
-  margin-bottom: 12px;
+.graph-route-compact__hop {
+  color: var(--text-muted);
+  font-weight: 500;
 }
 
-.graph-route-strip__hint {
+.graph-route-compact__sep {
+  opacity: 0.45;
+  padding: 0 1px;
+}
+
+.graph-route-compact__nav {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  align-items: center;
+  margin-left: auto;
+}
+
+.graph-route-compact__btn {
+  padding: 2px 7px;
+  font-size: 0.65rem;
+}
+
+.graph-route-compact__hint {
   color: var(--text-dim);
-  font-size: 0.66rem;
-  opacity: 0.9;
-}
-
-.graph-route-strip__compare {
-  width: 100%;
-  flex-basis: 100%;
-  font-size: 0.64rem;
-  color: var(--text-dim);
-  line-height: 1.4;
+  font-size: 0.62rem;
+  opacity: 0.92;
 }
 
 .graph-route-mode {
@@ -1375,87 +1400,99 @@ input[type="radio"] {
   color: var(--text);
 }
 
-/* Sticky graph inspector chrome — route + focus toolbar stay visible while scrolling details */
+/* Sticky graph inspector — graph focus + in-bar route controls; comparison text scrolls above */
 .graph-inspector-chrome {
   position: sticky;
   top: 0;
   z-index: 4;
-  margin: 0 0 12px;
-  padding-bottom: 2px;
-  background: linear-gradient(180deg, rgba(8, 12, 20, 0.97) 0%, rgba(8, 12, 20, 0.92) 70%, transparent 100%);
+  margin: 0 0 10px;
+  padding: 8px 0 6px;
+  background: linear-gradient(180deg, rgba(8, 12, 20, 0.98) 0%, rgba(8, 12, 20, 0.94) 55%, rgba(8, 12, 20, 0.88) 100%);
   backdrop-filter: blur(10px);
-  border-bottom: 1px solid rgba(143, 169, 255, 0.12);
-}
-
-.graph-inspector-chrome .graph-route-strip {
-  margin-bottom: 10px;
+  border-bottom: 1px solid rgba(143, 169, 255, 0.1);
 }
 
 .graph-focus-toolbar {
-  padding: 12px 12px 10px;
+  padding: 8px 10px 6px;
   border-radius: var(--radius);
-  border: 1px solid rgba(143, 169, 255, 0.28);
-  background: linear-gradient(145deg, rgba(143, 169, 255, 0.12) 0%, rgba(10, 14, 22, 0.85) 45%, rgba(10, 14, 22, 0.65) 100%);
-  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(143, 169, 255, 0.22);
+  background: linear-gradient(145deg, rgba(143, 169, 255, 0.08) 0%, rgba(10, 14, 22, 0.88) 50%, rgba(10, 14, 22, 0.72) 100%);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.03);
   font-size: 0.72rem;
-  line-height: 1.45;
+  line-height: 1.4;
 }
 
-.graph-focus-toolbar__head {
+.graph-focus-toolbar--compact .graph-focus-toolbar__top {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.graph-focus-toolbar__identity {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 10px;
+  gap: 4px 10px;
 }
 
-.graph-focus-toolbar__title {
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text);
+.graph-focus-toolbar__identity .graph-focus-toolbar__title {
+  margin: 0;
 }
 
-.graph-focus-toolbar__meta {
-  font-size: 0.65rem;
-  color: var(--text-dim);
-  letter-spacing: 0.02em;
+.graph-focus-toolbar__identity .graph-focus-toolbar__meta {
+  margin: 0;
 }
 
-.graph-focus-toolbar__primary {
+.graph-focus-toolbar__tools {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 10px;
+  gap: 6px;
+}
+
+.graph-focus-toolbar__tools-gap {
+  display: inline-block;
+  width: 1px;
+  height: 1rem;
+  margin: 0 2px;
+  background: rgba(143, 169, 255, 0.18);
+  align-self: center;
+}
+
+.graph-focus-toolbar__soft {
+  opacity: 0.92;
+}
+
+.graph-focus-toolbar__title {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.graph-focus-toolbar__meta {
+  font-size: 0.62rem;
+  color: var(--text-dim);
+  letter-spacing: 0.02em;
 }
 
 .graph-focus-toolbar__step {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 2px 6px 2px 8px;
+  padding: 1px 5px 1px 7px;
   border-radius: var(--radius-sm);
-  border: 1px solid rgba(143, 169, 255, 0.2);
-  background: rgba(10, 14, 22, 0.45);
+  border: 1px solid rgba(143, 169, 255, 0.18);
+  background: rgba(10, 14, 22, 0.4);
 }
 
 .graph-focus-toolbar__step-label {
-  font-size: 0.6rem;
+  font-size: 0.58rem;
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-dim);
-}
-
-.graph-focus-toolbar__back {
-  margin-left: auto;
-}
-
-.graph-focus-toolbar__secondary {
-  margin-bottom: 8px;
 }
 
 .graph-focus-toolbar__legend-wrap {
@@ -1509,6 +1546,13 @@ input[type="radio"] {
 
 .inspect-rows--neighbor-jump .inspect-row {
   min-height: 2.25rem;
+}
+
+.inspect-rows--scrollcap {
+  max-height: 11rem;
+  overflow-y: auto;
+  padding-right: 2px;
+  scrollbar-gutter: stable;
 }
 
 /* ----------------------------------------------------------------

@@ -335,50 +335,58 @@ function graphExploreStripHtml() {
     : '';
   const compareHint =
     routeOk && rr.comparisonNote
-      ? `<div class="graph-route-strip__compare">${escapeHtml(rr.comparisonNote)}</div>`
+      ? `<div class="graph-route-scroll-extra" role="note">${escapeHtml(rr.comparisonNote)}</div>`
       : '';
-  const routeStrip = routeOk
-    ? `<div class="graph-route-strip" role="group" aria-label="Route along highlighted path">
+
+  const routeCompact =
+    routeOk || showRouteMode
+      ? `<div class="graph-route-compact" role="group" aria-label="${routeOk ? 'Route along highlighted path' : 'Route mode'}">
     ${modeChips}
-    ${compareHint}
-    <span class="graph-route-strip__meta">${escapeHtml(hopLabel)} · ${rr.hops} edge${rr.hops === 1 ? '' : 's'} · ${escapeHtml(
-      ROUTE_MODE_META[graphRouteMode]?.shortLabel || graphRouteMode,
-    )}</span>
-    <span class="graph-route-strip__nav">
-      <button type="button" class="btn btn--ghost btn--sm" data-graph-action="route-start" title="Jump to route start">Start</button>
-      <button type="button" class="btn btn--ghost btn--sm" data-graph-action="route-prev" ${pathN > 1 ? '' : 'disabled'} title="Previous hop ([ when route active)">◀</button>
-      <button type="button" class="btn btn--ghost btn--sm" data-graph-action="route-next" ${pathN > 1 ? '' : 'disabled'} title="Next hop (] when route active)">▶</button>
-      <button type="button" class="btn btn--ghost btn--sm" data-graph-action="route-end" title="Jump to route end">End</button>
-      <button type="button" class="btn btn--ghost btn--sm" data-graph-action="route-clear" title="Clear route highlight">Clear route</button>
-    </span>
+    ${
+      routeOk
+        ? `<span class="graph-route-compact__status"><span class="graph-route-compact__hop">${escapeHtml(hopLabel)}</span><span class="graph-route-compact__sep" aria-hidden="true">·</span><span>${rr.hops} edge${
+            rr.hops === 1 ? '' : 's'
+          }</span><span class="graph-route-compact__sep" aria-hidden="true">·</span><span>${escapeHtml(
+            ROUTE_MODE_META[graphRouteMode]?.shortLabel || graphRouteMode,
+          )}</span></span>
+    <span class="graph-route-compact__nav">
+      <button type="button" class="btn btn--ghost btn--sm graph-route-compact__btn" data-graph-action="route-start" title="Jump to route start">Start</button>
+      <button type="button" class="btn btn--ghost btn--sm graph-route-compact__btn" data-graph-action="route-prev" ${pathN > 1 ? '' : 'disabled'} title="Previous hop ([ when route active)">◀</button>
+      <button type="button" class="btn btn--ghost btn--sm graph-route-compact__btn" data-graph-action="route-next" ${pathN > 1 ? '' : 'disabled'} title="Next hop (] when route active)">▶</button>
+      <button type="button" class="btn btn--ghost btn--sm graph-route-compact__btn" data-graph-action="route-end" title="Jump to route end">End</button>
+      <button type="button" class="btn btn--ghost btn--sm graph-route-compact__btn" data-graph-action="route-clear" title="Clear route highlight">Clear</button>
+    </span>`
+        : `<span class="graph-route-compact__hint">Applies when you route to a target.</span>`
+    }
   </div>`
-    : showRouteMode
-      ? `<div class="graph-route-strip graph-route-strip--mode-only" role="group" aria-label="Route mode">${modeChips}<span class="graph-route-strip__hint">Applies when you route to a target.</span></div>`
       : '';
+
   const stepDisabled = hasNbr && !routeOk ? '' : 'disabled';
   const backDisabled = graphFocusHistory.length > 0 ? '' : 'disabled';
-  return `<div class="graph-inspector-chrome">
-    ${routeStrip}
-    <div class="graph-focus-toolbar" role="region" aria-label="Graph selection and navigation">
-      <div class="graph-focus-toolbar__head">
-        <span class="graph-focus-toolbar__title">Graph focus</span>
-        <span class="graph-focus-toolbar__meta">${n} visible link${n === 1 ? '' : 's'} from this node</span>
-      </div>
-      <div class="graph-focus-toolbar__primary">
-        <button type="button" class="btn btn--graph-primary btn--sm" data-graph-action="frame-nbr" title="Fit the camera to this node and its visible edges (does not change selection)">Frame</button>
-        <div class="graph-focus-toolbar__step" role="group" aria-label="Step along neighbor ring">
-          <span class="graph-focus-toolbar__step-label">Step</span>
-          <button type="button" class="btn btn--ghost btn--sm" data-graph-action="prev" ${stepDisabled} title="Previous neighbor on the ring ([)">◀</button>
-          <button type="button" class="btn btn--ghost btn--sm" data-graph-action="next" ${stepDisabled} title="Next neighbor on the ring (])">▶</button>
+  return `${compareHint}
+  <div class="graph-inspector-chrome">
+    ${routeCompact}
+    <div class="graph-focus-toolbar graph-focus-toolbar--compact" role="region" aria-label="Graph selection and navigation">
+      <div class="graph-focus-toolbar__top">
+        <div class="graph-focus-toolbar__identity">
+          <span class="graph-focus-toolbar__title">Graph focus</span>
+          <span class="graph-focus-toolbar__meta">${n} visible link${n === 1 ? '' : 's'}</span>
         </div>
-        <button type="button" class="btn btn--ghost btn--sm graph-focus-toolbar__back" data-graph-action="back" ${backDisabled} title="Restore the previous graph focus after a jump or neighbor step (U)">Back</button>
-      </div>
-      <div class="graph-focus-toolbar__secondary btn-row">
-        <button type="button" class="btn btn--ghost btn--sm" data-graph-action="open-structure" title="Switch to Rooms view — same wing in taxonomy folder layout (structure, not tunnel topology)">Rooms tree</button>
-        <button type="button" class="btn btn--ghost btn--sm" data-graph-action="clear-focus" title="Clear selection and unlock the inspector — same as Clear in the toolbar">Clear</button>
+        <div class="graph-focus-toolbar__tools">
+          <button type="button" class="btn btn--graph-primary btn--sm" data-graph-action="frame-nbr" title="Fit the camera to this node and its visible edges (does not change selection)">Frame</button>
+          <div class="graph-focus-toolbar__step" role="group" aria-label="Step along neighbor ring">
+            <span class="graph-focus-toolbar__step-label">Step</span>
+            <button type="button" class="btn btn--ghost btn--sm" data-graph-action="prev" ${stepDisabled} title="Previous neighbor on the ring ([)">◀</button>
+            <button type="button" class="btn btn--ghost btn--sm" data-graph-action="next" ${stepDisabled} title="Next neighbor on the ring (])">▶</button>
+          </div>
+          <button type="button" class="btn btn--ghost btn--sm" data-graph-action="back" ${backDisabled} title="Restore the previous graph focus after a jump or neighbor step (U)">Back</button>
+          <span class="graph-focus-toolbar__tools-gap" aria-hidden="true"></span>
+          <button type="button" class="btn btn--ghost btn--sm graph-focus-toolbar__soft" data-graph-action="open-structure" title="Switch to Rooms view — same wing in taxonomy folder layout (structure, not tunnel topology)">Rooms tree</button>
+          <button type="button" class="btn btn--ghost btn--sm graph-focus-toolbar__soft" data-graph-action="clear-focus" title="Clear selection and unlock the inspector — same as Clear in the toolbar">Clear</button>
+        </div>
       </div>
       <details class="graph-focus-toolbar__legend-wrap">
-        <summary class="graph-focus-toolbar__legend-summary">Frame · Step · Back · Rooms tree · Clear</summary>
+        <summary class="graph-focus-toolbar__legend-summary">Shortcuts &amp; legend</summary>
         <ul class="graph-focus-toolbar__legend">
           <li><strong>Frame</strong> — camera only: fit this node and its drawn edges in view.</li>
           <li><strong>Step</strong> — move selection along the sorted neighbor ring ([ / ]); pushes focus history.</li>
@@ -1422,12 +1430,18 @@ function renderRoomInspector(ctx, wingName, roomName, _mode) {
 
   const keyRelTitle = appState.view === 'graph' ? 'Connections detail' : 'Key relationships';
 
+  const linkedJumpCount = relRoomsGraphJump.length;
+  const linkedRowsClass =
+    linkedJumpCount > 5
+      ? 'inspect-rows inspect-rows--neighbor-jump inspect-rows--scrollcap'
+      : 'inspect-rows inspect-rows--neighbor-jump';
+
   const graphLinkedRoomsSection =
     appState.view === 'graph' && graphNeighborJumpRows
       ? inspectSection(
-          'Linked rooms',
+          linkedJumpCount > 5 ? `Linked rooms (${linkedJumpCount})` : 'Linked rooms',
           `<p class="inspect-muted inspect-muted--tight">Strongest neighbors by link count on the visible graph — tap to focus (same as the 3D node).</p>
-        <div class="inspect-rows inspect-rows--neighbor-jump">${graphNeighborJumpRows}</div>`,
+        <div class="${linkedRowsClass}">${graphNeighborJumpRows}</div>`,
         )
       : '';
 
@@ -1454,7 +1468,7 @@ function renderRoomInspector(ctx, wingName, roomName, _mode) {
         ${lines.map((l) => `<p class="inspect-muted inspect-muted--tight">${escapeHtml(l)}</p>`).join('')}
         ${
           graphNeighborJumpRows
-            ? `<p class="inspect-muted inspect-muted--tight">Room shortcuts sit in <strong>Linked rooms</strong> above.</p>`
+            ? `<p class="inspect-muted inspect-muted--tight">Room shortcuts sit in <strong>Linked rooms</strong> below.</p>`
             : ''
         }`,
           );
@@ -1523,8 +1537,8 @@ function renderRoomInspector(ctx, wingName, roomName, _mode) {
         <p class="inspect-lead">${escapeHtml(sentence || 'Room in the palace taxonomy.')}</p>
         ${pctWing != null ? `<div class="inspect-pct"><span>${pctWing}% of wing drawers (room list)</span>${pctBar(pctWing)}</div>` : ''}
       </div>
-      ${graphLinkedRoomsSection}
       ${graphLocalNeighborhoodSection}
+      ${graphLinkedRoomsSection}
       ${routeBlock}
       ${inspectSection(
         'Why it matters',
