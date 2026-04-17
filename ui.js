@@ -344,7 +344,9 @@ function graphExploreStripHtml() {
       <button type="button" class="btn btn--ghost btn--sm" data-graph-action="prev" ${hasNbr && !routeOk ? '' : 'disabled'} title="Previous connected room ([)">◀</button>
       <button type="button" class="btn btn--ghost btn--sm" data-graph-action="next" ${hasNbr && !routeOk ? '' : 'disabled'} title="Next connected room (])">▶</button>
     </span>
-    <button type="button" class="btn btn--ghost btn--sm" data-graph-action="back" title="Prior graph focus (U)">Back</button>
+    <button type="button" class="btn btn--ghost btn--sm" data-graph-action="back"${
+      graphFocusHistory.length > 0 ? '' : ' disabled'
+    } title="Prior graph focus (U)">Back</button>
     <span class="graph-explore-strip__meta" aria-hidden="true">${n} link${n === 1 ? '' : 's'}</span>
   </div>`;
 }
@@ -388,9 +390,9 @@ function graphStepNeighbor(delta) {
 }
 
 function graphFocusBack() {
+  if (graphFocusHistory.length === 0) return;
   const prev = popFocusHistory(graphFocusHistory);
   if (!prev || prev.view !== 'graph' || !prev.selected?.id) {
-    showToast('No prior focus in history.');
     return;
   }
   appState.selected = prev.selected;
@@ -2289,6 +2291,7 @@ function renderBreadcrumb() {
 /**
  * Rooms view only: undo one level of structural focus (room → wing orbit → wings overview).
  * Does not reset camera unless scene centering does; separate from Reset camera (R).
+ * Canonical levels and back semantics: `nav-focus.js` (`peekRoomsBackAction`, `peekNextBackAction`).
  */
 function goBackStructuralFocusRooms() {
   closeHelpIfOpen();
@@ -2318,6 +2321,8 @@ function goBackStructuralFocusRooms() {
 }
 
 /**
+ * Header Back, Esc (when it applies), and graph strip Back / U use this — driven by
+ * `appState` + `graphFocusHistory`, not inspector mode or pin alone.
  * @returns {boolean} true if navigation state changed
  */
 function goBackOneLevel() {
@@ -2331,6 +2336,7 @@ function goBackOneLevel() {
   return false;
 }
 
+/** Renders nav-scope crumbs + Back enabled state; mirrors `getCanonicalNavLevel` / `peekNextBackAction` in `nav-focus.js`. */
 function updateNavScope() {
   const backBtn = $('btn-nav-back');
   const crumbsEl = $('nav-scope-crumbs');
@@ -3074,6 +3080,7 @@ function wireControls() {
         else graphStepNeighbor(1);
       }
       if (e.key === 'u' || e.key === 'U') {
+        if (graphFocusHistory.length === 0) return;
         e.preventDefault();
         graphFocusBack();
       }
