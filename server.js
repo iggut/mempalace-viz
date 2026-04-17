@@ -59,11 +59,13 @@ const STATIC_FILES = {
   '/graph-route.js': 'graph-route.js',
   '/graph-scene-helpers.js': 'graph-scene-helpers.js',
   '/graph-search.js': 'graph-search.js',
+  '/graph-workflow.js': 'graph-workflow.js',
   '/state-utils.js': 'state-utils.js',
   '/nav-focus.js': 'nav-focus.js',
   '/nav-dev-invariants.js': 'nav-dev-invariants.js',
   '/debug.js': 'debug.js',
   '/three-runtime.js': 'three-runtime.js',
+  '/ui-hover-policy.js': 'ui-hover-policy.js',
 };
 
 const MIME_TYPES = {

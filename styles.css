@@ -1295,14 +1295,19 @@ input[type="radio"] {
 }
 
 /* Route comparison note — scrolls with inspector body (sticky bar stays minimal) */
+/* Follows sticky chrome in DOM — tuck under without doubling margin with .graph-inspector-chrome */
+.graph-inspector-chrome + .graph-route-scroll-extra {
+  margin-top: 2px;
+}
+
 .graph-route-scroll-extra {
-  margin: 0 0 8px;
-  padding: 8px 10px;
+  margin: 0 0 6px;
+  padding: 6px 8px;
   border-radius: var(--radius-sm);
   border: 1px dashed rgba(143, 169, 255, 0.22);
-  font-size: 0.64rem;
+  font-size: 0.62rem;
   color: var(--text-dim);
-  line-height: 1.45;
+  line-height: 1.4;
 }
 
 /* Compact in-sticky route row (mode chips + hop nav stay visible while scrolling details) */
@@ -1310,13 +1315,14 @@ input[type="radio"] {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px 10px;
-  margin: 0 0 8px;
-  padding: 6px 8px;
+  gap: 4px 8px;
+  margin: 0 0 6px;
+  padding: 4px 6px;
   border-radius: var(--radius-sm);
   border: 1px solid rgba(143, 169, 255, 0.2);
   background: rgba(143, 169, 255, 0.05);
-  font-size: 0.68rem;
+  font-size: 0.65rem;
+  line-height: 1.25;
 }
 
 .graph-route-compact .graph-route-mode {
@@ -1353,14 +1359,15 @@ input[type="radio"] {
 }
 
 .graph-route-compact__btn {
-  padding: 2px 7px;
-  font-size: 0.65rem;
+  padding: 1px 6px;
+  font-size: 0.62rem;
 }
 
 .graph-route-compact__hint {
   color: var(--text-dim);
-  font-size: 0.62rem;
+  font-size: 0.6rem;
   opacity: 0.92;
+  line-height: 1.3;
 }
 
 .graph-route-mode {
@@ -1377,8 +1384,8 @@ input[type="radio"] {
   border: 1px solid var(--hairline);
   background: rgba(10, 14, 22, 0.55);
   color: var(--text-dim);
-  font-size: 0.65rem;
-  padding: 3px 8px;
+  font-size: 0.62rem;
+  padding: 2px 6px;
   border-radius: var(--radius-pill);
   cursor: pointer;
   letter-spacing: 0.02em;
@@ -1405,34 +1412,50 @@ input[type="radio"] {
   position: sticky;
   top: 0;
   z-index: 4;
-  margin: 0 0 10px;
-  padding: 8px 0 6px;
+  margin: 0 0 6px;
+  padding: 4px 0 4px;
   background: linear-gradient(180deg, rgba(8, 12, 20, 0.98) 0%, rgba(8, 12, 20, 0.94) 55%, rgba(8, 12, 20, 0.88) 100%);
   backdrop-filter: blur(10px);
-  border-bottom: 1px solid rgba(143, 169, 255, 0.1);
+  border-bottom: 1px solid rgba(143, 169, 255, 0.08);
+}
+
+/* Route start set and/or active path: compress sticky stack without hiding controls */
+.graph-inspector-chrome--route-busy .graph-route-compact {
+  margin-bottom: 4px;
+  padding: 3px 5px;
+  gap: 3px 6px;
+}
+
+.graph-inspector-chrome--route-busy .graph-focus-toolbar {
+  padding-top: 4px;
+  padding-bottom: 3px;
+}
+
+.graph-inspector-chrome--route-busy .graph-focus-toolbar--compact .graph-focus-toolbar__top {
+  gap: 4px;
 }
 
 .graph-focus-toolbar {
-  padding: 8px 10px 6px;
-  border-radius: var(--radius);
-  border: 1px solid rgba(143, 169, 255, 0.22);
-  background: linear-gradient(145deg, rgba(143, 169, 255, 0.08) 0%, rgba(10, 14, 22, 0.88) 50%, rgba(10, 14, 22, 0.72) 100%);
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.03);
-  font-size: 0.72rem;
-  line-height: 1.4;
+  padding: 5px 8px 4px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(143, 169, 255, 0.2);
+  background: linear-gradient(145deg, rgba(143, 169, 255, 0.07) 0%, rgba(10, 14, 22, 0.88) 50%, rgba(10, 14, 22, 0.72) 100%);
+  box-shadow: 0 1px 8px rgba(0, 0, 0, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  font-size: 0.7rem;
+  line-height: 1.32;
 }
 
 .graph-focus-toolbar--compact .graph-focus-toolbar__top {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 5px;
 }
 
 .graph-focus-toolbar__identity {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 4px 10px;
+  gap: 2px 8px;
 }
 
 .graph-focus-toolbar__identity .graph-focus-toolbar__title {
@@ -1447,14 +1470,14 @@ input[type="radio"] {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: 4px 5px;
 }
 
 .graph-focus-toolbar__tools-gap {
   display: inline-block;
   width: 1px;
-  height: 1rem;
-  margin: 0 2px;
+  height: 0.85rem;
+  margin: 0 1px;
   background: rgba(143, 169, 255, 0.18);
   align-self: center;
 }
@@ -1464,15 +1487,15 @@ input[type="radio"] {
 }
 
 .graph-focus-toolbar__title {
-  font-size: 0.65rem;
+  font-size: 0.62rem;
   font-weight: 700;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.055em;
   text-transform: uppercase;
   color: var(--text-muted);
 }
 
 .graph-focus-toolbar__meta {
-  font-size: 0.62rem;
+  font-size: 0.6rem;
   color: var(--text-dim);
   letter-spacing: 0.02em;
 }
@@ -1480,15 +1503,15 @@ input[type="radio"] {
 .graph-focus-toolbar__step {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 1px 5px 1px 7px;
+  gap: 3px;
+  padding: 0 4px 0 5px;
   border-radius: var(--radius-sm);
-  border: 1px solid rgba(143, 169, 255, 0.18);
+  border: 1px solid rgba(143, 169, 255, 0.16);
   background: rgba(10, 14, 22, 0.4);
 }
 
 .graph-focus-toolbar__step-label {
-  font-size: 0.58rem;
+  font-size: 0.55rem;
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -1504,9 +1527,11 @@ input[type="radio"] {
 .graph-focus-toolbar__legend-summary {
   cursor: pointer;
   list-style: none;
-  font-size: 0.62rem;
+  font-size: 0.58rem;
   color: var(--text-dim);
   letter-spacing: 0.02em;
+  line-height: 1.4;
+  padding: 1px 0;
 }
 
 .graph-focus-toolbar__legend-summary::-webkit-details-marker {
@@ -1514,11 +1539,11 @@ input[type="radio"] {
 }
 
 .graph-focus-toolbar__legend {
-  margin: 8px 0 0;
+  margin: 5px 0 0;
   padding-left: 1.1em;
-  font-size: 0.64rem;
+  font-size: 0.62rem;
   color: var(--text-dim);
-  line-height: 1.5;
+  line-height: 1.4;
 }
 
 .graph-focus-toolbar__legend li {
@@ -1542,6 +1567,50 @@ input[type="radio"] {
   border-color: rgba(160, 190, 255, 0.65);
   background: linear-gradient(180deg, rgba(143, 169, 255, 0.32), rgba(80, 110, 200, 0.2));
   color: #fff;
+}
+
+/* Graph sticky chrome: trim default .btn--sm padding so more inspector body fits above the fold */
+.graph-inspector-chrome .btn--sm {
+  padding: 3px 8px;
+  font-size: 0.66rem;
+}
+
+.graph-inspector-chrome--route-busy .btn--sm {
+  padding: 2px 7px;
+  font-size: 0.64rem;
+}
+
+@media (max-height: 760px) {
+  .graph-inspector-chrome {
+    margin-bottom: 4px;
+    padding: 2px 0 2px;
+  }
+
+  .graph-route-compact {
+    margin-bottom: 4px;
+    padding: 3px 5px;
+  }
+
+  .graph-focus-toolbar {
+    padding: 4px 6px 3px;
+  }
+
+  .graph-focus-toolbar--compact .graph-focus-toolbar__top {
+    gap: 4px;
+  }
+
+  .graph-inspector-chrome--route-busy .graph-route-compact {
+    margin-bottom: 3px;
+    padding: 2px 4px;
+  }
+
+  .graph-inspector-chrome--route-busy .graph-focus-toolbar {
+    padding-top: 3px;
+  }
+
+  .inspect-rows--scrollcap {
+    max-height: 9rem;
+  }
 }
 
 .inspect-rows--neighbor-jump .inspect-row {

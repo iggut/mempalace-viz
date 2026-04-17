@@ -363,8 +363,10 @@ function graphExploreStripHtml() {
 
   const stepDisabled = hasNbr && !routeOk ? '' : 'disabled';
   const backDisabled = graphFocusHistory.length > 0 ? '' : 'disabled';
-  return `${compareHint}
-  <div class="graph-inspector-chrome">
+  const routeChromeBusy = !!(routeOk || showRouteMode);
+  const chromeClass = `graph-inspector-chrome${routeChromeBusy ? ' graph-inspector-chrome--route-busy' : ''}`;
+  /* Sticky chrome first so controls stay at the top of the strip; route comparison note follows and scrolls with body. */
+  return `<div class="${chromeClass}">
     ${routeCompact}
     <div class="graph-focus-toolbar graph-focus-toolbar--compact" role="region" aria-label="Graph selection and navigation">
       <div class="graph-focus-toolbar__top">
@@ -396,7 +398,7 @@ function graphExploreStripHtml() {
         </ul>
       </details>
     </div>
-  </div>`;
+  </div>${compareHint}`;
 }
 
 function graphFrameNeighborhood() {
