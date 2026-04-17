@@ -56,6 +56,7 @@ import {
   summarizeVisibleGraphEdges,
 } from './graph-relationships.js';
 import { assertValidState, normalizePersistedNavigation, sanitizeNavigationAgainstData } from './state-utils.js';
+import { canNavigateBack, peekRoomsBackAction } from './nav-focus.js';
 import { devWarn, isDev } from './debug.js';
 import {
   parseRoomSceneId,
@@ -2253,7 +2254,7 @@ function renderBreadcrumb() {
   if (!el) return;
 
   const parts = [
-    `<button type="button" class="crumb" data-crumb="root">All wings</button>`,
+    `<button type="button" class="crumb" data-crumb="root">Overview</button>`,
   ];
   if (appState.currentWing) {
     parts.push(`<span class="crumb-sep" aria-hidden="true">›</span>`);
@@ -2283,6 +2284,122 @@ function renderBreadcrumb() {
     }
   });
   wireBreadcrumbRoving(el);
+}
+
+/**
+ * Rooms view only: undo one level of structural focus (room → wing orbit → wings overview).
+ * Does not reset camera unless scene centering does; separate from Reset camera (R).
+ */
+function goBackStructuralFocusRooms() {
+  closeHelpIfOpen();
+  if (appState.view !== 'rooms') return false;
+  const action = peekRoomsBackAction(appState.currentWing, appState.currentRoom);
+  if (action === 'toWing') {
+    const wing = appState.currentWing;
+    if (!wing || !dataBundle || !wingExists(dataBundle.wingsData, wing)) return false;
+    appState.currentRoom = null;
+    appState.selected = {
+      id: `wing:${wing}`,
+      type: 'wing',
+      name: wing,
+      wingId: wing,
+      drawers: dataBundle.wingsData[wing],
+    };
+    appState.pinned = false;
+    sceneApi?.setView('rooms', wing);
+    syncScenePresentation();
+    sceneApi?.centerOnNodeId(`wing:${wing}`);
+    renderInspector();
+    persistState();
+    return true;
+  }
+  goAllWings();
+  return true;
+}
+
+/**
+ * @returns {boolean} true if navigation state changed
+ */
+function goBackOneLevel() {
+  if (appState.view === 'rooms') {
+    return goBackStructuralFocusRooms();
+  }
+  if (appState.view === 'graph' && graphFocusHistory.length > 0) {
+    graphFocusBack();
+    return true;
+  }
+  return false;
+}
+
+function updateNavScope() {
+  const backBtn = $('btn-nav-back');
+  const crumbsEl = $('nav-scope-crumbs');
+  if (!backBtn || !crumbsEl) return;
+
+  const canBack = canNavigateBack(appState.view, graphFocusHistory.length);
+  backBtn.disabled = !canBack;
+  backBtn.setAttribute('aria-disabled', canBack ? 'false' : 'true');
+
+  const overviewBtn =
+    '<button type="button" class="nav-scope__crumb" data-nav-scope="overview">Overview</button>';
+  const sep = '<span class="nav-scope__sep" aria-hidden="true">/</span>';
+
+  if (appState.view === 'wings') {
+    crumbsEl.innerHTML = `<div class="nav-scope__crumbs-inner"><span class="nav-scope__here">Overview</span><span class="nav-scope__muted"> · Wings</span></div>`;
+    return;
+  }
+
+  if (appState.view === 'rooms') {
+    const parts = [overviewBtn];
+    if (!appState.currentWing && !appState.currentRoom) {
+      parts.push(sep, `<span class="nav-scope__here">Rooms (all wings)</span>`);
+    } else if (appState.currentWing && !appState.currentRoom) {
+      parts.push(sep, `<span class="nav-scope__here">${escapeHtml(appState.currentWing)}</span><span class="nav-scope__muted"> · Wing</span>`);
+    } else if (appState.currentWing && appState.currentRoom) {
+      parts.push(
+        sep,
+        `<button type="button" class="nav-scope__crumb" data-nav-scope="wing" data-wing="${escapeHtml(appState.currentWing)}">${escapeHtml(appState.currentWing)}</button>`,
+        sep,
+        `<span class="nav-scope__here">${escapeHtml(appState.currentRoom)}</span><span class="nav-scope__muted"> · Room</span>`,
+      );
+    }
+    crumbsEl.innerHTML = `<div class="nav-scope__crumbs-inner" aria-label="Location">${parts.join('')}</div>`;
+    return;
+  }
+
+  if (appState.view === 'graph') {
+    const parts = [overviewBtn, sep, `<span class="nav-scope__muted">Graph</span>`];
+    if (appState.currentWing) {
+      parts.push(sep, `<span class="nav-scope__crumb--text">${escapeHtml(appState.currentWing)}</span>`);
+    }
+    if (appState.currentRoom) {
+      parts.push(sep, `<span class="nav-scope__crumb--text">${escapeHtml(appState.currentRoom)}</span>`);
+    }
+    crumbsEl.innerHTML = `<div class="nav-scope__crumbs-inner" aria-label="Location">${parts.join('')}</div>`;
+  }
+}
+
+function wireNavScope() {
+  const scope = $('nav-scope');
+  if (!scope || scope._navScopeWired) return;
+  scope._navScopeWired = true;
+  scope.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-nav-scope]');
+    if (!btn) return;
+    const kind = btn.getAttribute('data-nav-scope');
+    if (kind === 'overview') {
+      goAllWings();
+      return;
+    }
+    if (kind === 'wing') {
+      const wing = btn.getAttribute('data-wing');
+      if (wing && dataBundle && wingExists(dataBundle.wingsData, wing)) navigateToWing(wing);
+    }
+  });
+  $('btn-nav-back')?.addEventListener('click', () => {
+    if ($('btn-nav-back')?.disabled) return;
+    goBackOneLevel();
+  });
 }
 
 function goAllWings() {
@@ -2361,6 +2478,7 @@ function renderInspector() {
   else if (mode === 'live') subject = appState.hovered;
 
   renderBreadcrumb();
+  updateNavScope();
 
   const ctx = buildPalaceContext();
   const graphNote = graphViewInspectorNotice(ctx);
@@ -2902,6 +3020,8 @@ function wireControls() {
     if (t) toggleRelationshipType(t);
   });
 
+  wireNavScope();
+
   window.addEventListener('keydown', (e) => {
     if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === 'n' || e.key === 'N' || e.key === 'p' || e.key === 'P')) {
       if (appState.view === 'graph' && graphSearchMatches.length > 1) {
@@ -2920,6 +3040,10 @@ function wireControls() {
       if (appState.searchQuery.trim()) {
         e.preventDefault();
         clearGraphSearchQuery();
+        return;
+      }
+      if (goBackOneLevel()) {
+        e.preventDefault();
         return;
       }
       if (appState.pinned) {

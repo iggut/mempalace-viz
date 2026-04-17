@@ -60,6 +60,7 @@ const STATIC_FILES = {
   '/graph-scene-helpers.js': 'graph-scene-helpers.js',
   '/graph-search.js': 'graph-search.js',
   '/state-utils.js': 'state-utils.js',
+  '/nav-focus.js': 'nav-focus.js',
   '/debug.js': 'debug.js',
   '/three-runtime.js': 'three-runtime.js',
 };

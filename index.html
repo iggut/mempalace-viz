@@ -32,6 +32,19 @@
           <h1>MemPalace</h1>
           <p class="tagline">A cognitive map of your memory palace</p>
         </div>
+        <div class="nav-scope" id="nav-scope" role="navigation" aria-label="View location">
+          <button
+            type="button"
+            id="btn-nav-back"
+            class="btn btn--ghost btn--sm nav-scope__back"
+            disabled
+            aria-disabled="true"
+            title="Back one level (Esc)"
+          >
+            ← Back
+          </button>
+          <div id="nav-scope-crumbs" class="nav-scope__crumbs" aria-live="polite"></div>
+        </div>
         <div class="header-actions">
           <div class="header-connection">
             <div
@@ -334,7 +347,7 @@
           </button>
           <span class="hint-row footer-shortcuts-hint" style="margin: 0">
             <kbd>1</kbd>–<kbd>3</kbd> view · <kbd>R</kbd> camera · <kbd>/</kbd> structure · <kbd>⌘/Ctrl K</kbd> semantic ·
-            <kbd>L</kbd> labels · <kbd>Esc</kbd> clear · graph: <kbd>[</kbd> <kbd>]</kbd> <kbd>U</kbd> · find:
+            <kbd>L</kbd> labels · <kbd>Esc</kbd> back / clear · graph: <kbd>[</kbd> <kbd>]</kbd> <kbd>U</kbd> · find:
             <kbd>Alt+N</kbd> <kbd>Alt+P</kbd>
           </span>
         </div>
@@ -365,7 +378,10 @@
           <li><kbd>R</kbd> — Reset camera</li>
           <li><kbd>/</kbd> — Focus structure search · <kbd>Ctrl</kbd>+<kbd>K</kbd> / <kbd>⌘</kbd>+<kbd>K</kbd> — semantic drawer search</li>
           <li><kbd>L</kbd> — Toggle labels</li>
-          <li><kbd>Esc</kbd> — Close this dialog; then clear search; then unpin; then clear selection</li>
+          <li>
+            <kbd>Esc</kbd> — Close this dialog; then clear search; then <strong>back one navigation level</strong> (Rooms view:
+            room → wing → overview; Graph: prior focus when history exists); then unpin; then clear selection
+          </li>
           <li><strong>Search</strong> — type a wing or room fragment; <kbd>Enter</kbd> frames in Graph · <kbd>Alt+N</kbd> / <kbd>Alt+P</kbd> next/prev match</li>
           <li><strong>Click</strong> wing (Wings) — Enter that wing’s rooms</li>
           <li><strong>Click</strong> room (Rooms) — Select &amp; center</li>
@@ -378,7 +394,10 @@
             <strong>Route</strong> — In Graph, pick a room: set route start, then <strong>Route to here</strong> (or Route from search). The scene highlights a path on <strong>explicit MCP edges only</strong> (same rules as tunnel discovery). Disconnected rooms are valid. Stock MemPalace MCP does not support persisting arbitrary room-to-room graph links — see <code>docs/MCP_CONNECTION_CAPABILITIES.md</code>.
           </li>
           <li><strong>Click</strong> empty canvas — Clear selection (unless pinned); subtle canvas cue</li>
-          <li><strong>Breadcrumb</strong> — Navigate: All wings → wing → refocus room</li>
+          <li>
+            <strong>Back / location</strong> — Header <strong>← Back</strong> and <strong>Overview</strong> crumbs step out of focus;
+            inspector breadcrumb matches. <kbd>Esc</kbd> backs out one level before clearing selection.
+          </li>
         </ul>
       </div>
     </div>

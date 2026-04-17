@@ -144,6 +144,10 @@ a {
   letter-spacing: -0.02em;
 }
 
+.brand {
+  flex-shrink: 0;
+}
+
 .tagline {
   margin: 4px 0 0;
   font-size: 0.78rem;
@@ -157,6 +161,80 @@ a {
   align-items: center;
   gap: 10px;
   flex-shrink: 0;
+}
+
+/* Header: persistent navigation scope + back (see ui.js goBackOneLevel) */
+.nav-scope {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 0 8px;
+}
+
+.nav-scope__back {
+  flex-shrink: 0;
+}
+
+.nav-scope__back:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
+.nav-scope__crumbs {
+  min-width: 0;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: var(--text-muted);
+}
+
+.nav-scope__crumbs-inner {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  justify-content: center;
+}
+
+.nav-scope__sep {
+  color: var(--text-dim);
+  user-select: none;
+}
+
+.nav-scope__here {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.nav-scope__muted {
+  color: var(--text-dim);
+  font-size: 0.72rem;
+}
+
+.nav-scope__crumb {
+  font: inherit;
+  font-size: inherit;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-color: rgba(124, 156, 255, 0.35);
+}
+
+.nav-scope__crumb:hover {
+  color: #93c5fd;
+}
+
+.nav-scope__crumb--text {
+  color: var(--text-muted);
+  max-width: 28ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .header-connection {
