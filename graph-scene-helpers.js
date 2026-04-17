@@ -22,11 +22,11 @@ export function computeDensityMetrics(nodeCount, edgeCount, wingCount) {
   else if (n > 48 || edgeDensity > 1.75) tier = 2;
   else if (n > 24 || edgeDensity > 1.05) tier = 1;
 
-  const labelBudget = tier >= 3 ? 85 : tier >= 2 ? 130 : tier >= 1 ? 175 : 235;
-  const fogDensity = 0.00155 + tier * 0.00042;
-  const adjacencyOpacityMult = tier >= 2 ? 0.68 : tier >= 1 ? 0.82 : 1;
-  const globalEdgeOpacityMult = tier >= 3 ? 0.74 : tier >= 2 ? 0.86 : 1;
-  const tunnelEmphasisMult = tier >= 2 ? 1.08 : 1;
+  const labelBudget = tier >= 3 ? 68 : tier >= 2 ? 108 : tier >= 1 ? 158 : 220;
+  const fogDensity = 0.0017 + tier * 0.0005;
+  const adjacencyOpacityMult = tier >= 2 ? 0.62 : tier >= 1 ? 0.78 : 0.92;
+  const globalEdgeOpacityMult = tier >= 3 ? 0.62 : tier >= 2 ? 0.79 : tier >= 1 ? 0.92 : 1;
+  const tunnelEmphasisMult = tier >= 2 ? 1.12 : 1.04;
 
   const repelScale = 1 + tier * 0.22;
   const attractScale = 1 - tier * 0.04;
@@ -272,7 +272,7 @@ export function effectiveLabelBudgetForCamera(baseBudget, cameraDistanceNorm, de
   const tier = Math.max(0, Math.min(3, densityTier));
   const zoomIn = Math.max(0, Math.min(1, cameraDistanceNorm));
   // Zoomed out: stronger reduction on dense tiers
-  const minFrac = 0.38 + tier * 0.06;
+  const minFrac = 0.24 + tier * 0.05;
   const maxFrac = 1;
   const frac = minFrac + (maxFrac - minFrac) * zoomIn;
   return Math.max(8, Math.floor(b * frac));
@@ -285,10 +285,10 @@ export function effectiveLabelBudgetForCamera(baseBudget, cameraDistanceNorm, de
  */
 export function labelSpriteScaleMultiplier(cameraDistanceNorm, role = {}) {
   const z = Math.max(0, Math.min(1, cameraDistanceNorm));
-  let m = 0.5 + z * 0.26;
-  if (role.pinned) m *= 1.05;
-  else if (role.selected) m *= 1.04;
-  else if (role.hovered) m *= 1.025;
+  let m = 0.46 + z * 0.22;
+  if (role.pinned) m *= 1.045;
+  else if (role.selected) m *= 1.035;
+  else if (role.hovered) m *= 1.02;
   return m;
 }
 
@@ -299,11 +299,11 @@ export function labelSpriteScaleMultiplier(cameraDistanceNorm, role = {}) {
  */
 export function labelOpacityDistanceFactor(cameraDistanceNorm, role = {}) {
   const z = Math.max(0, Math.min(1, cameraDistanceNorm));
-  let o = 0.32 + z * 0.34;
-  if (role.selected) o = Math.max(o, 0.78);
-  if (role.hovered) o = Math.max(o, 0.72);
-  if (role.neighbor) o = Math.max(o, 0.44 + z * 0.22);
-  return Math.max(0.2, Math.min(0.84, o));
+  let o = 0.24 + z * 0.28;
+  if (role.selected) o = Math.max(o, 0.68);
+  if (role.hovered) o = Math.max(o, 0.62);
+  if (role.neighbor) o = Math.max(o, 0.38 + z * 0.2);
+  return Math.max(0.16, Math.min(0.76, o));
 }
 
 /**
@@ -581,18 +581,19 @@ export function edgeEmphasisOpacityMult(p) {
   const tier = Math.max(0, Math.min(3, densityTier));
 
   if (primaryId) {
-    if (incidentPrimary) return tunnel ? 1.24 : 1.06;
+    if (incidentPrimary) return tunnel ? 1.3 : 1.08;
     // Preview edges for a different hovered node while a selection is pinned
     if (incidentSecondary) {
-      const sec = tunnel ? 0.88 : 0.78;
+      const sec = tunnel ? 0.82 : 0.72;
       return sec * (tier >= 2 ? 0.92 : 1);
     }
-    const nonIncident = tier >= 3 ? 0.36 : tier >= 2 ? 0.4 : tier >= 1 ? 0.52 : 0.68;
+    const nonIncident = tier >= 3 ? 0.24 : tier >= 2 ? 0.3 : tier >= 1 ? 0.46 : 0.62;
     return nonIncident;
   }
 
-  if (tier >= 3) return tunnel ? 0.92 : 0.78;
-  return 1;
+  if (tier >= 3) return tunnel ? 0.78 : 0.64;
+  if (tier >= 2) return tunnel ? 0.86 : 0.74;
+  return 0.96;
 }
 
 /**
@@ -606,11 +607,11 @@ export function focusNodeDistanceDimMult(distanceFromFocus, tier, ctx = {}) {
   const { isNeighbor = false, focusActive = false } = ctx;
   if (!focusActive) return 1;
   const tierClamped = Math.max(0, Math.min(3, tier));
-  const start = 38 + tierClamped * 18;
-  const span = 155 + tierClamped * 35;
-  let m = 1.05 - (distanceFromFocus - start) / span;
-  if (isNeighbor) m = 0.55 + m * 0.45;
-  m = Math.max(tierClamped === 0 ? 0.58 : 0.34, Math.min(1.08, m));
+  const start = 32 + tierClamped * 16;
+  const span = 128 + tierClamped * 30;
+  let m = 1.02 - (distanceFromFocus - start) / span;
+  if (isNeighbor) m = 0.6 + m * 0.4;
+  m = Math.max(tierClamped === 0 ? 0.52 : 0.26, Math.min(1.04, m));
   return m;
 }
 

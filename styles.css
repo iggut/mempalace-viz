@@ -8,15 +8,15 @@
   --bg-0: #04060c;
   --bg-1: #070a12;
   --bg-2: #0b0f18;
-  --surface-0: rgba(12, 16, 24, 0.62);
-  --surface-1: rgba(18, 22, 32, 0.62);
-  --surface-2: rgba(26, 32, 44, 0.62);
+  --surface-0: rgba(11, 15, 23, 0.52);
+  --surface-1: rgba(17, 22, 32, 0.52);
+  --surface-2: rgba(24, 30, 42, 0.5);
   --surface-solid: #0d111a;
   --surface-raised: #131826;
 
   /* Borders — low alpha so panels never fight the scene */
-  --hairline: rgba(255, 255, 255, 0.05);
-  --border: rgba(255, 255, 255, 0.08);
+  --hairline: rgba(255, 255, 255, 0.042);
+  --border: rgba(255, 255, 255, 0.07);
   --border-strong: rgba(255, 255, 255, 0.14);
 
   /* Text */
@@ -59,9 +59,10 @@
   --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
 
   /* Layout */
-  --header-h: 56px;
-  --footer-h: 44px;
-  --panel-w: 312px;
+  --header-h: 54px;
+  --footer-h: 40px;
+  --panel-w: clamp(280px, 18vw, 352px);
+  --shell-gap: clamp(8px, 1vw, 16px);
 
   /* Motion */
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
@@ -220,10 +221,10 @@ a {
   align-items: center;
   justify-content: space-between;
   gap: 20px;
-  padding: 10px 20px;
+  padding: 10px 22px;
   min-height: var(--header-h);
   background:
-    linear-gradient(180deg, rgba(10, 14, 22, 0.7), rgba(10, 14, 22, 0.35));
+    linear-gradient(180deg, rgba(9, 13, 20, 0.66), rgba(9, 13, 20, 0.22));
   border-bottom: 1px solid var(--hairline);
   backdrop-filter: blur(18px) saturate(120%);
   -webkit-backdrop-filter: blur(18px) saturate(120%);
@@ -499,6 +500,8 @@ a {
   grid-template-columns: var(--panel-w) 1fr var(--panel-w);
   min-height: 0;
   position: relative;
+  gap: var(--shell-gap);
+  padding: var(--shell-gap);
   transition: grid-template-columns var(--transition-slow);
 }
 
@@ -506,8 +509,8 @@ a {
   position: relative;
   min-width: 0;
   background:
-    radial-gradient(ellipse 85% 60% at 50% 42%, rgba(60, 100, 170, 0.08), transparent 60%),
-    radial-gradient(ellipse 50% 50% at 50% 100%, rgba(10, 14, 22, 0.8), transparent 70%);
+    radial-gradient(ellipse 85% 60% at 50% 42%, rgba(60, 100, 170, 0.07), transparent 60%),
+    radial-gradient(ellipse 50% 50% at 50% 100%, rgba(10, 14, 22, 0.72), transparent 70%);
   overflow: hidden;
 }
 
@@ -561,24 +564,22 @@ a {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  background: var(--surface-0);
+  background: linear-gradient(180deg, rgba(13, 18, 27, 0.58), rgba(11, 15, 23, 0.44));
   backdrop-filter: blur(20px) saturate(130%);
   -webkit-backdrop-filter: blur(20px) saturate(130%);
-  border: 1px solid var(--hairline);
+  border: 1px solid rgba(255, 255, 255, 0.038);
   overflow: hidden;
   position: relative;
+  border-radius: var(--radius-md);
+  box-shadow: 0 24px 40px rgba(0, 0, 0, 0.22);
 }
 
 .panel--left {
-  border-top: none;
-  border-bottom: none;
-  border-left: none;
+  border-left: 1px solid rgba(255, 255, 255, 0.03);
 }
 
 .panel--right {
-  border-top: none;
-  border-bottom: none;
-  border-right: none;
+  border-right: 1px solid rgba(255, 255, 255, 0.03);
 }
 
 .panel--collapsed {
@@ -594,10 +595,10 @@ a {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 12px 16px 10px;
+  padding: 11px 14px 9px;
   border-bottom: 1px solid var(--hairline);
   background: transparent;
-  font-size: 0.78rem;
+  font-size: 0.76rem;
   font-weight: 600;
   letter-spacing: -0.005em;
   color: var(--text);
@@ -627,7 +628,7 @@ a {
 }
 
 .panel-body {
-  padding: 14px 16px 18px;
+  padding: 12px 14px 16px;
   overflow-y: auto;
   flex: 1;
   font-size: 0.82rem;
@@ -646,10 +647,10 @@ a {
   background: var(--surface-1);
   color: var(--text-muted);
   font-family: inherit;
-  font-size: 0.66rem;
+  font-size: 0.63rem;
   font-weight: 500;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  text-transform: none;
   cursor: pointer;
   transform: translateY(-50%);
   transition:
@@ -1137,9 +1138,9 @@ input[type="radio"] {
 }
 
 .graph-rel-toolbar__label {
-  font-size: 0.64rem;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
+  font-size: 0.66rem;
+  text-transform: none;
+  letter-spacing: 0.03em;
   color: var(--text-dim);
   font-weight: 600;
 }
@@ -1353,8 +1354,8 @@ input[type="radio"] {
 .inspect-mode-badge {
   font-size: 0.62rem;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
+  text-transform: none;
+  letter-spacing: 0.04em;
   padding: 4px 10px;
   border-radius: var(--radius-pill);
   border: 1px solid var(--hairline);
@@ -1453,8 +1454,8 @@ input[type="radio"] {
   display: inline-block;
   font-size: 0.6rem;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
+  text-transform: none;
+  letter-spacing: 0.04em;
   padding: 3px 9px;
   border-radius: var(--radius-pill);
   background: var(--accent-soft);
@@ -1555,8 +1556,8 @@ input[type="radio"] {
   padding: 9px 14px 6px;
   font-size: 0.62rem;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
+  text-transform: none;
+  letter-spacing: 0.04em;
   color: var(--text-dim);
   background: transparent;
   border-bottom: 1px solid var(--hairline);
@@ -1576,8 +1577,8 @@ input[type="radio"] {
 .inspect-micro {
   margin: 0 0 6px;
   font-size: 0.62rem;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
+  text-transform: none;
+  letter-spacing: 0.04em;
   color: var(--text-dim);
   font-weight: 600;
 }
@@ -1726,16 +1727,16 @@ input[type="radio"] {
   pointer-events: none;
   min-width: 200px;
   max-width: 320px;
-  padding: 12px 14px;
+  padding: 10px 12px;
   border-radius: var(--radius);
-  border: 1px solid var(--border);
-  background: rgba(12, 16, 24, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: rgba(10, 14, 21, 0.78);
   backdrop-filter: blur(16px) saturate(140%);
   -webkit-backdrop-filter: blur(16px) saturate(140%);
-  box-shadow: var(--shadow-lg);
+  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.45);
   font-size: 0.78rem;
   opacity: 0;
-  transform: translateY(6px) scale(0.98);
+  transform: translateY(4px) scale(0.985);
   transition:
     opacity var(--transition-fast),
     transform var(--transition-fast);
@@ -1786,10 +1787,10 @@ input[type="radio"] {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 20px;
+  padding: 7px 22px;
   min-height: var(--footer-h);
   border-top: 1px solid var(--hairline);
-  background: linear-gradient(0deg, rgba(10, 14, 22, 0.7), rgba(10, 14, 22, 0.35));
+  background: linear-gradient(0deg, rgba(9, 13, 20, 0.64), rgba(9, 13, 20, 0.2));
   backdrop-filter: blur(16px) saturate(130%);
   -webkit-backdrop-filter: blur(16px) saturate(130%);
   font-size: 0.76rem;
@@ -1850,7 +1851,7 @@ input[type="radio"] {
 
 .metric__k {
   color: var(--text-dim);
-  font-size: 0.7rem;
+  font-size: 0.68rem;
   letter-spacing: 0.015em;
 }
 
@@ -2280,13 +2281,13 @@ kbd {
  * ----------------------------------------------------------------*/
 @media (max-width: 1200px) {
   :root {
-    --panel-w: 280px;
+    --panel-w: clamp(250px, 27vw, 308px);
   }
 }
 
 @media (max-width: 1000px) {
   :root {
-    --panel-w: 260px;
+    --panel-w: clamp(232px, 30vw, 276px);
   }
 }
 

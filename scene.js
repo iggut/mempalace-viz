@@ -414,8 +414,8 @@ export function createPalaceScene(container, options = {}) {
   // stretched blue blocks. See README/QA notes on label rendering.
   function makeLabelSprite(text, color = '#e8eaef') {
     const dpr = Math.min(typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1, 2);
-    const fontSize = 13;
-    const padX = 6;
+    const fontSize = 12;
+    const padX = 7;
     const padY = 3;
     const fontDecl = `400 ${fontSize}px ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`;
 
@@ -434,7 +434,7 @@ export function createPalaceScene(container, options = {}) {
     ctx.scale(dpr, dpr);
     ctx.clearRect(0, 0, cssW, cssH);
 
-    const r = Math.min(4, cssH / 2);
+    const r = Math.min(5, cssH / 2);
     ctx.beginPath();
     ctx.moveTo(r, 0);
     ctx.lineTo(cssW - r, 0);
@@ -446,17 +446,17 @@ export function createPalaceScene(container, options = {}) {
     ctx.lineTo(0, r);
     ctx.quadraticCurveTo(0, 0, r, 0);
     ctx.closePath();
-    ctx.fillStyle = 'rgba(5, 8, 14, 0.28)';
+    ctx.fillStyle = 'rgba(7, 10, 16, 0.2)';
     ctx.fill();
-    ctx.strokeStyle = 'rgba(118, 132, 160, 0.09)';
+    ctx.strokeStyle = 'rgba(158, 174, 206, 0.12)';
     ctx.lineWidth = 1;
     ctx.stroke();
 
     ctx.font = fontDecl;
     ctx.textBaseline = 'middle';
     ctx.textAlign = 'left';
-    ctx.shadowColor = 'rgba(3, 5, 8, 0.62)';
-    ctx.shadowBlur = 2.5;
+    ctx.shadowColor = 'rgba(2, 3, 6, 0.5)';
+    ctx.shadowBlur = 2;
     ctx.shadowOffsetX = 0;
     ctx.shadowOffsetY = 1;
     ctx.fillStyle = color;
@@ -674,6 +674,7 @@ export function createPalaceScene(container, options = {}) {
       transparent: true,
       opacity,
       depthWrite: false,
+      depthTest: true,
       blending: isGraphRel ? THREE.AdditiveBlending : THREE.NormalBlending,
     });
     const line = new THREE.Line(geometry, material);
@@ -693,6 +694,7 @@ export function createPalaceScene(container, options = {}) {
         transparent: true,
         opacity: 0,
         depthWrite: false,
+        depthTest: true,
         blending: THREE.AdditiveBlending,
       });
       glowLine = new THREE.Line(glowGeom, glowMat);
@@ -1070,6 +1072,18 @@ export function createPalaceScene(container, options = {}) {
           isGraphRelationship: true,
         });
       }
+      if (isGraphRelationship && line.geometry?.attributes?.position) {
+        const pos = line.geometry.attributes.position;
+        const midIx = Math.floor(pos.count / 2);
+        const mid = new THREE.Vector3(pos.getX(midIx), pos.getY(midIx), pos.getZ(midIx));
+        const edgeDist = camera.position.distanceTo(mid);
+        const targetDist = camera.position.distanceTo(controls.target);
+        const near = targetDist * 0.45;
+        const far = targetDist * 1.85;
+        const tDepth = THREE.MathUtils.clamp((edgeDist - near) / Math.max(1, far - near), 0, 1);
+        const depthFade = 1 - tDepth * (gTier >= 2 ? 0.45 : 0.3);
+        op *= depthFade;
+      }
       if (routeActive && isGraphRelationship && fromId && toId) {
         const pk = undirectedPairKey(fromId, toId);
         const onRoute = routePairKeys.has(pk);
@@ -1081,7 +1095,7 @@ export function createPalaceScene(container, options = {}) {
         const hex = styleColorHex ?? getStyleForRelationshipType(segType).color;
         const baseC = new THREE.Color(hex);
         if (onRoute) {
-          op = Math.min(1, op * 1.52);
+          op = Math.min(1, op * 1.44);
           baseC.lerp(new THREE.Color(0xffffff), 0.11);
           if (segType === 'tunnel') {
             baseC.lerp(new THREE.Color(0x5b8cff), 0.06);
@@ -1090,7 +1104,7 @@ export function createPalaceScene(container, options = {}) {
             baseC.lerp(new THREE.Color(0x3dc9b8), 0.05);
           }
         } else {
-          op *= 0.32;
+          op *= 0.24;
           baseC.multiplyScalar(0.72);
         }
         line.material.color.copy(baseC);
@@ -1113,22 +1127,22 @@ export function createPalaceScene(container, options = {}) {
         const neighborEdge =
           !touchesSid && !touchesHid && nbr && fromId && toId && (nbr.has(fromId) || nbr.has(toId));
         let glowOp = 0;
-        if (touchesSid) glowOp = 0.55;
-        else if (touchesHid) glowOp = 0.38;
-        else if (neighborEdge) glowOp = 0.16;
+        if (touchesSid) glowOp = 0.46;
+        else if (touchesHid) glowOp = 0.28;
+        else if (neighborEdge) glowOp = 0.11;
         if (routeActive && fromId && toId) {
           const pk = undirectedPairKey(fromId, toId);
           if (routePairKeys.has(pk)) {
-            glowOp = Math.max(glowOp, 0.6);
+            glowOp = Math.max(glowOp, 0.5);
             if (stepSceneId && (fromId === stepSceneId || toId === stepSceneId)) {
-              glowOp = 0.85;
+              glowOp = 0.72;
             }
           } else {
-            glowOp *= 0.35;
+            glowOp *= 0.28;
           }
         }
         // Respect search dimming — only fully quiet if primary line was already dim.
-        if (q) glowOp *= 0.4;
+        if (q) glowOp *= 0.32;
         const hex = styleColorHex ?? (glowLine.userData?.baseColorHex ?? 0xffffff);
         const baseC = new THREE.Color(hex).lerp(new THREE.Color(0xffffff), 0.45);
         glowLine.material.color.copy(baseC);
@@ -1147,7 +1161,7 @@ export function createPalaceScene(container, options = {}) {
       if (!mat || mat.type === 'MeshBasicMaterial') return;
 
       const match = nodeMatchesSearch(data, q);
-      let opacityMult = match ? 1 : 0.14;
+      let opacityMult = match ? 1 : 0.1;
       let emissiveMult = 1;
 
       if (selectionPulse && id === selectionPulse.id) {
@@ -1165,14 +1179,14 @@ export function createPalaceScene(container, options = {}) {
       const fullG = graphRoomIncidentFull.get(id) || 0;
       const visG = visibleGraphIncidents.get(id) || 0;
       if (data.type === 'room' && fullG > 0 && visG === 0 && currentView === 'graph') {
-        opacityMult *= gTier >= 2 ? 0.28 : gTier >= 1 ? 0.31 : 0.38;
-        emissiveMult *= gTier >= 2 ? 0.48 : 0.54;
+          opacityMult *= gTier >= 2 ? 0.22 : gTier >= 1 ? 0.28 : 0.34;
+          emissiveMult *= gTier >= 2 ? 0.42 : 0.5;
       }
 
       if (nbrFocus) {
         if (nbrFocus.has(id)) {
-          opacityMult = Math.max(opacityMult, gTier >= 2 ? 0.55 : 0.66);
-          emissiveMult *= 1.09;
+          opacityMult = Math.max(opacityMult, gTier >= 2 ? 0.5 : 0.62);
+          emissiveMult *= 1.06;
         }
         if (id === primaryId) {
           opacityMult = Math.max(opacityMult, pin && id === sid ? 0.94 : 0.88);
@@ -1183,8 +1197,8 @@ export function createPalaceScene(container, options = {}) {
       if (routeActive && data.type === 'room') {
         const pathSet = new Set(route.pathSceneIds);
         if (!pathSet.has(id)) {
-          opacityMult *= 0.4;
-          emissiveMult *= 0.75;
+          opacityMult *= 0.3;
+          emissiveMult *= 0.68;
         } else {
           const p0 = route.pathSceneIds[0];
           const pLast = route.pathSceneIds[route.pathSceneIds.length - 1];
@@ -1195,7 +1209,7 @@ export function createPalaceScene(container, options = {}) {
             routeScale = Math.max(routeScale, 1.03);
           }
           if (stepSceneId && id === stepSceneId) {
-            emissiveMult *= 1.18;
+            emissiveMult *= 1.12;
             routeScale = 1.05;
           }
         }
@@ -1686,7 +1700,7 @@ export function createPalaceScene(container, options = {}) {
     // bob — it was reading as jitter and fought depth cues. Positions are
     // now stable; motion lives in light.
     const t = Date.now() * 0.001;
-    const pulseAmp = prefersReducedMotion ? 0 : 0.06 * motionIntensity;
+    const pulseAmp = prefersReducedMotion ? 0 : 0.045 * motionIntensity;
     const rot = prefersReducedMotion ? 0 : 0.004 * motionIntensity;
 
     nodes.forEach((node, i) => {
@@ -1736,7 +1750,7 @@ export function createPalaceScene(container, options = {}) {
           const base = lo.line.userData.opacityAnimBase;
           if (base != null) {
             const phase = (String(lo.fromId) + String(lo.toId)).length * 0.07;
-            const wobble = 1 + Math.sin(lt * 0.85 + phase) * 0.042;
+            const wobble = 1 + Math.sin(lt * 0.78 + phase) * 0.028;
             lo.line.material.opacity = Math.min(1, base * wobble);
           }
         }
@@ -1745,7 +1759,7 @@ export function createPalaceScene(container, options = {}) {
           const gbase = lo.glowLine.userData.glowAnimBase ?? 0;
           if (gbase > 0.001) {
             const phase = (String(lo.fromId) + String(lo.toId)).length * 0.09;
-            const pulse = 1 + Math.sin(lt * 1.8 + phase) * 0.28;
+            const pulse = 1 + Math.sin(lt * 1.4 + phase) * 0.2;
             lo.glowLine.material.opacity = Math.min(1, gbase * pulse);
           }
         }
@@ -1763,7 +1777,7 @@ export function createPalaceScene(container, options = {}) {
           const z = one * one * p.from.z + 2 * one * t * p.mid.z + t * t * p.to.z;
           p.sprite.position.set(x, y, z);
           const env = Math.sin(t * Math.PI); // fade in/out at ends
-          p.sprite.material.opacity = 0.78 * env;
+          p.sprite.material.opacity = 0.56 * env;
         });
       }
     }
@@ -1774,9 +1788,9 @@ export function createPalaceScene(container, options = {}) {
       selectionRing.quaternion.copy(camera.quaternion);
       if (!prefersReducedMotion) {
         const rt = Date.now() * 0.001;
-        const breath = 1 + Math.sin(rt * 1.4) * 0.08;
+        const breath = 1 + Math.sin(rt * 1.25) * 0.055;
         selectionRing.scale.setScalar(selectionRing.userData.baseScale * breath);
-        selectionRing.material.opacity = 0.32 + Math.sin(rt * 1.4) * 0.08;
+        selectionRing.material.opacity = 0.28 + Math.sin(rt * 1.25) * 0.05;
       }
     }
 

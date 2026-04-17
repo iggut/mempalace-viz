@@ -70,6 +70,21 @@ Short regression pass before releases or after copy / routing / graph changes. T
 - [ ] Reduced-motion mode disables glow pulsing, route travel, and ring breath (still renders the glow statically).
 - [ ] Dense graph: effects stay performant — no noticeable FPS drop when hovering across many rooms.
 
+### 5e. Product-grade polish pass
+
+- [ ] **Overview readability:** In Graph overview, hero card + summary hierarchy is clear at a glance; helper text supports, not dominates.
+- [ ] **Dense cluster readability:** In high-density graph payloads, distant/non-incident edges recede enough that local structure remains scannable.
+- [ ] **Focused wing readability:** Selecting a wing preserves clear foreground/background separation across neighboring wings.
+- [ ] **Focused room readability:** Selecting a room makes incident neighborhood immediately legible while non-neighbors politely recede.
+- [ ] **Label restraint/readability:** Labels remain readable but never dominate spheres/edges; overlap culling stays stable while slow orbiting.
+- [ ] **Edge readability in dense scenes:** At-rest links remain interpretable without route mode; no flat luminous wash in hubs.
+- [ ] **Route/path clarity:** Route lines read as guidance (continuous, coherent, calm), not a special-effect overlay.
+- [ ] **Hover/selection clarity:** Hover, selection, and pinned focus states remain visually distinct and unambiguous.
+- [ ] **Collapsed panel elegance:** Collapsing/restoring left/right panels feels subtle and intentional; scene remains centered and premium.
+- [ ] **Dark theme accessibility:** Primary/secondary text, metadata rows, and controls maintain readable contrast in low-light conditions.
+- [ ] **Reduced-motion behavior:** `prefers-reduced-motion` disables breathing/pulse travel while preserving selection and route meaning.
+- [ ] **Performance sanity during orbit/hover/focus:** Fast orbit + hover transitions in dense graphs show no stutter or delayed highlight coherence.
+
 ### 5b. Graph 3D — picking vs camera (regression)
 
 - [ ] **Click** a node with minimal movement → selection + inspector update (intentional pick).
