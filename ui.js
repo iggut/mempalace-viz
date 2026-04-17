@@ -1569,7 +1569,7 @@ function renderWingInspector(ctx, wingName, _mode) {
     wingDetailNav =
       idx >= 0
         ? {
-            positionLabel: `${idx + 1} / ${wingView.items.length}`,
+            positionLabel: `${idx + 1} / ${wingView.items.length} on loaded page`,
             hasPrev: idx > 0,
             hasNext: idx < wingView.items.length - 1,
           }
@@ -1578,6 +1578,7 @@ function renderWingInspector(ctx, wingName, _mode) {
   const wingStoredHtml = buildWingStoredContentSectionHtml({
     escapeHtml,
     wingName,
+    wingTaxonomyDrawerCount: d,
     listLoading: wingContentExplorer.listLoading,
     listError: wingContentExplorer.listError,
     listRaw: wingContentExplorer.listRaw,
@@ -1671,7 +1672,7 @@ function renderRoomInspector(ctx, wingName, roomName, _mode) {
     roomDetailNav =
       idx >= 0
         ? {
-            positionLabel: `${idx + 1} / ${roomView.items.length}`,
+            positionLabel: `${idx + 1} / ${roomView.items.length} on loaded page`,
             hasPrev: idx > 0,
             hasNext: idx < roomView.items.length - 1,
           }

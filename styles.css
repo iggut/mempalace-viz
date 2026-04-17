@@ -1922,6 +1922,18 @@ input[type="radio"] {
   justify-self: start;
 }
 
+.content-pager--stored {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.content-pager--stored .content-pager__summary {
+  margin: 0;
+  line-height: 1.35;
+  color: var(--text-muted);
+}
+
 .content-detail-anchor {
   position: sticky;
   top: 0;

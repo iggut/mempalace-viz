@@ -82,6 +82,32 @@ export function applyDrawerListView(items, query, sort) {
 }
 
 /**
+ * Human-readable line for where the user is in the paginated storage stream.
+ * Does not claim a total count (API does not provide one) — only slice position and fetch size.
+ * @param {number} offset
+ * @param {number} limit
+ * @param {number} itemCount — rows in the current response
+ * @param {boolean} hasPrev
+ * @param {boolean} hasNext
+ */
+export function storedListPageSummary(offset, limit, itemCount, hasPrev, hasNext) {
+  const n = Math.max(0, Math.floor(Number(itemCount) || 0));
+  const lim = Math.max(1, Math.floor(Number(limit) || 20));
+  const off = Math.max(0, Math.floor(Number(offset) || 0));
+  const pageNum = Math.floor(off / lim) + 1;
+  if (n === 0) {
+    return `Storage page ${pageNum} · no rows in this slice`;
+  }
+  const start = off + 1;
+  const end = off + n;
+  let tail = '';
+  if (hasNext) tail = ' · more in storage (Older →)';
+  else if (hasPrev) tail = ' · last page in this list';
+  else tail = n < lim ? ' · all rows on one page' : ' · single full page (end of list)';
+  return `Storage page ${pageNum} · rows ${start}–${end} · up to ${lim} per fetch${tail}`;
+}
+
+/**
  * Primary line for list cards: first line of preview, else a shortened id.
  * @param {string} id
  * @param {string} preview
@@ -169,7 +195,7 @@ export function metadataChipsHtml(meta, escapeHtml) {
  */
 function sortSelectOptionsHtml(escapeHtml, current) {
   const pairs = [
-    ['server', 'Page order'],
+    ['server', 'Storage order (this page)'],
     ['id-asc', 'Drawer id (A→Z)'],
     ['id-desc', 'Drawer id (Z→A)'],
     ['preview-az', 'Preview (A→Z)'],
@@ -188,16 +214,16 @@ function sortSelectOptionsHtml(escapeHtml, current) {
  * @param {'content'|'wing'} which
  * @param {string} filterVal
  * @param {string} sortVal
- * @param {string} countLine — e.g. "Showing 4 of 12 on this page"
+ * @param {string} countLine — visible rows vs loaded rows on this storage page
  */
 function storedListToolbarHtml(escapeHtml, which, filterVal, sortVal, countLine) {
   const fid = which === 'content' ? 'content-stored-filter' : 'wing-stored-filter';
   const sid = which === 'content' ? 'content-stored-sort' : 'wing-stored-sort';
-  return `<div class="content-stored-toolbar" role="group" aria-label="Filter and sort this page">
-    <label class="visually-hidden" for="${fid}">Filter entries on this page</label>
-    <input type="search" id="${fid}" class="content-stored-filter" placeholder="Filter this page…" value="${escapeHtml(filterVal)}" autocomplete="off" spellcheck="false" />
+  return `<div class="content-stored-toolbar" role="group" aria-label="Filter and sort loaded page only">
+    <label class="visually-hidden" for="${fid}">Filter text on the loaded storage page</label>
+    <input type="search" id="${fid}" class="content-stored-filter" placeholder="Filter loaded page…" title="Matches drawer id, wing, room, and preview text on this page only — not other storage pages." value="${escapeHtml(filterVal)}" autocomplete="off" spellcheck="false" />
     <label class="visually-hidden" for="${sid}">Sort</label>
-    <select id="${sid}" class="content-stored-sort">${sortSelectOptionsHtml(escapeHtml, sortVal)}</select>
+    <select id="${sid}" class="content-stored-sort" title="Reorders rows on this page only; does not change storage paging.">${sortSelectOptionsHtml(escapeHtml, sortVal)}</select>
     <span class="content-stored-toolbar__count inspect-micro" aria-live="polite">${escapeHtml(countLine)}</span>
   </div>`;
 }
@@ -254,15 +280,17 @@ export function buildRoomStoredContentSectionHtml(opts) {
   const detailErr = detailError || det?.error;
   const rows = Array.isArray(displayItems) ? displayItems : norm.items;
 
-  const contextLine = `<p class="inspect-muted inspect-muted--tight content-scope-line"><strong>Scope</strong> · wing <code class="content-code">${escapeHtml(wingName)}</code> · room <code class="content-code">${escapeHtml(roomName)}</code>${taxonomyDrawerCount != null ? ` · taxonomy lists <strong>${taxonomyDrawerCount}</strong> drawers here` : ''}.</p>`;
+  const contextLine = `<p class="inspect-muted inspect-muted--tight content-scope-line"><strong>Scope</strong> · wing <code class="content-code">${escapeHtml(wingName)}</code> · room <code class="content-code">${escapeHtml(roomName)}</code>${taxonomyDrawerCount != null ? ` · structure lists <strong>${escapeHtml(String(taxonomyDrawerCount))}</strong> drawers here (may differ from Chroma labels)` : ''}.</p>`;
 
   const pager =
     pane === 'list' && !listLoading && !listErr && norm.items.length
-      ? `<div class="content-pager btn-row" style="margin-top:8px;flex-wrap:wrap;gap:6px">
-          <button type="button" class="btn btn--ghost btn--sm" data-content-action="room-page" data-dir="-1" ${hasPrev ? '' : 'disabled'}>Newer</button>
-          <span class="inspect-muted content-pager__stat">${escapeHtml(String(offset + 1))}–${escapeHtml(String(offset + norm.pageCount))}</span>
-          <button type="button" class="btn btn--ghost btn--sm" data-content-action="room-page" data-dir="1" ${hasNext ? '' : 'disabled'}>Older</button>
+      ? `<div class="content-pager content-pager--stored" style="margin-top:8px">
+          <p class="inspect-micro content-pager__summary" aria-live="polite">${escapeHtml(storedListPageSummary(offset, limit, norm.items.length, hasPrev, hasNext))}</p>
+          <div class="content-pager__actions btn-row" style="flex-wrap:wrap;gap:6px">
+          <button type="button" class="btn btn--ghost btn--sm" data-content-action="room-page" data-dir="-1" ${hasPrev ? '' : 'disabled'} title="Previous storage page (newer rows)">Newer</button>
+          <button type="button" class="btn btn--ghost btn--sm" data-content-action="room-page" data-dir="1" ${hasNext ? '' : 'disabled'} title="Next storage page (older rows)">Older</button>
           <button type="button" class="btn btn--ghost btn--sm" data-content-action="room-refresh">Refresh</button>
+          </div>
         </div>`
       : pane === 'list'
         ? `<div class="content-pager btn-row" style="margin-top:8px"><button type="button" class="btn btn--ghost btn--sm" data-content-action="room-refresh">Refresh</button></div>`
@@ -286,8 +314,8 @@ export function buildRoomStoredContentSectionHtml(opts) {
         <button type="button" class="btn btn--ghost btn--sm" data-content-action="room-back-list">← List</button>
         ${pos}
         <div class="content-detail-anchor__step">
-          <button type="button" class="btn btn--ghost btn--sm" data-content-action="room-detail-step" data-dir="-1" ${nav.hasPrev ? '' : 'disabled'} title="Previous entry on this page">↑ Prev</button>
-          <button type="button" class="btn btn--ghost btn--sm" data-content-action="room-detail-step" data-dir="1" ${nav.hasNext ? '' : 'disabled'} title="Next entry on this page">Next ↓</button>
+          <button type="button" class="btn btn--ghost btn--sm" data-content-action="room-detail-step" data-dir="-1" ${nav.hasPrev ? '' : 'disabled'} title="Previous entry on the loaded storage page">↑ Prev</button>
+          <button type="button" class="btn btn--ghost btn--sm" data-content-action="room-detail-step" data-dir="1" ${nav.hasNext ? '' : 'disabled'} title="Next entry on the loaded storage page">Next ↓</button>
         </div>
         <button type="button" class="btn btn--ghost btn--sm" data-content-action="copy-detail" ${detailLoading || detailErr ? 'disabled' : ''}>Copy</button>
       </div>
@@ -325,8 +353,8 @@ export function buildRoomStoredContentSectionHtml(opts) {
   const countLine =
     !listLoading && !listErr && norm.items.length
       ? rows.length === norm.items.length
-        ? `Showing ${rows.length} on this page`
-        : `Showing ${rows.length} of ${norm.items.length} on this page (filtered)`
+        ? `${rows.length} row${rows.length === 1 ? '' : 's'} on this storage page (full fetch)`
+        : `${rows.length} visible of ${norm.items.length} on this storage page (page-local filter)`
       : '';
 
   if (listLoading) {
@@ -339,13 +367,14 @@ export function buildRoomStoredContentSectionHtml(opts) {
       <p class="inspect-muted inspect-muted--tight">If the palace has structure and links but nothing appears here, entries may live under different room labels, or storage may be empty for this room.</p>
       <div class="btn-row" style="margin-top:8px"><button type="button" class="btn btn--ghost btn--sm" data-content-action="room-refresh">Refresh</button></div>`;
   } else if (!rows.length) {
-    body += `<p class="inspect-empty">No entries on this page match your filter.</p>
+    body += `<p class="inspect-empty">No rows on this storage page match the page filter.</p>
+      <p class="inspect-muted inspect-muted--tight">Clear the filter to see all rows on this fetch, or use Newer/Older — the filter does not search other storage pages.</p>
       <div class="btn-row" style="margin-top:8px;flex-wrap:wrap;gap:6px">
         <button type="button" class="btn btn--ghost btn--sm" data-content-action="room-clear-filter">Clear filter</button>
         <button type="button" class="btn btn--ghost btn--sm" data-content-action="room-refresh">Refresh</button>
       </div>`;
   } else {
-    body += `<p class="inspect-micro content-stored-hint">Memory entries in this room (paginated from storage). Filter and sort apply to the current page only.</p>
+    body += `<p class="inspect-micro content-stored-hint">Drawers for this room are read from storage in pages (up to <strong>${escapeHtml(String(limit))}</strong> per fetch). The field below filters and sorts <strong>only the rows on this fetch</strong> — it is not a whole-room search. To scan the rest of the room, step with Newer/Older (each request stays small).</p>
       ${storedListToolbarHtml(escapeHtml, 'content', listFilter, listSort, countLine)}
       <div class="content-entry-list" role="list">
         ${rows
@@ -384,6 +413,7 @@ export function buildWingStoredContentSectionHtml(opts) {
   const {
     escapeHtml,
     wingName,
+    wingTaxonomyDrawerCount,
     listLoading,
     listError,
     listRaw,
@@ -408,15 +438,21 @@ export function buildWingStoredContentSectionHtml(opts) {
   const detailErr = detailError || det?.error;
   const rows = Array.isArray(displayItems) ? displayItems : norm.items;
 
-  const contextLine = `<p class="inspect-muted inspect-muted--tight content-scope-line"><strong>Scope</strong> · entire wing <code class="content-code">${escapeHtml(wingName)}</code> (all rooms). Open a single room for a focused list.</p>`;
+  const wingScopeExtra =
+    wingTaxonomyDrawerCount != null
+      ? ` Structure lists <strong>${escapeHtml(String(wingTaxonomyDrawerCount))}</strong> drawers wing-wide; the rows below are one paginated storage slice, not the full wing.`
+      : '';
+  const contextLine = `<p class="inspect-muted inspect-muted--tight content-scope-line"><strong>Scope</strong> · entire wing <code class="content-code">${escapeHtml(wingName)}</code> (all rooms).${wingScopeExtra} Open a single room for a focused list.</p>`;
 
   const pager =
     pane === 'list' && !listLoading && !listErr && norm.items.length
-      ? `<div class="content-pager btn-row" style="margin-top:8px;flex-wrap:wrap;gap:6px">
-          <button type="button" class="btn btn--ghost btn--sm" data-content-action="wing-page" data-dir="-1" ${hasPrev ? '' : 'disabled'}>Newer</button>
-          <span class="inspect-muted content-pager__stat">${escapeHtml(String(offset + 1))}–${escapeHtml(String(offset + norm.pageCount))}</span>
-          <button type="button" class="btn btn--ghost btn--sm" data-content-action="wing-page" data-dir="1" ${hasNext ? '' : 'disabled'}>Older</button>
+      ? `<div class="content-pager content-pager--stored" style="margin-top:8px">
+          <p class="inspect-micro content-pager__summary" aria-live="polite">${escapeHtml(storedListPageSummary(offset, limit, norm.items.length, hasPrev, hasNext))}</p>
+          <div class="content-pager__actions btn-row" style="flex-wrap:wrap;gap:6px">
+          <button type="button" class="btn btn--ghost btn--sm" data-content-action="wing-page" data-dir="-1" ${hasPrev ? '' : 'disabled'} title="Previous storage page (newer rows)">Newer</button>
+          <button type="button" class="btn btn--ghost btn--sm" data-content-action="wing-page" data-dir="1" ${hasNext ? '' : 'disabled'} title="Next storage page (older rows)">Older</button>
           <button type="button" class="btn btn--ghost btn--sm" data-content-action="wing-refresh">Refresh</button>
+          </div>
         </div>`
       : pane === 'list'
         ? `<div class="content-pager btn-row" style="margin-top:8px"><button type="button" class="btn btn--ghost btn--sm" data-content-action="wing-refresh">Refresh</button></div>`
@@ -440,8 +476,8 @@ export function buildWingStoredContentSectionHtml(opts) {
         <button type="button" class="btn btn--ghost btn--sm" data-content-action="wing-back-list">← Sample list</button>
         ${pos}
         <div class="content-detail-anchor__step">
-          <button type="button" class="btn btn--ghost btn--sm" data-content-action="wing-detail-step" data-dir="-1" ${nav.hasPrev ? '' : 'disabled'} title="Previous entry on this page">↑ Prev</button>
-          <button type="button" class="btn btn--ghost btn--sm" data-content-action="wing-detail-step" data-dir="1" ${nav.hasNext ? '' : 'disabled'} title="Next entry on this page">Next ↓</button>
+          <button type="button" class="btn btn--ghost btn--sm" data-content-action="wing-detail-step" data-dir="-1" ${nav.hasPrev ? '' : 'disabled'} title="Previous entry on the loaded storage page">↑ Prev</button>
+          <button type="button" class="btn btn--ghost btn--sm" data-content-action="wing-detail-step" data-dir="1" ${nav.hasNext ? '' : 'disabled'} title="Next entry on the loaded storage page">Next ↓</button>
         </div>
         <button type="button" class="btn btn--ghost btn--sm" data-content-action="wing-copy-detail" ${detailLoading || detailErr ? 'disabled' : ''}>Copy</button>
       </div>
@@ -479,8 +515,8 @@ export function buildWingStoredContentSectionHtml(opts) {
   const countLine =
     !listLoading && !listErr && norm.items.length
       ? rows.length === norm.items.length
-        ? `Showing ${rows.length} on this page`
-        : `Showing ${rows.length} of ${norm.items.length} on this page (filtered)`
+        ? `${rows.length} row${rows.length === 1 ? '' : 's'} on this storage page (full fetch)`
+        : `${rows.length} visible of ${norm.items.length} on this storage page (page-local filter)`
       : '';
 
   if (listLoading) {
@@ -493,13 +529,14 @@ export function buildWingStoredContentSectionHtml(opts) {
       <p class="inspect-muted inspect-muted--tight">Pick a room under this wing to see entries targeted to that room.</p>
       <div class="btn-row" style="margin-top:8px"><button type="button" class="btn btn--ghost btn--sm" data-content-action="wing-refresh">Refresh</button></div>`;
   } else if (!rows.length) {
-    body += `<p class="inspect-empty">No entries on this page match your filter.</p>
+    body += `<p class="inspect-empty">No rows on this storage page match the page filter.</p>
+      <p class="inspect-muted inspect-muted--tight">Clear the filter to see all rows on this fetch, or use Newer/Older — the filter does not search other storage pages.</p>
       <div class="btn-row" style="margin-top:8px;flex-wrap:wrap;gap:6px">
         <button type="button" class="btn btn--ghost btn--sm" data-content-action="wing-clear-filter">Clear filter</button>
         <button type="button" class="btn btn--ghost btn--sm" data-content-action="wing-refresh">Refresh</button>
       </div>`;
   } else {
-    body += `<p class="inspect-micro content-stored-hint">Sample of drawers across this wing (paginated). Tap a row to read the full entry. Filter and sort apply to the current page only.</p>
+    body += `<p class="inspect-micro content-stored-hint">Sample of drawers across this wing (up to <strong>${escapeHtml(String(limit))}</strong> per fetch). Tap a row to read the full entry. Filter and sort apply <strong>only to this fetch</strong> — not the whole wing. Use Newer/Older to move through storage; there is no server-side text search across the full wing here.</p>
       ${storedListToolbarHtml(escapeHtml, 'wing', listFilter, listSort, countLine)}
       <div class="content-entry-list" role="list">
         ${rows

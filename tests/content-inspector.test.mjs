@@ -5,6 +5,7 @@ import {
   drawerCardHeadline,
   normalizeGetDrawerPayload,
   normalizeListDrawersPayload,
+  storedListPageSummary,
 } from '../content-inspector.js';
 
 test('normalizeListDrawersPayload maps drawers and hasMore when page is full', () => {
@@ -80,4 +81,19 @@ test('applyDrawerListView sorts by id', () => {
 
 test('drawerCardHeadline uses first preview line', () => {
   assert.equal(drawerCardHeadline('id', 'Hello\nWorld'), 'Hello');
+});
+
+test('storedListPageSummary describes slice position without claiming totals', () => {
+  assert.equal(
+    storedListPageSummary(0, 12, 12, false, true),
+    'Storage page 1 · rows 1–12 · up to 12 per fetch · more in storage (Older →)',
+  );
+  assert.equal(
+    storedListPageSummary(12, 12, 5, true, false),
+    'Storage page 2 · rows 13–17 · up to 12 per fetch · last page in this list',
+  );
+  assert.equal(
+    storedListPageSummary(0, 10, 3, false, false),
+    'Storage page 1 · rows 1–3 · up to 10 per fetch · all rows on one page',
+  );
 });
