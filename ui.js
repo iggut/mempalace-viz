@@ -106,6 +106,7 @@ import {
   shouldShowTunnelWorkflowCard,
 } from './graph-guidance.js';
 import {
+  applyDrawerListView,
   buildRoomStoredContentSectionHtml,
   buildWingStoredContentSectionHtml,
   normalizeGetDrawerPayload,
@@ -188,6 +189,12 @@ const roomContentExplorer = {
   detailRaw: null,
   detailLoading: false,
   detailError: null,
+  /** Client-side filter for the current list page (debounced re-render). */
+  listFilter: '',
+  listSort: 'server',
+  /** @type {'room' | null} */
+  _restoreFilterFocus: null,
+  _filterCaret: null,
 };
 
 /** Inspector: paginated sample across a wing (wing filter only). */
@@ -198,7 +205,20 @@ const wingContentExplorer = {
   listRaw: null,
   listLoading: false,
   listError: null,
+  pane: 'list',
+  detailDrawerId: null,
+  detailRaw: null,
+  detailLoading: false,
+  detailError: null,
+  listFilter: '',
+  listSort: 'server',
+  /** @type {'wing' | null} */
+  _restoreFilterFocus: null,
+  _filterCaret: null,
 };
+
+/** @type {ReturnType<typeof setTimeout> | null} */
+let storedContentFilterDebounce = null;
 
 let semanticSearchDebounce = null;
 /** @type {Array<{ wing: string, room: string, similarity: number, preview: string }>} */
@@ -1132,11 +1152,24 @@ function resetContentExplorers() {
   roomContentExplorer.detailRaw = null;
   roomContentExplorer.detailLoading = false;
   roomContentExplorer.detailError = null;
+  roomContentExplorer.listFilter = '';
+  roomContentExplorer.listSort = 'server';
+  roomContentExplorer._restoreFilterFocus = null;
+  roomContentExplorer._filterCaret = null;
   wingContentExplorer.wing = null;
   wingContentExplorer.offset = 0;
   wingContentExplorer.listRaw = null;
   wingContentExplorer.listLoading = false;
   wingContentExplorer.listError = null;
+  wingContentExplorer.pane = 'list';
+  wingContentExplorer.detailDrawerId = null;
+  wingContentExplorer.detailRaw = null;
+  wingContentExplorer.detailLoading = false;
+  wingContentExplorer.detailError = null;
+  wingContentExplorer.listFilter = '';
+  wingContentExplorer.listSort = 'server';
+  wingContentExplorer._restoreFilterFocus = null;
+  wingContentExplorer._filterCaret = null;
 }
 
 function ensureRoomContentExplorer(wing, room) {
@@ -1152,6 +1185,8 @@ function ensureRoomContentExplorer(wing, room) {
   roomContentExplorer.detailRaw = null;
   roomContentExplorer.detailLoading = false;
   roomContentExplorer.detailError = null;
+  roomContentExplorer.listFilter = '';
+  roomContentExplorer.listSort = 'server';
 }
 
 function kickRoomListFetch() {
@@ -1185,10 +1220,18 @@ function ensureWingContentExplorer(wing) {
   wingContentExplorer.listRaw = null;
   wingContentExplorer.listLoading = false;
   wingContentExplorer.listError = null;
+  wingContentExplorer.pane = 'list';
+  wingContentExplorer.detailDrawerId = null;
+  wingContentExplorer.detailRaw = null;
+  wingContentExplorer.detailLoading = false;
+  wingContentExplorer.detailError = null;
+  wingContentExplorer.listFilter = '';
+  wingContentExplorer.listSort = 'server';
 }
 
 function kickWingListFetch() {
   if (!wingContentExplorer.wing) return;
+  if (wingContentExplorer.pane !== 'list') return;
   if (wingContentExplorer.listLoading) return;
   if (wingContentExplorer.listRaw !== null) return;
   if (wingContentExplorer.listError) return;
@@ -1263,6 +1306,66 @@ function roomContentRetryDetail() {
   if (id) roomContentOpenDrawer(id);
 }
 
+function roomContentDetailStep(dir) {
+  const delta = Number(dir);
+  if (!Number.isFinite(delta) || delta === 0) return;
+  const norm = normalizeListDrawersPayload(roomContentExplorer.listRaw);
+  const view = applyDrawerListView(norm.items, roomContentExplorer.listFilter, roomContentExplorer.listSort);
+  const id = roomContentExplorer.detailDrawerId;
+  const idx = view.items.findIndex((x) => x.id === id);
+  if (idx < 0) return;
+  const nextIdx = idx + delta;
+  if (nextIdx < 0 || nextIdx >= view.items.length) return;
+  roomContentOpenDrawer(view.items[nextIdx].id);
+}
+
+function wingContentOpenDrawer(drawerId) {
+  const id = typeof drawerId === 'string' ? drawerId.trim() : '';
+  if (!id) return;
+  wingContentExplorer.pane = 'detail';
+  wingContentExplorer.detailDrawerId = id;
+  wingContentExplorer.detailRaw = null;
+  wingContentExplorer.detailLoading = true;
+  wingContentExplorer.detailError = null;
+  fetchDrawerById(id)
+    .then((raw) => {
+      wingContentExplorer.detailLoading = false;
+      wingContentExplorer.detailRaw = raw;
+      renderInspector();
+    })
+    .catch((e) => {
+      wingContentExplorer.detailLoading = false;
+      wingContentExplorer.detailError = e?.message || String(e);
+      renderInspector();
+    });
+}
+
+function wingContentBackToList() {
+  wingContentExplorer.pane = 'list';
+  wingContentExplorer.detailDrawerId = null;
+  wingContentExplorer.detailRaw = null;
+  wingContentExplorer.detailError = null;
+  renderInspector();
+}
+
+function wingContentRetryDetail() {
+  const id = wingContentExplorer.detailDrawerId;
+  if (id) wingContentOpenDrawer(id);
+}
+
+function wingContentDetailStep(dir) {
+  const delta = Number(dir);
+  if (!Number.isFinite(delta) || delta === 0) return;
+  const norm = normalizeListDrawersPayload(wingContentExplorer.listRaw);
+  const view = applyDrawerListView(norm.items, wingContentExplorer.listFilter, wingContentExplorer.listSort);
+  const id = wingContentExplorer.detailDrawerId;
+  const idx = view.items.findIndex((x) => x.id === id);
+  if (idx < 0) return;
+  const nextIdx = idx + delta;
+  if (nextIdx < 0 || nextIdx >= view.items.length) return;
+  wingContentOpenDrawer(view.items[nextIdx].id);
+}
+
 function wingContentPaginate(dir) {
   const delta = Number(dir);
   if (!wingContentExplorer.wing) return;
@@ -1284,6 +1387,22 @@ function wingContentRefreshList() {
 
 function copyRoomDetailToClipboard() {
   const raw = roomContentExplorer.detailRaw;
+  if (!raw) return;
+  const n = normalizeGetDrawerPayload(raw);
+  const text = n.content || '';
+  if (!text) {
+    showToast('Nothing to copy');
+    return;
+  }
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(text).then(() => showToast('Copied')).catch(() => showToast('Copy failed'));
+  } else {
+    showToast('Clipboard unavailable');
+  }
+}
+
+function copyWingDetailToClipboard() {
+  const raw = wingContentExplorer.detailRaw;
   if (!raw) return;
   const n = normalizeGetDrawerPayload(raw);
   const text = n.content || '';
@@ -1439,16 +1558,42 @@ function renderWingInspector(ctx, wingName, _mode) {
   ensureWingContentExplorer(wingName);
   kickWingListFetch();
   const wingListNorm = normalizeListDrawersPayload(wingContentExplorer.listRaw);
+  const wingView = applyDrawerListView(
+    wingListNorm.items,
+    wingContentExplorer.listFilter,
+    wingContentExplorer.listSort,
+  );
+  let wingDetailNav = { positionLabel: '', hasPrev: false, hasNext: false };
+  if (wingContentExplorer.pane === 'detail' && wingContentExplorer.detailDrawerId) {
+    const idx = wingView.items.findIndex((x) => x.id === wingContentExplorer.detailDrawerId);
+    wingDetailNav =
+      idx >= 0
+        ? {
+            positionLabel: `${idx + 1} / ${wingView.items.length}`,
+            hasPrev: idx > 0,
+            hasNext: idx < wingView.items.length - 1,
+          }
+        : { positionLabel: '—', hasPrev: false, hasNext: false };
+  }
   const wingStoredHtml = buildWingStoredContentSectionHtml({
     escapeHtml,
     wingName,
     listLoading: wingContentExplorer.listLoading,
     listError: wingContentExplorer.listError,
     listRaw: wingContentExplorer.listRaw,
+    pane: wingContentExplorer.pane,
+    detailLoading: wingContentExplorer.detailLoading,
+    detailError: wingContentExplorer.detailError,
+    detailRaw: wingContentExplorer.detailRaw,
+    detailDrawerId: wingContentExplorer.detailDrawerId,
     offset: wingContentExplorer.offset,
     limit: wingContentExplorer.limit,
     hasPrev: wingContentExplorer.offset > 0,
     hasNext: wingListNorm.hasMore,
+    listFilter: wingContentExplorer.listFilter,
+    listSort: wingContentExplorer.listSort,
+    displayItems: wingView.items,
+    detailNav: wingDetailNav,
   });
 
   return `
@@ -1515,6 +1660,23 @@ function renderRoomInspector(ctx, wingName, roomName, _mode) {
   ensureRoomContentExplorer(wingName, roomName);
   kickRoomListFetch();
   const roomListNorm = normalizeListDrawersPayload(roomContentExplorer.listRaw);
+  const roomView = applyDrawerListView(
+    roomListNorm.items,
+    roomContentExplorer.listFilter,
+    roomContentExplorer.listSort,
+  );
+  let roomDetailNav = { positionLabel: '', hasPrev: false, hasNext: false };
+  if (roomContentExplorer.pane === 'detail' && roomContentExplorer.detailDrawerId) {
+    const idx = roomView.items.findIndex((x) => x.id === roomContentExplorer.detailDrawerId);
+    roomDetailNav =
+      idx >= 0
+        ? {
+            positionLabel: `${idx + 1} / ${roomView.items.length}`,
+            hasPrev: idx > 0,
+            hasNext: idx < roomView.items.length - 1,
+          }
+        : { positionLabel: '—', hasPrev: false, hasNext: false };
+  }
   const storedContentHtml = buildRoomStoredContentSectionHtml({
     escapeHtml,
     wingName,
@@ -1527,10 +1689,15 @@ function renderRoomInspector(ctx, wingName, roomName, _mode) {
     detailLoading: roomContentExplorer.detailLoading,
     detailError: roomContentExplorer.detailError,
     detailRaw: roomContentExplorer.detailRaw,
+    detailDrawerId: roomContentExplorer.detailDrawerId,
     offset: roomContentExplorer.offset,
     limit: roomContentExplorer.limit,
     hasPrev: roomContentExplorer.offset > 0,
     hasNext: roomListNorm.hasMore,
+    listFilter: roomContentExplorer.listFilter,
+    listSort: roomContentExplorer.listSort,
+    displayItems: roomView.items,
+    detailNav: roomDetailNav,
   });
 
   const wingTotal = Number(wingsData[wingName]) || 0;
@@ -2056,6 +2223,41 @@ function onInspectorClick(e) {
     }
     if (act === 'copy-detail') {
       copyRoomDetailToClipboard();
+      return;
+    }
+    if (act === 'room-detail-step') {
+      roomContentDetailStep(contentAct.getAttribute('data-dir'));
+      return;
+    }
+    if (act === 'room-clear-filter') {
+      roomContentExplorer.listFilter = '';
+      renderInspector();
+      return;
+    }
+    if (act === 'wing-open') {
+      const wid = contentAct.getAttribute('data-drawer-id');
+      if (wid) wingContentOpenDrawer(wid);
+      return;
+    }
+    if (act === 'wing-back-list') {
+      wingContentBackToList();
+      return;
+    }
+    if (act === 'wing-detail-step') {
+      wingContentDetailStep(contentAct.getAttribute('data-dir'));
+      return;
+    }
+    if (act === 'wing-copy-detail') {
+      copyWingDetailToClipboard();
+      return;
+    }
+    if (act === 'wing-retry-detail') {
+      wingContentRetryDetail();
+      return;
+    }
+    if (act === 'wing-clear-filter') {
+      wingContentExplorer.listFilter = '';
+      renderInspector();
       return;
     }
     if (act === 'wing-page') {
@@ -3010,6 +3212,47 @@ function updatePinButton() {
   b.disabled = !appState.selected;
 }
 
+function restoreStoredContentFilterFocus(inspectorBody) {
+  if (!inspectorBody) return;
+  if (roomContentExplorer._restoreFilterFocus === 'room') {
+    const el = inspectorBody.querySelector('#content-stored-filter');
+    if (el) {
+      el.focus();
+      const pos = roomContentExplorer._filterCaret;
+      if (typeof pos === 'number') {
+        try {
+          el.setSelectionRange(pos, pos);
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+    roomContentExplorer._restoreFilterFocus = null;
+  } else if (wingContentExplorer._restoreFilterFocus === 'wing') {
+    const el = inspectorBody.querySelector('#wing-stored-filter');
+    if (el) {
+      el.focus();
+      const pos = wingContentExplorer._filterCaret;
+      if (typeof pos === 'number') {
+        try {
+          el.setSelectionRange(pos, pos);
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+    wingContentExplorer._restoreFilterFocus = null;
+  }
+}
+
+function scheduleStoredFilterRender() {
+  clearTimeout(storedContentFilterDebounce);
+  storedContentFilterDebounce = setTimeout(() => {
+    storedContentFilterDebounce = null;
+    renderInspector();
+  }, 200);
+}
+
 function renderInspector() {
   const body = $('inspect-body');
   const mode = inspectorMode();
@@ -3055,6 +3298,7 @@ function renderInspector() {
       graphFocusHistoryLength: graphFocusHistory.length,
       view: appState.view,
     });
+    restoreStoredContentFilterFocus(body);
     updatePinButton();
     return;
   }
@@ -3074,6 +3318,7 @@ function renderInspector() {
     graphFocusHistoryLength: graphFocusHistory.length,
     view: appState.view,
   });
+  restoreStoredContentFilterFocus(body);
   updatePinButton();
 }
 
@@ -3871,6 +4116,31 @@ function wireInspectorDelegation() {
   if (!body || body._delegationWired) return;
   body._delegationWired = true;
   body.addEventListener('click', onInspectorClick);
+  body.addEventListener('input', (e) => {
+    const t = e.target;
+    if (!(t instanceof HTMLInputElement)) return;
+    if (t.id === 'content-stored-filter') {
+      roomContentExplorer.listFilter = t.value;
+      roomContentExplorer._restoreFilterFocus = 'room';
+      roomContentExplorer._filterCaret = t.selectionStart;
+      scheduleStoredFilterRender();
+    } else if (t.id === 'wing-stored-filter') {
+      wingContentExplorer.listFilter = t.value;
+      wingContentExplorer._restoreFilterFocus = 'wing';
+      wingContentExplorer._filterCaret = t.selectionStart;
+      scheduleStoredFilterRender();
+    }
+  });
+  body.addEventListener('change', (e) => {
+    const t = e.target;
+    if (t instanceof HTMLSelectElement && t.id === 'content-stored-sort') {
+      roomContentExplorer.listSort = t.value;
+      renderInspector();
+    } else if (t instanceof HTMLSelectElement && t.id === 'wing-stored-sort') {
+      wingContentExplorer.listSort = t.value;
+      renderInspector();
+    }
+  });
 }
 
 function main() {

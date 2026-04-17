@@ -67,6 +67,7 @@ const STATIC_FILES = {
   '/debug.js': 'debug.js',
   '/three-runtime.js': 'three-runtime.js',
   '/ui-hover-policy.js': 'ui-hover-policy.js',
+  '/content-inspector.js': 'content-inspector.js',
 };
 
 const MIME_TYPES = {

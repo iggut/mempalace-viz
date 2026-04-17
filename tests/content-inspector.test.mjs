@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  applyDrawerListView,
+  drawerCardHeadline,
   normalizeGetDrawerPayload,
   normalizeListDrawersPayload,
 } from '../content-inspector.js';
@@ -53,4 +55,29 @@ test('normalizeGetDrawerPayload returns content and metadata', () => {
 test('normalizeGetDrawerPayload maps error field', () => {
   const n = normalizeGetDrawerPayload({ error: 'missing' });
   assert.equal(n.error, 'missing');
+});
+
+test('applyDrawerListView filters by substring and preserves server order', () => {
+  const items = [
+    { id: 'b', wing: 'w', room: 'r1', preview: 'beta' },
+    { id: 'a', wing: 'w', room: 'r2', preview: 'alpha' },
+  ];
+  const v = applyDrawerListView(items, 'alp', 'server');
+  assert.equal(v.matched, 1);
+  assert.equal(v.items[0].id, 'a');
+});
+
+test('applyDrawerListView sorts by id', () => {
+  const items = [
+    { id: 'z', wing: 'w', room: 'r', preview: 'z' },
+    { id: 'a', wing: 'w', room: 'r', preview: 'a' },
+  ];
+  const asc = applyDrawerListView(items, '', 'id-asc');
+  assert.deepEqual(asc.items.map((x) => x.id), ['a', 'z']);
+  const desc = applyDrawerListView(items, '', 'id-desc');
+  assert.deepEqual(desc.items.map((x) => x.id), ['z', 'a']);
+});
+
+test('drawerCardHeadline uses first preview line', () => {
+  assert.equal(drawerCardHeadline('id', 'Hello\nWorld'), 'Hello');
 });
