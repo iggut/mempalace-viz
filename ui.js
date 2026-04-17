@@ -59,6 +59,11 @@ import { assertValidState, normalizePersistedNavigation, sanitizeNavigationAgain
 import { canNavigateBack, peekRoomsBackAction } from './nav-focus.js';
 import { devWarn, isDev } from './debug.js';
 import {
+  assertGraphBackInvariant,
+  assertHeaderBackInvariant,
+  assertNavScopeLevelInvariant,
+} from './nav-dev-invariants.js';
+import {
   parseRoomSceneId,
   popFocusHistory,
   pushFocusHistory,
@@ -2351,7 +2356,21 @@ function updateNavScope() {
   const sep = '<span class="nav-scope__sep" aria-hidden="true">/</span>';
 
   if (appState.view === 'wings') {
+    crumbsEl.dataset.navLevel = 'overview';
     crumbsEl.innerHTML = `<div class="nav-scope__crumbs-inner"><span class="nav-scope__here">Overview</span><span class="nav-scope__muted"> · Wings</span></div>`;
+    assertNavScopeLevelInvariant({
+      view: appState.view,
+      currentWing: appState.currentWing,
+      currentRoom: appState.currentRoom,
+      navScopeLevel: crumbsEl.dataset.navLevel || null,
+    });
+    assertHeaderBackInvariant({
+      backBtn,
+      view: appState.view,
+      currentWing: appState.currentWing,
+      currentRoom: appState.currentRoom,
+      graphFocusHistoryLength: graphFocusHistory.length,
+    });
     return;
   }
 
@@ -2369,11 +2388,28 @@ function updateNavScope() {
         `<span class="nav-scope__here">${escapeHtml(appState.currentRoom)}</span><span class="nav-scope__muted"> · Room</span>`,
       );
     }
+    if (!appState.currentWing && !appState.currentRoom) crumbsEl.dataset.navLevel = 'rooms_all';
+    else if (appState.currentWing && !appState.currentRoom) crumbsEl.dataset.navLevel = 'wing_scope';
+    else crumbsEl.dataset.navLevel = 'room_scope';
     crumbsEl.innerHTML = `<div class="nav-scope__crumbs-inner" aria-label="Location">${parts.join('')}</div>`;
+    assertNavScopeLevelInvariant({
+      view: appState.view,
+      currentWing: appState.currentWing,
+      currentRoom: appState.currentRoom,
+      navScopeLevel: crumbsEl.dataset.navLevel || null,
+    });
+    assertHeaderBackInvariant({
+      backBtn,
+      view: appState.view,
+      currentWing: appState.currentWing,
+      currentRoom: appState.currentRoom,
+      graphFocusHistoryLength: graphFocusHistory.length,
+    });
     return;
   }
 
   if (appState.view === 'graph') {
+    crumbsEl.dataset.navLevel = 'graph_focus';
     const parts = [overviewBtn, sep, `<span class="nav-scope__muted">Graph</span>`];
     if (appState.currentWing) {
       parts.push(sep, `<span class="nav-scope__crumb--text">${escapeHtml(appState.currentWing)}</span>`);
@@ -2382,6 +2418,19 @@ function updateNavScope() {
       parts.push(sep, `<span class="nav-scope__crumb--text">${escapeHtml(appState.currentRoom)}</span>`);
     }
     crumbsEl.innerHTML = `<div class="nav-scope__crumbs-inner" aria-label="Location">${parts.join('')}</div>`;
+    assertNavScopeLevelInvariant({
+      view: appState.view,
+      currentWing: appState.currentWing,
+      currentRoom: appState.currentRoom,
+      navScopeLevel: crumbsEl.dataset.navLevel || null,
+    });
+    assertHeaderBackInvariant({
+      backBtn,
+      view: appState.view,
+      currentWing: appState.currentWing,
+      currentRoom: appState.currentRoom,
+      graphFocusHistoryLength: graphFocusHistory.length,
+    });
   }
 }
 
@@ -2503,6 +2552,11 @@ function renderInspector() {
         </div>`;
     }
     updateFooterContextLine(null, ctx);
+    assertGraphBackInvariant({
+      graphBackBtn: body.querySelector('[data-graph-action="back"]'),
+      graphFocusHistoryLength: graphFocusHistory.length,
+      view: appState.view,
+    });
     updatePinButton();
     return;
   }
@@ -2517,6 +2571,11 @@ function renderInspector() {
     body.innerHTML = strip + graphNote + `<div class="inspect-card"><p class="inspect-muted">Unknown node type.</p></div>`;
   }
   updateFooterContextLine(t, ctx);
+  assertGraphBackInvariant({
+    graphBackBtn: body.querySelector('[data-graph-action="back"]'),
+    graphFocusHistoryLength: graphFocusHistory.length,
+    view: appState.view,
+  });
   updatePinButton();
 }
 
