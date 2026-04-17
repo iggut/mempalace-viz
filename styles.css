@@ -1371,60 +1371,144 @@ input[type="radio"] {
   color: var(--text);
 }
 
-.graph-selection-workflow {
-  margin-bottom: 12px;
-  padding: 10px 12px;
-  border-radius: var(--radius-sm);
-  border: 1px solid rgba(143, 169, 255, 0.2);
-  background: linear-gradient(180deg, rgba(143, 169, 255, 0.06), rgba(10, 14, 22, 0.2));
-  font-size: 0.72rem;
-  line-height: 1.45;
-}
-
-.graph-selection-workflow__lead {
-  margin: 0;
-  color: var(--text-dim);
-}
-
-.graph-selection-workflow__lead strong {
-  color: var(--text);
-}
-
 .graph-overview-workflow strong {
   color: var(--text);
 }
 
-.graph-explore-strip {
+/* Sticky graph inspector chrome — route + focus toolbar stay visible while scrolling details */
+.graph-inspector-chrome {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  margin: 0 0 12px;
+  padding-bottom: 2px;
+  background: linear-gradient(180deg, rgba(8, 12, 20, 0.97) 0%, rgba(8, 12, 20, 0.92) 70%, transparent 100%);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(143, 169, 255, 0.12);
+}
+
+.graph-inspector-chrome .graph-route-strip {
+  margin-bottom: 10px;
+}
+
+.graph-focus-toolbar {
+  padding: 12px 12px 10px;
+  border-radius: var(--radius);
+  border: 1px solid rgba(143, 169, 255, 0.28);
+  background: linear-gradient(145deg, rgba(143, 169, 255, 0.12) 0%, rgba(10, 14, 22, 0.85) 45%, rgba(10, 14, 22, 0.65) 100%);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
+.graph-focus-toolbar__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.graph-focus-toolbar__title {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+
+.graph-focus-toolbar__meta {
+  font-size: 0.65rem;
+  color: var(--text-dim);
+  letter-spacing: 0.02em;
+}
+
+.graph-focus-toolbar__primary {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  margin-bottom: 12px;
-  padding: 9px 12px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--hairline);
-  background: var(--surface-1);
-  font-size: 0.72rem;
+  margin-bottom: 10px;
 }
 
-.graph-explore-strip__label {
-  color: var(--text-dim);
-  font-size: 0.66rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  margin-right: 2px;
-}
-
-.graph-explore-strip__nav {
+.graph-focus-toolbar__step {
   display: inline-flex;
+  align-items: center;
   gap: 4px;
+  padding: 2px 6px 2px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(143, 169, 255, 0.2);
+  background: rgba(10, 14, 22, 0.45);
 }
 
-.graph-explore-strip__meta {
-  margin-left: auto;
+.graph-focus-toolbar__step-label {
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   color: var(--text-dim);
-  font-size: 0.66rem;
+}
+
+.graph-focus-toolbar__back {
+  margin-left: auto;
+}
+
+.graph-focus-toolbar__secondary {
+  margin-bottom: 8px;
+}
+
+.graph-focus-toolbar__legend-wrap {
+  margin: 0;
+  border: none;
+  padding: 0;
+}
+
+.graph-focus-toolbar__legend-summary {
+  cursor: pointer;
+  list-style: none;
+  font-size: 0.62rem;
+  color: var(--text-dim);
   letter-spacing: 0.02em;
+}
+
+.graph-focus-toolbar__legend-summary::-webkit-details-marker {
+  display: none;
+}
+
+.graph-focus-toolbar__legend {
+  margin: 8px 0 0;
+  padding-left: 1.1em;
+  font-size: 0.64rem;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+.graph-focus-toolbar__legend li {
+  margin-bottom: 4px;
+}
+
+.graph-focus-toolbar__legend strong {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.btn--graph-primary {
+  font-weight: 600;
+  border-color: rgba(143, 169, 255, 0.45);
+  background: linear-gradient(180deg, rgba(143, 169, 255, 0.22), rgba(80, 110, 200, 0.12));
+  color: #e8ecff;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.06) inset;
+}
+
+.btn--graph-primary:hover {
+  border-color: rgba(160, 190, 255, 0.65);
+  background: linear-gradient(180deg, rgba(143, 169, 255, 0.32), rgba(80, 110, 200, 0.2));
+  color: #fff;
+}
+
+.inspect-rows--neighbor-jump .inspect-row {
+  min-height: 2.25rem;
 }
 
 /* ----------------------------------------------------------------

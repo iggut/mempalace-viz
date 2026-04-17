@@ -141,8 +141,8 @@
                 <p class="graph-mode-intro__body">
                   <strong>Wings / Rooms</strong> = where drawers live (folder layout). <strong>Graph</strong> = how rooms
                   connect (MCP tunnel edges only). <strong>Start:</strong> click a node — inspector locks, neighbors
-                  spotlight. Then use <kbd>[</kbd>/<kbd>]</kbd> to walk links, <strong>Wing / room layout</strong> for
-                  taxonomy, <kbd>U</kbd>/<strong>Back</strong> to step out. Drag to orbit.
+                  spotlight. Then use <kbd>[</kbd>/<kbd>]</kbd> to walk links, <strong>Rooms tree</strong> for taxonomy,
+                  <kbd>U</kbd>/<strong>Back</strong> to step out. Drag to orbit.
                 </p>
               </section>
               <div id="graph-status-pill" class="graph-status-pill" role="status" aria-live="polite"></div>
@@ -272,7 +272,12 @@
                 >
                   Pin
                 </button>
-                <button type="button" id="btn-clear-sel" class="btn btn--ghost btn--sm" title="Clear selection">
+                <button
+                  type="button"
+                  id="btn-clear-sel"
+                  class="btn btn--ghost btn--sm"
+                  title="Clear selection — unlock inspector (same as Clear in graph focus bar)"
+                >
                   Clear
                 </button>
               </div>
@@ -396,7 +401,7 @@
           <li><strong>Click</strong> room (Rooms) — Select &amp; center</li>
           <li><strong>Click</strong> node (Graph) — Focus (inspector lock) &amp; frame</li>
           <li>
-            <strong>Wing / room layout</strong> (Graph inspector strip) — Opens the same wing or room in Rooms (taxonomy).
+            <strong>Rooms tree</strong> (Graph focus bar) — Opens the same wing or room in Rooms (taxonomy folder layout).
             Press <kbd>3</kbd> to return to Graph.
           </li>
           <li>

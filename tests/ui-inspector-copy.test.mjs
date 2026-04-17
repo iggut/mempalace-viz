@@ -53,8 +53,8 @@ test('graph mode exposes task-oriented workflow copy and structure jump', async 
   const src = await readUiSource();
   assert.ok(src.includes('Local neighborhood'));
   assert.ok(src.includes('Connections detail'));
-  assert.ok(src.includes('graph-selection-workflow'));
-  assert.ok(src.includes('Wing / room layout'));
+  assert.ok(src.includes('graph-focus-toolbar'));
+  assert.ok(src.includes('Rooms tree'));
   assert.ok(src.includes('graphJumpToStructureView'));
   assert.ok(src.includes('Graph workflow'));
   assert.ok(src.includes('summarizeGraphRoomNeighborhood'));
