@@ -9,6 +9,8 @@ import {
   buildGraphRoomLabelCandidateSet,
   buildGraphRoomNeighborMap,
   computeDensityMetrics,
+  chooseNonOverlappingLabels,
+  classifyPointerRelease,
   computeGraphFocusCameraDistance,
   computeVisibleLabelIds,
   countGraphIncidentsByRoomNodeId,
@@ -197,7 +199,7 @@ export function createPalaceScene(container, options = {}) {
   let resizeObserver = null;
 
   /** Primary-button press → release: distinguish click from orbit/pan/zoom so OrbitControls never triggers selection. */
-  const CLICK_MOVE_THRESHOLD_PX = 10;
+  const CLICK_MOVE_THRESHOLD_PX = 8;
   /** World-space squared; ignores float noise but catches real orbit/pan camera motion during the gesture. */
   const CAMERA_MOVE_EPS_SQ = 2.5e-5;
 
@@ -210,7 +212,18 @@ export function createPalaceScene(container, options = {}) {
     camPosStart: new THREE.Vector3(),
     targetStart: new THREE.Vector3(),
   };
+  let cameraInteractionActive = false;
+  let controlsStartHandler = null;
+  let controlsEndHandler = null;
   let globalPointerEndAttached = false;
+
+  function clearHoverState(clientX = 0, clientY = 0) {
+    hoveredMesh = null;
+    presentation.hoveredId = null;
+    renderer.domElement.style.cursor = 'default';
+    syncVisualPresentation();
+    callbacks.onHover(null, { x: clientX, y: clientY });
+  }
 
   function attachGlobalPointerEnd() {
     if (globalPointerEndAttached) return;
@@ -357,12 +370,12 @@ export function createPalaceScene(container, options = {}) {
   }
 
   /** World height of label sprites; must match `targetWorldHeight` in makeLabelSprite. */
-  const LABEL_SPRITE_WORLD_HEIGHT = 1.85;
+  const LABEL_SPRITE_WORLD_HEIGHT = 1.46;
   /** Gap between sphere top and label bottom (sprite center is half height above that). */
-  const LABEL_CLEARANCE_ABOVE_SPHERE = 0.22;
+  const LABEL_CLEARANCE_ABOVE_SPHERE = 0.16;
 
   function labelYAboveSphere(centerY, sphereRadius) {
-    return centerY + sphereRadius + LABEL_SPRITE_WORLD_HEIGHT * 0.5 + LABEL_CLEARANCE_ABOVE_SPHERE;
+    return centerY + sphereRadius + LABEL_CLEARANCE_ABOVE_SPHERE;
   }
 
   // Label sprites: rendered to an offscreen canvas at devicePixelRatio for crispness,
@@ -371,10 +384,10 @@ export function createPalaceScene(container, options = {}) {
   // stretched blue blocks. See README/QA notes on label rendering.
   function makeLabelSprite(text, color = '#e8eaef') {
     const dpr = Math.min(typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1, 2);
-    const fontSize = 15;
-    const padX = 8;
-    const padY = 4;
-    const fontDecl = `450 ${fontSize}px ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`;
+    const fontSize = 13;
+    const padX = 6;
+    const padY = 3;
+    const fontDecl = `400 ${fontSize}px ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`;
 
     const measure = document.createElement('canvas').getContext('2d');
     measure.font = fontDecl;
@@ -391,7 +404,7 @@ export function createPalaceScene(container, options = {}) {
     ctx.scale(dpr, dpr);
     ctx.clearRect(0, 0, cssW, cssH);
 
-    const r = Math.min(5, cssH / 2);
+    const r = Math.min(4, cssH / 2);
     ctx.beginPath();
     ctx.moveTo(r, 0);
     ctx.lineTo(cssW - r, 0);
@@ -403,17 +416,22 @@ export function createPalaceScene(container, options = {}) {
     ctx.lineTo(0, r);
     ctx.quadraticCurveTo(0, 0, r, 0);
     ctx.closePath();
-    ctx.fillStyle = 'rgba(5, 7, 12, 0.44)';
+    ctx.fillStyle = 'rgba(5, 8, 14, 0.28)';
     ctx.fill();
-    ctx.strokeStyle = 'rgba(110, 122, 150, 0.16)';
+    ctx.strokeStyle = 'rgba(118, 132, 160, 0.09)';
     ctx.lineWidth = 1;
     ctx.stroke();
 
     ctx.font = fontDecl;
     ctx.textBaseline = 'middle';
     ctx.textAlign = 'left';
+    ctx.shadowColor = 'rgba(3, 5, 8, 0.62)';
+    ctx.shadowBlur = 2.5;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 1;
     ctx.fillStyle = color;
     ctx.fillText(text, padX, cssH / 2 + 0.5);
+    ctx.shadowBlur = 0;
 
     const tex = new THREE.CanvasTexture(canvas);
     tex.minFilter = THREE.LinearFilter;
@@ -431,7 +449,9 @@ export function createPalaceScene(container, options = {}) {
     const sx = LABEL_SPRITE_WORLD_HEIGHT * aspect;
     const sy = LABEL_SPRITE_WORLD_HEIGHT;
     sprite.scale.set(sx, sy, 1);
+    sprite.center.set(0.5, 0);
     sprite.userData.labelBaseScale = { x: sx, y: sy, z: 1 };
+    sprite.userData.labelPixelSize = { w: cssW, h: cssH };
     sprite.renderOrder = 10;
     return sprite;
   }
@@ -541,6 +561,8 @@ export function createPalaceScene(container, options = {}) {
         ensureDynamicRoomLabel(id);
       }
     }
+    /** @type {Array<{ id: string, x: number, y: number, w: number, h: number, priority: number }>} */
+    const overlapCandidates = [];
     labelByNodeId.forEach((sprite, id) => {
       const data = nodeRegistry.get(id)?.data;
       if (!data) return;
@@ -560,6 +582,29 @@ export function createPalaceScene(container, options = {}) {
       const opBase = match ? labelOpacityDistanceFactor(distNorm, role) : 0.12;
       sprite.material.opacity = opBase;
       sprite.visible = labelsVisible && allow;
+      if (!sprite.visible) return;
+      const px = sprite.userData.labelPixelSize;
+      if (!px || !renderer || !camera) return;
+      const p = sprite.position.clone().project(camera);
+      if (p.z < -1 || p.z > 1) return;
+      const x = ((p.x + 1) * 0.5) * renderer.domElement.clientWidth;
+      const y = ((1 - p.y) * 0.5) * renderer.domElement.clientHeight;
+      const w = (px.w || 42) * scaleM;
+      const h = (px.h || 16) * scaleM;
+      const priority = role.pinned
+        ? 2_000_000
+        : role.selected
+          ? 1_000_000
+          : role.hovered
+            ? 800_000
+            : role.neighbor
+              ? 40_000
+              : Math.floor(opBase * 1000);
+      overlapCandidates.push({ id, x, y, w, h, priority });
+    });
+    const kept = chooseNonOverlappingLabels(overlapCandidates, 4);
+    labelByNodeId.forEach((sprite, id) => {
+      if (sprite.visible && !kept.has(id)) sprite.visible = false;
     });
   }
 
@@ -1315,11 +1360,7 @@ export function createPalaceScene(container, options = {}) {
   }
 
   function onPointerLeave() {
-    hoveredMesh = null;
-    presentation.hoveredId = null;
-    renderer.domElement.style.cursor = 'default';
-    syncVisualPresentation();
-    callbacks.onHover(null, { x: 0, y: 0 });
+    clearHoverState(0, 0);
   }
 
   function onPointerMove(event) {
@@ -1334,6 +1375,7 @@ export function createPalaceScene(container, options = {}) {
   }
 
   function processPointerMove(event) {
+    if (cameraInteractionActive) return;
     if (pointerGesture.active && event.pointerId === pointerGesture.pointerId) {
       const dx = event.clientX - pointerGesture.startX;
       const dy = event.clientY - pointerGesture.startY;
@@ -1369,6 +1411,8 @@ export function createPalaceScene(container, options = {}) {
     pointerGesture.maxMoveSq = 0;
     pointerGesture.camPosStart.copy(camera.position);
     pointerGesture.targetStart.copy(controls.target);
+    // Fresh press must not inherit stale hovered-id from a prior interaction.
+    clearHoverState(event.clientX, event.clientY);
     attachGlobalPointerEnd();
   }
 
@@ -1379,14 +1423,18 @@ export function createPalaceScene(container, options = {}) {
     if (event.type === 'pointercancel') return;
     if (event.button !== 0) return;
 
-    const movedPx = Math.sqrt(pointerGesture.maxMoveSq);
-    const pointerDragged = movedPx > CLICK_MOVE_THRESHOLD_PX;
-    // During programmatic tweens the camera moves without user orbit; don't treat that as a suppressing drag.
-    const camMovedByUser =
-      !cameraTween &&
-      (camera.position.distanceToSquared(pointerGesture.camPosStart) > CAMERA_MOVE_EPS_SQ ||
-        controls.target.distanceToSquared(pointerGesture.targetStart) > CAMERA_MOVE_EPS_SQ);
-    if (pointerDragged || camMovedByUser) return;
+    const cameraMovedSq = Math.max(
+      camera.position.distanceToSquared(pointerGesture.camPosStart),
+      controls.target.distanceToSquared(pointerGesture.targetStart),
+    );
+    const release = classifyPointerRelease({
+      maxMoveSq: pointerGesture.maxMoveSq,
+      cameraMovedSq,
+      moveThresholdPx: CLICK_MOVE_THRESHOLD_PX,
+      cameraMoveEpsSq: CAMERA_MOVE_EPS_SQ,
+      cameraInteractionActive,
+    });
+    if (!release.shouldSelect) return;
 
     const pick = findHoveredNodeMeshAtClient(event.clientX, event.clientY);
     if (!pick) {
@@ -1498,6 +1546,18 @@ export function createPalaceScene(container, options = {}) {
     controls.minDistance = 8;
     controls.maxDistance = 420;
     controls.maxPolarAngle = Math.PI * 0.52;
+    controlsStartHandler = () => {
+      cameraInteractionActive = true;
+      if (pointerGesture.active) pointerGesture.maxMoveSq = Math.max(pointerGesture.maxMoveSq, CLICK_MOVE_THRESHOLD_PX ** 2 + 1);
+      clearHoverState();
+    };
+    controlsEndHandler = () => {
+      requestAnimationFrame(() => {
+        cameraInteractionActive = false;
+      });
+    };
+    controls.addEventListener('start', controlsStartHandler);
+    controls.addEventListener('end', controlsEndHandler);
 
     // Warm-cool two-tone lighting suggests cognitive depth without pushing
     // hard blue. Hemi is ambient ground-vs-sky; key is warm (thought side),
@@ -1679,6 +1739,10 @@ export function createPalaceScene(container, options = {}) {
       renderer.domElement.removeEventListener('pointermove', onPointerMove);
       renderer.domElement.removeEventListener('pointerdown', onPointerDown);
       renderer.domElement.removeEventListener('pointerleave', onPointerLeave);
+    }
+    if (controls) {
+      if (controlsStartHandler) controls.removeEventListener('start', controlsStartHandler);
+      if (controlsEndHandler) controls.removeEventListener('end', controlsEndHandler);
     }
     clearSceneContent();
     if (selectionPulseTimer) clearTimeout(selectionPulseTimer);

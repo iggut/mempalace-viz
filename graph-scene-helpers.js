@@ -285,10 +285,10 @@ export function effectiveLabelBudgetForCamera(baseBudget, cameraDistanceNorm, de
  */
 export function labelSpriteScaleMultiplier(cameraDistanceNorm, role = {}) {
   const z = Math.max(0, Math.min(1, cameraDistanceNorm));
-  let m = 0.6 + z * 0.34;
-  if (role.pinned) m *= 1.08;
-  else if (role.selected) m *= 1.06;
-  else if (role.hovered) m *= 1.04;
+  let m = 0.5 + z * 0.26;
+  if (role.pinned) m *= 1.05;
+  else if (role.selected) m *= 1.04;
+  else if (role.hovered) m *= 1.025;
   return m;
 }
 
@@ -299,11 +299,62 @@ export function labelSpriteScaleMultiplier(cameraDistanceNorm, role = {}) {
  */
 export function labelOpacityDistanceFactor(cameraDistanceNorm, role = {}) {
   const z = Math.max(0, Math.min(1, cameraDistanceNorm));
-  let o = 0.42 + z * 0.4;
-  if (role.selected) o = Math.max(o, 0.9);
-  if (role.hovered) o = Math.max(o, 0.86);
-  if (role.neighbor) o = Math.max(o, 0.52 + z * 0.26);
-  return Math.max(0.28, Math.min(0.96, o));
+  let o = 0.32 + z * 0.34;
+  if (role.selected) o = Math.max(o, 0.78);
+  if (role.hovered) o = Math.max(o, 0.72);
+  if (role.neighbor) o = Math.max(o, 0.44 + z * 0.22);
+  return Math.max(0.2, Math.min(0.84, o));
+}
+
+/**
+ * Canonical pointer release classification for select vs drag/pan.
+ * @param {{
+ *  maxMoveSq: number,
+ *  cameraMovedSq: number,
+ *  moveThresholdPx?: number,
+ *  cameraMoveEpsSq?: number,
+ *  cameraInteractionActive?: boolean,
+ * }} p
+ * @returns {{ shouldSelect: boolean, reason: 'click'|'pointer-drag'|'camera-drag'|'camera-interaction' }}
+ */
+export function classifyPointerRelease(p) {
+  const moveThresholdPx = p.moveThresholdPx ?? 8;
+  const cameraMoveEpsSq = p.cameraMoveEpsSq ?? 2.5e-5;
+  if (p.cameraInteractionActive) {
+    return { shouldSelect: false, reason: 'camera-interaction' };
+  }
+  const movedPx = Math.sqrt(Math.max(0, p.maxMoveSq || 0));
+  if (movedPx > moveThresholdPx) {
+    return { shouldSelect: false, reason: 'pointer-drag' };
+  }
+  if ((p.cameraMovedSq || 0) > cameraMoveEpsSq) {
+    return { shouldSelect: false, reason: 'camera-drag' };
+  }
+  return { shouldSelect: true, reason: 'click' };
+}
+
+/**
+ * Greedy rectangle overlap culling for label legibility in dense clusters.
+ * @param {Array<{ id: string, x: number, y: number, w: number, h: number, priority: number }>} labels
+ * @param {number} [paddingPx]
+ * @returns {Set<string>}
+ */
+export function chooseNonOverlappingLabels(labels, paddingPx = 6) {
+  const sorted = [...(labels || [])].sort((a, b) => b.priority - a.priority);
+  /** @type {Array<{ x0: number, y0: number, x1: number, y1: number }>} */
+  const boxes = [];
+  const keep = new Set();
+  for (const l of sorted) {
+    const x0 = l.x - l.w * 0.5 - paddingPx;
+    const y0 = l.y - l.h * 0.5 - paddingPx;
+    const x1 = l.x + l.w * 0.5 + paddingPx;
+    const y1 = l.y + l.h * 0.5 + paddingPx;
+    const hit = boxes.some((b) => !(x1 < b.x0 || x0 > b.x1 || y1 < b.y0 || y0 > b.y1));
+    if (hit) continue;
+    boxes.push({ x0, y0, x1, y1 });
+    keep.add(l.id);
+  }
+  return keep;
 }
 
 /**

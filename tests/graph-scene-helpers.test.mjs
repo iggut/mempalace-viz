@@ -4,6 +4,8 @@ import {
   baseLabelScoreForGraphNode,
   buildGraphRoomLabelCandidateSet,
   buildGraphRoomNeighborMap,
+  chooseNonOverlappingLabels,
+  classifyPointerRelease,
   computeDensityMetrics,
   computeGraphFocusCameraDistance,
   computeVisibleLabelIds,
@@ -266,6 +268,61 @@ test('focusNodeDistanceDimMult favors neighbors when focused', () => {
 test('labelSpriteScaleMultiplier and labelOpacityDistanceFactor', () => {
   assert.ok(labelSpriteScaleMultiplier(0.2, { selected: true }) > labelSpriteScaleMultiplier(0.2, {}));
   assert.ok(labelOpacityDistanceFactor(0.9, { neighbor: true }) >= labelOpacityDistanceFactor(0.2, { neighbor: true }));
+});
+
+test('classifyPointerRelease handles click, drag, pan and jitter tolerance', () => {
+  assert.equal(
+    classifyPointerRelease({
+      maxMoveSq: 9,
+      cameraMovedSq: 0,
+      moveThresholdPx: 8,
+      cameraMoveEpsSq: 0.001,
+      cameraInteractionActive: false,
+    }).shouldSelect,
+    true,
+  );
+  assert.equal(
+    classifyPointerRelease({
+      maxMoveSq: 144,
+      cameraMovedSq: 0,
+      moveThresholdPx: 8,
+      cameraMoveEpsSq: 0.001,
+      cameraInteractionActive: false,
+    }).reason,
+    'pointer-drag',
+  );
+  assert.equal(
+    classifyPointerRelease({
+      maxMoveSq: 4,
+      cameraMovedSq: 0.1,
+      moveThresholdPx: 8,
+      cameraMoveEpsSq: 0.001,
+      cameraInteractionActive: false,
+    }).reason,
+    'camera-drag',
+  );
+  assert.equal(
+    classifyPointerRelease({
+      maxMoveSq: 4,
+      cameraMovedSq: 0,
+      moveThresholdPx: 8,
+      cameraMoveEpsSq: 0.001,
+      cameraInteractionActive: true,
+    }).reason,
+    'camera-interaction',
+  );
+});
+
+test('chooseNonOverlappingLabels keeps highest-priority labels in dense clusters', () => {
+  const keep = chooseNonOverlappingLabels([
+    { id: 'selected', x: 100, y: 100, w: 60, h: 16, priority: 1000 },
+    { id: 'nearby-a', x: 112, y: 102, w: 58, h: 16, priority: 300 },
+    { id: 'nearby-b', x: 128, y: 104, w: 58, h: 16, priority: 250 },
+    { id: 'far', x: 260, y: 220, w: 58, h: 16, priority: 100 },
+  ]);
+  assert.ok(keep.has('selected'));
+  assert.ok(keep.has('far'));
+  assert.ok(!keep.has('nearby-a') || !keep.has('nearby-b'));
 });
 
 test('focusWingIdFromSceneSelection', () => {
