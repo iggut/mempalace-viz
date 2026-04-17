@@ -2089,6 +2089,17 @@ function showError(message, detail, { kind = 'data' } = {}) {
   });
 }
 
+/**
+ * Locked selection only — not hover preview — so the footer does not reflow when
+ * mousing over the canvas with nothing selected.
+ */
+function footerFocusSubjectForMetrics() {
+  const s = appState.selected;
+  if (!s || s.type === 'center') return null;
+  if (s.type === 'wing' || s.type === 'room') return s;
+  return null;
+}
+
 function updateFooterContextLine(subject, ctx) {
   const el = $('metric-context');
   const wrap = $('metric-context-wrap');
@@ -2165,7 +2176,7 @@ function updateMetrics() {
   const refreshedEl = $('metric-refreshed');
   if (refreshedEl) refreshedEl.textContent = formatRelativeRefreshTime(dataBundle?.fetchedAt || lastGoodFetchedAt) || '—';
 
-  updateFooterContextLine(appState.selected, ctx);
+  updateFooterContextLine(footerFocusSubjectForMetrics(), ctx);
 }
 
 function filterLegendSearch(text, query) {
@@ -2748,7 +2759,7 @@ function renderInspector() {
           <p>Hover for a quick preview, or select a wing or room to lock a full readout.</p>
         </div>`;
     }
-    updateFooterContextLine(null, ctx);
+    updateFooterContextLine(footerFocusSubjectForMetrics(), ctx);
     assertGraphBackInvariant({
       graphBackBtn: body.querySelector('[data-graph-action="back"]'),
       graphFocusHistoryLength: graphFocusHistory.length,
@@ -2767,7 +2778,7 @@ function renderInspector() {
   } else {
     body.innerHTML = strip + graphNote + `<div class="inspect-card"><p class="inspect-muted">This selection type is not supported in the inspector yet.</p></div>`;
   }
-  updateFooterContextLine(t, ctx);
+  updateFooterContextLine(footerFocusSubjectForMetrics(), ctx);
   assertGraphBackInvariant({
     graphBackBtn: body.querySelector('[data-graph-action="back"]'),
     graphFocusHistoryLength: graphFocusHistory.length,
