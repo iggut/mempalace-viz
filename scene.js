@@ -596,6 +596,8 @@ export function createPalaceScene(container, options = {}) {
       const y = ((1 - p.y) * 0.5) * renderer.domElement.clientHeight;
       const w = (px.w || 42) * scaleM;
       const h = (px.h || 16) * scaleM;
+      // Bucket opacity for overlap priority so slow orbit does not reorder borderline labels every frame.
+      const opBucket = Math.round(opBase * 50) / 50;
       const priority = role.pinned
         ? 2_000_000
         : role.selected
@@ -604,11 +606,11 @@ export function createPalaceScene(container, options = {}) {
             ? 800_000
             : role.neighbor
               ? 40_000
-              : Math.floor(opBase * 1000) + hash01(id) * 0.001;
+              : Math.floor(opBucket * 1000) + hash01(id) * 0.001;
       overlapCandidates.push({ id, x, y, w, h, priority });
     });
     const kept = chooseNonOverlappingLabels(overlapCandidates, 6, {
-      quantizePx: 1,
+      quantizePx: 2,
       lastKept: labelOverlapLastKept,
     });
     labelOverlapLastKept = new Set(kept);
@@ -1710,6 +1712,7 @@ export function createPalaceScene(container, options = {}) {
   }
 
   function updatePresentation(patch) {
+    const prevSel = presentation.selectedId;
     const next = { ...presentation, ...patch };
     if (patch.route !== undefined) {
       next.route = { ...defaultRoutePresentation(), ...patch.route };
@@ -1721,6 +1724,14 @@ export function createPalaceScene(container, options = {}) {
         mode: p.mode != null ? p.mode : cur.mode ?? 'off',
         weights: p.weights && typeof p.weights === 'object' ? p.weights : cur.weights ?? {},
       };
+    }
+    // Programmatic selection changes (Back, search jump, inspector) do not emit pointermove; clear stale hover
+    // so scene emphasis and UI hover card stay aligned with the new focus.
+    if (patch.selectedId !== undefined && patch.selectedId !== prevSel && patch.selectedId != null) {
+      next.hoveredId = null;
+      hoveredMesh = null;
+      if (renderer?.domElement) renderer.domElement.style.cursor = 'default';
+      callbacks.onHover(null, { x: 0, y: 0 });
     }
     if (presentationEqual(presentation, next)) return;
     presentation = next;

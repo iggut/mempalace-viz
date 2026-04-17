@@ -355,8 +355,8 @@ test('chooseNonOverlappingLabels lastKept gives mild continuity preference', () 
 test('pointerMoveThresholdPx by pointer type', () => {
   assert.equal(pointerMoveThresholdPx('touch'), 12);
   assert.equal(pointerMoveThresholdPx('pen'), 10);
-  assert.equal(pointerMoveThresholdPx('mouse'), 9);
-  assert.equal(pointerMoveThresholdPx(undefined), 9);
+  assert.equal(pointerMoveThresholdPx('mouse'), 10);
+  assert.equal(pointerMoveThresholdPx(undefined), 10);
 });
 
 test('classifyPointerRelease uses pointer type when moveThresholdPx omitted', () => {

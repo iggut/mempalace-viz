@@ -315,7 +315,8 @@ export function labelOpacityDistanceFactor(cameraDistanceNorm, role = {}) {
 export function pointerMoveThresholdPx(pointerType) {
   if (pointerType === 'touch') return 12;
   if (pointerType === 'pen') return 10;
-  return 9;
+  // Trackpads are typically pointerType "mouse"; a hair more slack reduces false "drag" on jittery pads.
+  return 10;
 }
 
 /**

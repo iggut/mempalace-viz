@@ -52,9 +52,10 @@ Short regression pass before releases or after copy / routing / graph changes. T
 - [ ] **Click** a node with minimal movement → selection + inspector update (intentional pick).
 - [ ] **Drag / orbit** the camera (left button) → **no** selection on pointer release; hover may update during drag but release must not change selection.
 - [ ] **Pan** (if enabled / right-drag or middle) → **no** accidental node selection on release.
-- [ ] **Tiny pointer jitter** (a few pixels) on press/release still counts as a click when the camera did not move.
-- [ ] **Dense graph**: labels stay readable (not oversized pills); overlapping clusters remain scannable.
+- [ ] **Tiny pointer jitter** (a few pixels) on press/release still counts as a click when the camera did not move; trackpads (reported as `mouse`) use a slightly larger move budget than touch.
+- [ ] **Dense graph**: labels stay readable (not oversized pills); overlapping clusters remain scannable; **slow orbit** should not cause labels to swap visibility every frame (overlap priority is bucketed + lightly hysteretic).
 - [ ] **Zoom** in and out: labels stay legible without dominating the frame (subtle chips, not billboards).
+- [ ] **Graph Back** (strip / header / U) after moving the pointer without moving it again: scene highlight, inspector, and hover card stay consistent with the restored focus (no stale hover on the previously hovered node).
 
 ## 6. Performance sanity
 
