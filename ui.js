@@ -11,6 +11,8 @@ import {
   fetchSemanticSearch,
   fetchMcpToolsList,
   fetchPalaceTraverse,
+  fetchListDrawers,
+  fetchDrawerById,
   fetchKgQuery,
   fetchKgTimeline,
   fetchAaakSpec,
@@ -103,6 +105,12 @@ import {
   shouldShowHowConnectionsExplainer,
   shouldShowTunnelWorkflowCard,
 } from './graph-guidance.js';
+import {
+  buildRoomStoredContentSectionHtml,
+  buildWingStoredContentSectionHtml,
+  normalizeGetDrawerPayload,
+  normalizeListDrawersPayload,
+} from './content-inspector.js';
 
 const LS_KEY = 'mempalace-viz-explorer-v1';
 const ROUTE_MODE_LS_KEY = 'mempalace-viz-route-mode-v1';
@@ -165,6 +173,32 @@ let graphSearchLastQueryKey = '';
 
 /** @type {Record<string, unknown>} Cached <code>mempalace_traverse</code> JSON by room name */
 let traversePreviewByRoom = {};
+
+/** Inspector: list/detail for drawers in the selected room (MCP list_drawers / get_drawer). */
+const roomContentExplorer = {
+  wing: null,
+  room: null,
+  offset: 0,
+  limit: 12,
+  listRaw: null,
+  listLoading: false,
+  listError: null,
+  pane: 'list',
+  detailDrawerId: null,
+  detailRaw: null,
+  detailLoading: false,
+  detailError: null,
+};
+
+/** Inspector: paginated sample across a wing (wing filter only). */
+const wingContentExplorer = {
+  wing: null,
+  offset: 0,
+  limit: 10,
+  listRaw: null,
+  listLoading: false,
+  listError: null,
+};
 
 let semanticSearchDebounce = null;
 /** @type {Array<{ wing: string, room: string, similarity: number, preview: string }>} */
@@ -1086,6 +1120,184 @@ function renderDiscoverySectionOverview(ctx) {
   );
 }
 
+function resetContentExplorers() {
+  roomContentExplorer.wing = null;
+  roomContentExplorer.room = null;
+  roomContentExplorer.offset = 0;
+  roomContentExplorer.listRaw = null;
+  roomContentExplorer.listLoading = false;
+  roomContentExplorer.listError = null;
+  roomContentExplorer.pane = 'list';
+  roomContentExplorer.detailDrawerId = null;
+  roomContentExplorer.detailRaw = null;
+  roomContentExplorer.detailLoading = false;
+  roomContentExplorer.detailError = null;
+  wingContentExplorer.wing = null;
+  wingContentExplorer.offset = 0;
+  wingContentExplorer.listRaw = null;
+  wingContentExplorer.listLoading = false;
+  wingContentExplorer.listError = null;
+}
+
+function ensureRoomContentExplorer(wing, room) {
+  if (roomContentExplorer.wing === wing && roomContentExplorer.room === room) return;
+  roomContentExplorer.wing = wing;
+  roomContentExplorer.room = room;
+  roomContentExplorer.offset = 0;
+  roomContentExplorer.listRaw = null;
+  roomContentExplorer.listLoading = false;
+  roomContentExplorer.listError = null;
+  roomContentExplorer.pane = 'list';
+  roomContentExplorer.detailDrawerId = null;
+  roomContentExplorer.detailRaw = null;
+  roomContentExplorer.detailLoading = false;
+  roomContentExplorer.detailError = null;
+}
+
+function kickRoomListFetch() {
+  if (!roomContentExplorer.wing || !roomContentExplorer.room) return;
+  if (roomContentExplorer.pane !== 'list') return;
+  if (roomContentExplorer.listLoading) return;
+  if (roomContentExplorer.listRaw !== null) return;
+  if (roomContentExplorer.listError) return;
+  roomContentExplorer.listLoading = true;
+  roomContentExplorer.listError = null;
+  fetchListDrawers(roomContentExplorer.wing, roomContentExplorer.room, {
+    limit: roomContentExplorer.limit,
+    offset: roomContentExplorer.offset,
+  })
+    .then((raw) => {
+      roomContentExplorer.listLoading = false;
+      roomContentExplorer.listRaw = raw;
+      renderInspector();
+    })
+    .catch((e) => {
+      roomContentExplorer.listLoading = false;
+      roomContentExplorer.listError = e?.message || String(e);
+      renderInspector();
+    });
+}
+
+function ensureWingContentExplorer(wing) {
+  if (wingContentExplorer.wing === wing) return;
+  wingContentExplorer.wing = wing;
+  wingContentExplorer.offset = 0;
+  wingContentExplorer.listRaw = null;
+  wingContentExplorer.listLoading = false;
+  wingContentExplorer.listError = null;
+}
+
+function kickWingListFetch() {
+  if (!wingContentExplorer.wing) return;
+  if (wingContentExplorer.listLoading) return;
+  if (wingContentExplorer.listRaw !== null) return;
+  if (wingContentExplorer.listError) return;
+  wingContentExplorer.listLoading = true;
+  wingContentExplorer.listError = null;
+  fetchListDrawers(wingContentExplorer.wing, undefined, {
+    limit: wingContentExplorer.limit,
+    offset: wingContentExplorer.offset,
+  })
+    .then((raw) => {
+      wingContentExplorer.listLoading = false;
+      wingContentExplorer.listRaw = raw;
+      renderInspector();
+    })
+    .catch((e) => {
+      wingContentExplorer.listLoading = false;
+      wingContentExplorer.listError = e?.message || String(e);
+      renderInspector();
+    });
+}
+
+function roomContentOpenDrawer(drawerId) {
+  const id = typeof drawerId === 'string' ? drawerId.trim() : '';
+  if (!id) return;
+  roomContentExplorer.pane = 'detail';
+  roomContentExplorer.detailDrawerId = id;
+  roomContentExplorer.detailRaw = null;
+  roomContentExplorer.detailLoading = true;
+  roomContentExplorer.detailError = null;
+  fetchDrawerById(id)
+    .then((raw) => {
+      roomContentExplorer.detailLoading = false;
+      roomContentExplorer.detailRaw = raw;
+      renderInspector();
+    })
+    .catch((e) => {
+      roomContentExplorer.detailLoading = false;
+      roomContentExplorer.detailError = e?.message || String(e);
+      renderInspector();
+    });
+}
+
+function roomContentBackToList() {
+  roomContentExplorer.pane = 'list';
+  roomContentExplorer.detailDrawerId = null;
+  roomContentExplorer.detailRaw = null;
+  roomContentExplorer.detailError = null;
+  renderInspector();
+}
+
+function roomContentPaginate(dir) {
+  const delta = Number(dir);
+  if (!roomContentExplorer.wing || !roomContentExplorer.room) return;
+  const next = Math.max(0, roomContentExplorer.offset + delta * roomContentExplorer.limit);
+  if (next === roomContentExplorer.offset && delta < 0) return;
+  roomContentExplorer.offset = next;
+  roomContentExplorer.listRaw = null;
+  roomContentExplorer.listError = null;
+  kickRoomListFetch();
+}
+
+function roomContentRefreshList() {
+  if (!roomContentExplorer.wing || !roomContentExplorer.room) return;
+  roomContentExplorer.offset = 0;
+  roomContentExplorer.listRaw = null;
+  roomContentExplorer.listError = null;
+  kickRoomListFetch();
+}
+
+function roomContentRetryDetail() {
+  const id = roomContentExplorer.detailDrawerId;
+  if (id) roomContentOpenDrawer(id);
+}
+
+function wingContentPaginate(dir) {
+  const delta = Number(dir);
+  if (!wingContentExplorer.wing) return;
+  const next = Math.max(0, wingContentExplorer.offset + delta * wingContentExplorer.limit);
+  if (next === wingContentExplorer.offset && delta < 0) return;
+  wingContentExplorer.offset = next;
+  wingContentExplorer.listRaw = null;
+  wingContentExplorer.listError = null;
+  kickWingListFetch();
+}
+
+function wingContentRefreshList() {
+  if (!wingContentExplorer.wing) return;
+  wingContentExplorer.offset = 0;
+  wingContentExplorer.listRaw = null;
+  wingContentExplorer.listError = null;
+  kickWingListFetch();
+}
+
+function copyRoomDetailToClipboard() {
+  const raw = roomContentExplorer.detailRaw;
+  if (!raw) return;
+  const n = normalizeGetDrawerPayload(raw);
+  const text = n.content || '';
+  if (!text) {
+    showToast('Nothing to copy');
+    return;
+  }
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(text).then(() => showToast('Copied')).catch(() => showToast('Copy failed'));
+  } else {
+    showToast('Clipboard unavailable');
+  }
+}
+
 function renderWingInspector(ctx, wingName, _mode) {
   const { wingsData, roomsData, totalDrawers, ga, graphEdges } = ctx;
   const d = Number(wingsData[wingName]) || 0;
@@ -1224,6 +1436,21 @@ function renderWingInspector(ctx, wingName, _mode) {
 
   const wingKeyRelTitle = appState.view === 'graph' ? 'Connections detail' : 'Key relationships';
 
+  ensureWingContentExplorer(wingName);
+  kickWingListFetch();
+  const wingListNorm = normalizeListDrawersPayload(wingContentExplorer.listRaw);
+  const wingStoredHtml = buildWingStoredContentSectionHtml({
+    escapeHtml,
+    wingName,
+    listLoading: wingContentExplorer.listLoading,
+    listError: wingContentExplorer.listError,
+    listRaw: wingContentExplorer.listRaw,
+    offset: wingContentExplorer.offset,
+    limit: wingContentExplorer.limit,
+    hasPrev: wingContentExplorer.offset > 0,
+    hasNext: wingListNorm.hasMore,
+  });
+
   return `
     <div class="inspect-stack">
       <div class="inspect-card inspect-card--hero">
@@ -1232,6 +1459,7 @@ function renderWingInspector(ctx, wingName, _mode) {
         <p class="inspect-lead">${escapeHtml(sentence || 'Wing footprint in the palace.')}</p>
         ${pctDrawers != null ? `<div class="inspect-pct"><span>${pctDrawers}% of palace drawers</span>${pctBar(pctDrawers)}</div>` : ''}
       </div>
+      ${wingStoredHtml}
       ${graphWingNeighborhoodSection}
       ${inspectSection(
         'Why it matters',
@@ -1283,6 +1511,27 @@ function renderRoomInspector(ctx, wingName, roomName, _mode) {
   const rooms = roomsData[wingName] || [];
   const room = rooms.find((r) => r.name === roomName);
   const drawers = room ? Number(room.drawers) || 0 : null;
+
+  ensureRoomContentExplorer(wingName, roomName);
+  kickRoomListFetch();
+  const roomListNorm = normalizeListDrawersPayload(roomContentExplorer.listRaw);
+  const storedContentHtml = buildRoomStoredContentSectionHtml({
+    escapeHtml,
+    wingName,
+    roomName,
+    taxonomyDrawerCount: drawers,
+    listLoading: roomContentExplorer.listLoading,
+    listError: roomContentExplorer.listError,
+    listRaw: roomContentExplorer.listRaw,
+    pane: roomContentExplorer.pane,
+    detailLoading: roomContentExplorer.detailLoading,
+    detailError: roomContentExplorer.detailError,
+    detailRaw: roomContentExplorer.detailRaw,
+    offset: roomContentExplorer.offset,
+    limit: roomContentExplorer.limit,
+    hasPrev: roomContentExplorer.offset > 0,
+    hasNext: roomListNorm.hasMore,
+  });
 
   const wingTotal = Number(wingsData[wingName]) || 0;
   const sumInWing = sumDrawerCountsInWing(roomsData, wingName);
@@ -1539,28 +1788,29 @@ function renderRoomInspector(ctx, wingName, roomName, _mode) {
         <p class="inspect-lead">${escapeHtml(sentence || 'Room in the palace taxonomy.')}</p>
         ${pctWing != null ? `<div class="inspect-pct"><span>${pctWing}% of wing drawers (room list)</span>${pctBar(pctWing)}</div>` : ''}
       </div>
+      ${storedContentHtml}
       ${graphLocalNeighborhoodSection}
       ${graphLinkedRoomsSection}
       ${routeBlock}
       ${inspectSection(
-        'Why it matters',
+        'Key metadata',
         `
+        <p class="inspect-micro">Taxonomy &amp; footprint</p>
         <div class="meta-block">
           ${metaRow('Wing', escapeHtml(wingName))}
-          ${metaRow('Drawers', drawers != null ? formatNum(drawers) : '—')}
+          ${metaRow('Drawers (taxonomy count)', drawers != null ? formatNum(drawers) : '—')}
           ${metaRow('Share of palace', pctPalace != null ? `${pctPalace}%` : '—')}
-        </div>`,
-      )}
-      ${inspectSection(
-        'Position',
-        rooms.length
-          ? `
+        </div>
+        ${
+          rooms.length
+            ? `<p class="inspect-micro">Size context</p>
         <div class="meta-block">
           ${metaRow('Rank in wing', rr ? `${ordinal(rr.rank)} of ${ranked.length}` : '—')}
           ${metaRow('Wing average drawers', wingAvg != null ? wingAvg.toFixed(1) : '—')}
           ${metaRow('Compared with wing average', cmp)}
         </div>`
-          : '<p class="inspect-empty">Room-level drawer breakdown is not available for this wing.</p>',
+            : '<p class="inspect-empty">Room-level drawer breakdown is not available for this wing.</p>'
+        }`,
       )}
       ${inspectSection(
         keyRelTitle,
@@ -1777,6 +2027,44 @@ function onInspectorClick(e) {
     if (act === 'traverse-room') {
       const rm = mcp.getAttribute('data-room');
       if (rm) runTraverseForRoom(rm);
+    }
+    return;
+  }
+  const contentAct = e.target.closest('[data-content-action]');
+  if (contentAct) {
+    const act = contentAct.getAttribute('data-content-action');
+    if (act === 'room-open') {
+      const id = contentAct.getAttribute('data-drawer-id');
+      if (id) roomContentOpenDrawer(id);
+      return;
+    }
+    if (act === 'room-back-list') {
+      roomContentBackToList();
+      return;
+    }
+    if (act === 'room-page') {
+      roomContentPaginate(contentAct.getAttribute('data-dir'));
+      return;
+    }
+    if (act === 'room-refresh' || act === 'room-retry-list') {
+      roomContentRefreshList();
+      return;
+    }
+    if (act === 'room-retry-detail') {
+      roomContentRetryDetail();
+      return;
+    }
+    if (act === 'copy-detail') {
+      copyRoomDetailToClipboard();
+      return;
+    }
+    if (act === 'wing-page') {
+      wingContentPaginate(contentAct.getAttribute('data-dir'));
+      return;
+    }
+    if (act === 'wing-refresh' || act === 'wing-retry-list') {
+      wingContentRefreshList();
+      return;
     }
     return;
   }
@@ -2666,6 +2954,7 @@ function wireNavScope() {
 function goAllWings() {
   closeHelpIfOpen();
   graphFocusHistory.length = 0;
+  resetContentExplorers();
   appState.view = 'wings';
   appState.currentWing = null;
   appState.currentRoom = null;
@@ -2686,6 +2975,7 @@ function goAllWings() {
 function navigateToWing(wing) {
   closeHelpIfOpen();
   if (!dataBundle || !wingExists(dataBundle.wingsData, wing)) return;
+  resetContentExplorers();
   appState.currentWing = wing;
   appState.currentRoom = null;
   appState.view = 'rooms';
@@ -2927,6 +3217,7 @@ function clearSelection() {
   appState.currentRoom = null;
   appState.pinned = false;
   lastInspectorHoverKey = '';
+  resetContentExplorers();
   syncScenePresentation();
   renderInspector();
   persistState();
@@ -3460,6 +3751,7 @@ async function loadData(preserveContext) {
   }
 
   lastGoodFetchedAt = dataBundle.fetchedAt || new Date().toISOString();
+  resetContentExplorers();
   setConnState('ok', 'Connected', `Last refresh ${formatRelativeRefreshTime(lastGoodFetchedAt)}.`);
   fetchMcpToolsList()
     .then((r) => {

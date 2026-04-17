@@ -5,7 +5,8 @@
  *   GET /api/status, /api/wings, /api/rooms, /api/taxonomy,
  *       /api/palace, /api/graph-stats, /api/overview, /api/kg-stats,
  *       /api/mcp-tools, /api/search, /api/traverse, /api/kg-query,
- *       /api/kg-timeline, /api/aaak-spec, /api/diary
+ *       /api/kg-timeline, /api/aaak-spec, /api/diary,
+ *       /api/list-drawers, /api/drawer
  *   POST /api/check-duplicate
  *
  * Every request spawns `mempalace.mcp_server` as a short-lived child process
@@ -493,6 +494,29 @@ const server = createServer(async (req, res) => {
         result = await callMcp('mempalace_get_aaak_spec');
         break;
 
+      case '/api/list-drawers': {
+        const wingLd = requestUrl.searchParams.get('wing')?.trim() || undefined;
+        const roomLd = requestUrl.searchParams.get('room')?.trim() || undefined;
+        const limitLd = Math.min(100, Math.max(1, Number(requestUrl.searchParams.get('limit') || 20)));
+        const offsetLd = Math.max(0, Number(requestUrl.searchParams.get('offset') || 0));
+        const args = { limit: limitLd, offset: offsetLd };
+        if (wingLd) args.wing = wingLd;
+        if (roomLd) args.room = roomLd;
+        result = await callMcp('mempalace_list_drawers', args, 25000);
+        break;
+      }
+
+      case '/api/drawer': {
+        const did = (requestUrl.searchParams.get('id') || '').trim();
+        if (!did) {
+          res.writeHead(400);
+          res.end(JSON.stringify({ error: 'id parameter required' }));
+          return;
+        }
+        result = await callMcp('mempalace_get_drawer', { drawer_id: did }, 25000);
+        break;
+      }
+
       case '/api/diary': {
         const agentName =
           requestUrl.searchParams.get('agent')?.trim() ||
@@ -528,7 +552,8 @@ server.listen(PORT, HOST, () => {
   console.log('  API:    /api/status, /api/wings, /api/rooms, /api/taxonomy,');
   console.log('          /api/palace, /api/graph-stats, /api/overview, /api/kg-stats,');
   console.log('          /api/mcp-tools, /api/search, /api/traverse, /api/kg-query,');
-  console.log('          /api/kg-timeline, /api/aaak-spec, /api/diary, POST /api/check-duplicate');
+  console.log('          /api/kg-timeline, /api/aaak-spec, /api/diary, /api/list-drawers, /api/drawer,');
+  console.log('          POST /api/check-duplicate');
   console.log('  Set HOST=127.0.0.1 to restrict to local-only access.');
   if (AUTO_EXIT_MS > 0) {
     console.log(`  Auto-exit enabled after ${AUTO_EXIT_MS}ms (dev restart mode).`);

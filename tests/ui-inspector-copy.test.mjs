@@ -3,9 +3,14 @@ import test from 'node:test';
 import { readFile } from 'node:fs/promises';
 
 const uiSourcePath = new URL('../ui.js', import.meta.url);
+const contentInspectorPath = new URL('../content-inspector.js', import.meta.url);
 
 async function readUiSource() {
   return readFile(uiSourcePath, 'utf8');
+}
+
+async function readContentInspectorSource() {
+  return readFile(contentInspectorPath, 'utf8');
 }
 
 test('overview inspector keeps scan-first section order and labels', async () => {
@@ -25,12 +30,22 @@ test('overview inspector keeps scan-first section order and labels', async () =>
 
 test('wing and room inspectors expose usefulness-first section names', async () => {
   const src = await readUiSource();
+  const ci = await readContentInspectorSource();
   assert.ok(src.includes("'Why it matters'"));
+  assert.ok(src.includes("'Key metadata'"));
+  assert.ok(ci.includes('Stored content'));
+  assert.ok(ci.includes('Stored memories (wing sample)'));
   assert.ok(src.includes("'Key relationships'"));
   assert.ok(src.includes("'Top rooms'"));
   assert.ok(src.includes("'Useful stats'"));
-  assert.ok(src.includes("'Position'"));
   assert.ok(src.includes("'Structural read'"));
+});
+
+test('room inspector places stored content before key metadata in template', async () => {
+  const src = await readUiSource();
+  const iStored = src.indexOf('${storedContentHtml}');
+  const iMeta = src.indexOf("'Key metadata'");
+  assert.ok(iStored > 0 && iMeta > iStored);
 });
 
 test('empty and low-data states use curated concise phrasing', async () => {

@@ -233,6 +233,32 @@ export async function fetchPalaceTraverse(startRoom, maxHops = 2) {
 }
 
 /**
+ * List stored drawers (Chroma) with optional wing/room filter — wraps MCP `mempalace_list_drawers`.
+ * @param {string} [wing]
+ * @param {string} [room]
+ * @param {{ limit?: number, offset?: number }} [opts]
+ */
+export async function fetchListDrawers(wing, room, opts = {}) {
+  const u = createApiUrl('/api/list-drawers');
+  if (wing && String(wing).trim()) u.searchParams.set('wing', String(wing).trim());
+  if (room && String(room).trim()) u.searchParams.set('room', String(room).trim());
+  const limit = opts.limit != null ? Number(opts.limit) : 20;
+  const offset = opts.offset != null ? Number(opts.offset) : 0;
+  u.searchParams.set('limit', String(Number.isFinite(limit) ? limit : 20));
+  u.searchParams.set('offset', String(Number.isFinite(offset) ? offset : 0));
+  return fetchJson(u.toString(), { timeoutMs: 25000 });
+}
+
+/** Full drawer by id — MCP `mempalace_get_drawer`. */
+export async function fetchDrawerById(drawerId) {
+  const id = typeof drawerId === 'string' ? drawerId.trim() : '';
+  if (!id) return Promise.reject(new Error('Drawer id is empty.'));
+  const u = createApiUrl('/api/drawer');
+  u.searchParams.set('id', id);
+  return fetchJson(u.toString(), { timeoutMs: 25000 });
+}
+
+/**
  * @param {string} entity
  * @param {{ as_of?: string, direction?: string }} [opts]
  */
