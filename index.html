@@ -137,20 +137,19 @@
 
             <div id="graph-view-extras" class="graph-view-extras" hidden>
               <section class="graph-mode-intro" aria-label="What graph view shows">
-                <p class="graph-mode-intro__title">Relationship graph (tunnels)</p>
+                <p class="graph-mode-intro__title">Links, not the folder tree</p>
                 <p class="graph-mode-intro__body">
-                  You are looking at <strong>explicit MCP tunnel edges</strong> — how rooms link in MemPalace — not the
-                  folder tree. <strong>Wings</strong> / <strong>Rooms</strong> views show structure; this view shows
-                  connectivity. Click a room node to lock the inspector; drag to orbit. Use <kbd>Back</kbd> in the header
-                  or <kbd>U</kbd> for prior focus.
+                  <strong>Wings / Rooms</strong> = taxonomy structure. <strong>Graph</strong> = resolved MCP edges only
+                  (what connects in data). Click a room to focus its neighborhood; drag to orbit. <kbd>Back</kbd> or
+                  <kbd>U</kbd> steps focus.
                 </p>
               </section>
               <div id="graph-status-pill" class="graph-status-pill" role="status" aria-live="polite"></div>
               <div class="graph-rel-toolbar">
-                <span class="graph-rel-toolbar__label">Relationship types</span>
+                <span class="graph-rel-toolbar__label">Show link types</span>
                 <div id="graph-rel-chips" class="rel-chips" aria-label="Toggle relationship types in the 3D graph"></div>
               </div>
-              <div id="graph-legend-compact" class="graph-legend-compact"></div>
+              <p id="graph-legend-compact" class="graph-legend-compact graph-legend-compact--static" aria-live="polite"></p>
             </div>
 
             <div class="control-row" style="margin-top: 14px">

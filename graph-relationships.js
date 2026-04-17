@@ -22,7 +22,13 @@ export const RELATIONSHIP_TYPES = {
     label: 'Tunnel',
     shortLabel: 'Tunnel',
     description:
-      'Same room name appearing in multiple wings — a cross-wing structural link from MemPalace tunnel discovery (`mempalace_find_tunnels`).',
+      'Cross-wing link from tunnel discovery (`mempalace_find_tunnels`): same logical room in more than one wing.',
+  },
+  taxonomy_adjacency: {
+    label: 'Taxonomy order',
+    shortLabel: 'Same-wing order',
+    description:
+      'Rooms that sit next to each other in your taxonomy list within one wing — layout structure, not a tunnel hop.',
   },
   unknown: {
     label: 'Other',
@@ -69,6 +75,9 @@ export function getStyleForRelationshipType(type) {
   const t = type || 'tunnel';
   if (t === 'tunnel') {
     return { color: 0x5b8cff, opacity: 0.44 };
+  }
+  if (t === 'taxonomy_adjacency') {
+    return { color: 0x3dc9b8, opacity: 0.34 };
   }
   if (t === 'unknown') {
     return { color: 0x94a3b8, opacity: 0.32 };

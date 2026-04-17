@@ -451,6 +451,53 @@ export function neighborIdsForFocus(focusId, neighborMap) {
 }
 
 /**
+ * Nodes to keep fully legible when a room or wing is focused: the focus id,
+ * all room–room graph neighbors, the parent wing for a room, or all rooms in a wing when a wing is focused.
+ * @param {string} primaryId
+ * @param {Map<string, Set<string>>} neighborMap
+ * @param {Record<string, Array<{ name: string }>>} roomsData
+ * @returns {Set<string>}
+ */
+export function buildGraphHighlightNodeIds(primaryId, neighborMap, roomsData) {
+  const out = new Set();
+  if (!primaryId) return out;
+  out.add(primaryId);
+  const nbr = neighborIdsForFocus(primaryId, neighborMap);
+  nbr.forEach((id) => out.add(id));
+  if (primaryId.startsWith('room:')) {
+    const wid = wingIdFromSceneNodeId(primaryId);
+    if (wid) out.add(`wing:${wid}`);
+  } else if (primaryId.startsWith('wing:')) {
+    const w = primaryId.slice('wing:'.length);
+    const rooms = roomsData[w] || [];
+    for (const r of rooms) {
+      if (r && r.name) out.add(`room:${w}:${r.name}`);
+    }
+  }
+  return out;
+}
+
+/**
+ * Darken edges that do not help read the focused neighborhood. Multiplied after
+ * `edgeEmphasisOpacityMult` when a focus exists and no route overlay is active.
+ * @param {string|null|undefined} fromId
+ * @param {string|null|undefined} toId
+ * @param {Set<string>} highlightIds
+ * @param {number} densityTier
+ * @returns {number}
+ */
+export function graphEdgeHighlightMult(fromId, toId, highlightIds, densityTier) {
+  if (!highlightIds || highlightIds.size === 0) return 1;
+  if (!fromId || !toId) return 1;
+  const a = highlightIds.has(fromId);
+  const b = highlightIds.has(toId);
+  const t = Math.max(0, Math.min(3, densityTier));
+  if (a && b) return 1;
+  if (a || b) return t >= 2 ? 0.38 : 0.48;
+  return t >= 3 ? 0.05 : t >= 2 ? 0.07 : t >= 1 ? 0.1 : 0.14;
+}
+
+/**
  * Split selection vs secondary hover so graph emphasis stays anchored on the selection
  * while still previewing another node (incident edges + label priority use this).
  * @param {string | null | undefined} selectedId

@@ -6,6 +6,7 @@ import { makeRoomId } from './canonical.js';
 import { getEdgeRelationshipType, getStyleForRelationshipType } from './graph-relationships.js';
 import {
   baseLabelScoreForGraphNode,
+  buildGraphHighlightNodeIds,
   buildGraphRoomLabelCandidateSet,
   buildGraphRoomNeighborMap,
   computeDensityMetrics,
@@ -15,7 +16,7 @@ import {
   computeVisibleLabelIds,
   countGraphIncidentsByRoomNodeId,
   edgeEmphasisOpacityMult,
-  focusNodeDistanceDimMult,
+  graphEdgeHighlightMult,
   focusWingIdFromSceneSelection,
   framingTargetOffset,
   graphSceneNodeIdForLayoutNode,
@@ -153,6 +154,8 @@ export function createPalaceScene(container, options = {}) {
   let graphDefaultCamera = null;
   /** @type {Map<string, Set<string>>} */
   let graphNeighborMap = new Map();
+  /** @type {Set<string>} room/wing ids kept bright when focusing in graph view */
+  let graphHighlightIds = new Set();
   /** @type {number} graph bbox extent for camera / label normalization */
   let graphSpatialExtent = 80;
   /** @type {string|null} */
@@ -576,13 +579,14 @@ export function createPalaceScene(container, options = {}) {
     const hid = presentation.hoveredId;
     const { primaryId } = splitGraphFocusIds(sid, hid);
     const neighborIds = primaryId ? neighborIdsForFocus(primaryId, graphNeighborMap) : new Set();
+    const labelNeighborIds = graphHighlightIds.size > 0 ? graphHighlightIds : neighborIds;
     const focusWingId = focusWingIdFromSceneSelection(sid || hid);
     const showIds = computeVisibleLabelIds(graphLabelEntries, {
       selectedId: sid,
       hoveredId: hid,
       pinActive: presentation.pinActive,
       budget,
-      neighborIds,
+      neighborIds: labelNeighborIds,
       focusWingId,
       cameraDistanceNorm: distNorm,
       densityTier: tier,
@@ -604,7 +608,7 @@ export function createPalaceScene(container, options = {}) {
         selected: id === sid,
         hovered: id === hid,
         pinned: !!(presentation.pinActive && id === sid),
-        neighbor: neighborIds.has(id),
+        neighbor: neighborIds.has(id) || graphHighlightIds.has(id),
       };
       const scaleM = labelSpriteScaleMultiplier(distNorm, role);
       const bs = sprite.userData.labelBaseScale;
@@ -1013,11 +1017,24 @@ export function createPalaceScene(container, options = {}) {
     // Pre-compute the primary focus neighborhood once; used both for edge
     // glow layering and the downstream node emphasis pass below.
     const primaryFocusInfo = splitGraphFocusIds(sid, hid);
+    graphHighlightIds = new Set();
+    if (currentView === 'graph' && primaryFocusInfo.primaryId) {
+      graphHighlightIds = buildGraphHighlightNodeIds(
+        primaryFocusInfo.primaryId,
+        graphNeighborMap,
+        roomsData,
+      );
+    }
     const neighborFocusSet =
       primaryFocusInfo.primaryId && currentView === 'graph'
         ? neighborIdsForFocus(primaryFocusInfo.primaryId, graphNeighborMap)
         : null;
     const nbrFocusRef = { forEdges: neighborFocusSet };
+    const nhActive =
+      currentView === 'graph' &&
+      graphHighlightIds.size > 0 &&
+      !routeActive &&
+      !!primaryFocusInfo.primaryId;
 
     linkObjects.forEach((lo) => {
       const {
@@ -1073,6 +1090,9 @@ export function createPalaceScene(container, options = {}) {
           densityTier: gTier,
           isGraphRelationship: true,
         });
+        if (graphHighlightIds.size > 0 && !routeActive) {
+          op *= graphEdgeHighlightMult(fromId, toId, graphHighlightIds, gTier);
+        }
       }
       if (isGraphRelationship && line.geometry?.attributes?.position) {
         const pos = line.geometry.attributes.position;
@@ -1128,9 +1148,16 @@ export function createPalaceScene(container, options = {}) {
         const nbr = nbrFocusRef?.forEdges;
         const neighborEdge =
           !touchesSid && !touchesHid && nbr && fromId && toId && (nbr.has(fromId) || nbr.has(toId));
+        const bothInHighlight =
+          nhActive &&
+          fromId &&
+          toId &&
+          graphHighlightIds.has(fromId) &&
+          graphHighlightIds.has(toId);
         let glowOp = 0;
         if (touchesSid) glowOp = 0.46;
         else if (touchesHid) glowOp = 0.28;
+        else if (bothInHighlight) glowOp = 0.36;
         else if (neighborEdge) glowOp = 0.11;
         if (routeActive && fromId && toId) {
           const pk = undirectedPairKey(fromId, toId);
@@ -1185,13 +1212,23 @@ export function createPalaceScene(container, options = {}) {
           emissiveMult *= gTier >= 2 ? 0.42 : 0.5;
       }
 
-      if (nbrFocus) {
+      if (nbrFocus && !nhActive) {
         if (nbrFocus.has(id)) {
           opacityMult = Math.max(opacityMult, gTier >= 2 ? 0.5 : 0.62);
           emissiveMult *= 1.06;
         }
         if (id === primaryId) {
           opacityMult = Math.max(opacityMult, pin && id === sid ? 0.94 : 0.88);
+        }
+      }
+
+      if (nhActive) {
+        if (graphHighlightIds.has(id)) {
+          opacityMult = Math.max(opacityMult, gTier >= 2 ? 0.78 : 0.88);
+          emissiveMult *= 1.06;
+        } else {
+          opacityMult *= gTier >= 2 ? 0.085 : 0.11;
+          emissiveMult *= 0.28;
         }
       }
 
@@ -1245,9 +1282,13 @@ export function createPalaceScene(container, options = {}) {
             : 1.14
           : id === hid
             ? 1
-            : nbrFocus?.has(id)
-              ? 1.02
-              : 1;
+            : nhActive && graphHighlightIds.has(id)
+              ? 1.05
+              : nhActive && !graphHighlightIds.has(id)
+                ? 0.86
+                : nbrFocus?.has(id)
+                  ? 1.02
+                  : 1;
       const dimScale = match ? 1 : 0.88;
       mesh.scale.setScalar(emphasis * dimScale * routeScale);
     });
@@ -1721,24 +1762,12 @@ export function createPalaceScene(container, options = {}) {
 
     const gTier = graphSceneMetrics?.tier ?? 0;
     if (currentView === 'graph') {
-      let focusPt = controls.target;
-      if (presentation.selectedId && nodeRegistry.get(presentation.selectedId)) {
-        focusPt = nodeRegistry.get(presentation.selectedId).mesh.position;
-      } else if (presentation.hoveredId && nodeRegistry.get(presentation.hoveredId)) {
-        focusPt = nodeRegistry.get(presentation.hoveredId).mesh.position;
-      }
-      const fid = presentation.selectedId || presentation.hoveredId;
-      const nbr = fid ? neighborIdsForFocus(fid, graphNeighborMap) : new Set();
-      const focusActive = !!(presentation.selectedId || presentation.hoveredId);
+      // Neighborhood contrast is handled in syncVisualPresentation; avoid
+      // stacking distance-based dimming on top (it washed out the highlight).
       nodeRegistry.forEach((entry, id) => {
         const mat = entry.mesh.material;
         if (!mat || mat.type === 'MeshBasicMaterial') return;
-        const d = entry.mesh.position.distanceTo(focusPt);
-        const distMult = focusNodeDistanceDimMult(d, gTier, {
-          isNeighbor: nbr.has(id),
-          focusActive,
-        });
-        mat.opacity = Math.min(1, entry.baseOpacity * (entry.presentationOpacity ?? 1) * distMult);
+        mat.opacity = Math.min(1, entry.baseOpacity * (entry.presentationOpacity ?? 1));
       });
       applyGraphLabels();
     }

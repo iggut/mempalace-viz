@@ -783,7 +783,8 @@ function updateGraphViewChrome() {
         .map((t) => {
           const meta = getRelationshipTypeMeta(t);
           const on = graphRelEnabledTypes.has(t);
-          const swatch = t === 'tunnel' ? '#5b8cff' : '#a78bfa';
+          const swatch =
+            t === 'tunnel' ? '#5b8cff' : t === 'taxonomy_adjacency' ? '#3dc9b8' : '#a78bfa';
           return `<button type="button" class="rel-chip ${on ? 'is-on' : ''}" data-rel-type="${escapeHtml(t)}" title="${escapeHtml(meta.description)}">
           <span class="rel-chip__swatch" style="background:${swatch}"></span>
           <span>${escapeHtml(meta.shortLabel)}</span>
@@ -815,13 +816,7 @@ function updateGraphViewChrome() {
   const legend = $('graph-legend-compact');
   if (legend) {
     legend.innerHTML = avail.length
-      ? avail
-          .map((t) => {
-            const m = getRelationshipTypeMeta(t);
-            const swatch = t === 'tunnel' ? '#5b8cff' : '#a78bfa';
-            return `<div class="graph-legend-compact__row"><span class="legend-swatch" style="background:${swatch}"></span><span><strong>${escapeHtml(m.shortLabel)}</strong> — ${escapeHtml(m.description)}</span></div>`;
-          })
-          .join('')
+      ? `<span class="graph-legend-compact__line">Colors match chips. <strong>Tunnel</strong> — cross-wing discovery. <strong>Same-wing order</strong> — taxonomy sequence (structure).</span>`
       : '';
   }
 }

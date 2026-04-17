@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   baseLabelScoreForGraphNode,
+  buildGraphHighlightNodeIds,
   buildGraphRoomLabelCandidateSet,
   buildGraphRoomNeighborMap,
   chooseNonOverlappingLabels,
@@ -15,6 +16,7 @@ import {
   focusNodeDistanceDimMult,
   focusWingIdFromSceneSelection,
   framingTargetOffset,
+  graphEdgeHighlightMult,
   graphSceneNodeIdForLayoutNode,
   labelOpacityDistanceFactor,
   labelSpriteScaleMultiplier,
@@ -95,6 +97,30 @@ test('edgeEmphasisOpacityMult', () => {
     isGraphRelationship: true,
   });
   assert.ok(hi > dim);
+});
+
+test('buildGraphHighlightNodeIds includes wing and neighbors', () => {
+  const edges = [{ sourceRoomId: 'w/a', targetRoomId: 'w/b', relationshipType: 'tunnel' }];
+  const nodeList = [
+    { type: 'room', wing: 'w', name: 'a', x: 0, y: 0, z: 0 },
+    { type: 'room', wing: 'w', name: 'b', x: 1, y: 0, z: 0 },
+  ];
+  const m = buildGraphRoomNeighborMap(edges, nodeList, (list, edge, end) => {
+    const ref = end === 'from' ? edge.sourceRoomId : edge.targetRoomId;
+    return nodeList.find((n) => n.type === 'room' && `${n.wing}/${n.name}` === ref);
+  });
+  const roomsData = { w: [{ name: 'a' }, { name: 'b' }] };
+  const h = buildGraphHighlightNodeIds('room:w:a', m, roomsData);
+  assert.ok(h.has('room:w:a'));
+  assert.ok(h.has('room:w:b'));
+  assert.ok(h.has('wing:w'));
+});
+
+test('graphEdgeHighlightMult tiers inside vs outside', () => {
+  const ids = new Set(['room:w:a', 'room:w:b']);
+  assert.equal(graphEdgeHighlightMult('room:w:a', 'room:w:b', ids, 1), 1);
+  assert.ok(graphEdgeHighlightMult('room:w:a', 'room:x:z', ids, 1) < 1);
+  assert.ok(graphEdgeHighlightMult('room:x:y', 'room:x:z', ids, 2) < 0.1);
 });
 
 test('splitGraphFocusIds secondary hover', () => {

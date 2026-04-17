@@ -1246,6 +1246,15 @@ input[type="radio"] {
   line-height: 1.45;
 }
 
+.graph-legend-compact--static {
+  margin: 10px 0 0;
+}
+
+.graph-legend-compact__line strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
 .graph-legend-compact__row {
   display: flex;
   gap: 8px;
