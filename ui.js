@@ -2819,15 +2819,24 @@ function setupScene() {
   try {
     sceneApi = createPalaceScene(container, {
       onHover: (data, pos) => {
+        const px = pos && typeof pos.x === 'number' ? pos.x : 0;
+        const py = pos && typeof pos.y === 'number' ? pos.y : 0;
+        if (!data || data.type === 'center') {
+          appState.hovered = null;
+          fillHoverCard(null);
+          positionHoverCard(0, 0, false);
+          renderInspector();
+          return;
+        }
         if (shouldIgnoreHover()) {
           fillHoverCard(null);
           positionHoverCard(0, 0, false);
           return;
         }
-        appState.hovered = data && data.type !== 'center' ? { ...data } : null;
+        appState.hovered = { ...data };
         renderInspector();
         fillHoverCard(data);
-        positionHoverCard(pos.x, pos.y, !!data && data.type !== 'center');
+        positionHoverCard(px, py, true);
       },
       onClick: (data) => handleSceneClick(data),
       onBackgroundClick: () => {

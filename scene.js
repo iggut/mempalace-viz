@@ -597,7 +597,7 @@ export function createPalaceScene(container, options = {}) {
       const w = (px.w || 42) * scaleM;
       const h = (px.h || 16) * scaleM;
       // Bucket opacity for overlap priority so slow orbit does not reorder borderline labels every frame.
-      const opBucket = Math.round(opBase * 50) / 50;
+      const opBucket = Math.round(opBase * 20) / 20;
       const priority = role.pinned
         ? 2_000_000
         : role.selected
@@ -610,7 +610,7 @@ export function createPalaceScene(container, options = {}) {
       overlapCandidates.push({ id, x, y, w, h, priority });
     });
     const kept = chooseNonOverlappingLabels(overlapCandidates, 6, {
-      quantizePx: 2,
+      quantizePx: 4,
       lastKept: labelOverlapLastKept,
     });
     labelOverlapLastKept = new Set(kept);
@@ -1639,6 +1639,7 @@ export function createPalaceScene(container, options = {}) {
   }
 
   function resetCamera() {
+    clearHoverState();
     if (currentView === 'graph' && graphDefaultCamera) {
       tweenCamera(graphDefaultCamera.position.clone(), graphDefaultCamera.target.clone());
       return;
@@ -1649,6 +1650,7 @@ export function createPalaceScene(container, options = {}) {
   function centerOnNodeId(nodeId) {
     const entry = nodeRegistry.get(nodeId);
     if (!entry) return;
+    clearHoverState();
     const p = new THREE.Vector3();
     entry.mesh.getWorldPosition(p);
 
@@ -1726,8 +1728,8 @@ export function createPalaceScene(container, options = {}) {
       };
     }
     // Programmatic selection changes (Back, search jump, inspector) do not emit pointermove; clear stale hover
-    // so scene emphasis and UI hover card stay aligned with the new focus.
-    if (patch.selectedId !== undefined && patch.selectedId !== prevSel && patch.selectedId != null) {
+    // so scene emphasis and UI hover card stay aligned with the new focus (including clear-to-null).
+    if (patch.selectedId !== undefined && patch.selectedId !== prevSel) {
       next.hoveredId = null;
       hoveredMesh = null;
       if (renderer?.domElement) renderer.domElement.style.cursor = 'default';
