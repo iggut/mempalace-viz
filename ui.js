@@ -830,6 +830,20 @@ function inspectSection(title, inner, emptyMessage) {
     </section>`;
 }
 
+function inspectDisclosure(title, summary, inner, emptyMessage, open = false) {
+  const body =
+    inner && String(inner).trim()
+      ? inner
+      : `<p class="inspect-empty">${escapeHtml(emptyMessage || 'No details available.')}</p>`;
+  return `
+    <section class="inspect-section">
+      <details class="inspect-details"${open ? ' open' : ''}>
+        <summary class="inspect-section__title">${escapeHtml(title)}${summary ? `<span class="inspect-section__meta">${escapeHtml(summary)}</span>` : ''}</summary>
+        <div class="inspect-section__body">${body}</div>
+      </details>
+    </section>`;
+}
+
 function pctBar(pct) {
   if (pct == null || Number.isNaN(Number(pct))) return '';
   const w = Math.min(100, Math.max(0, Number(pct)));
@@ -900,10 +914,10 @@ function renderOverviewInspector(ctx) {
     : '';
 
   const palaceBlurb = [
-    `Palace scale: ${formatNum(om.totalDrawers)} drawers across ${formatNum(om.wingCount)} wings and ${formatNum(om.roomCount)} rooms.`,
+    `${formatNum(om.totalDrawers)} drawers across ${formatNum(om.wingCount)} wings and ${formatNum(om.roomCount)} rooms.`,
     om.tunnelNodeCount
-      ? `Graph summary: ${formatNum(om.graphEdgeCount)} resolved undirected edges (all relationship types).`
-      : 'No graph edges in graph-stats.',
+      ? `${formatNum(om.graphEdgeCount)} resolved connections across the current relationship mix.`
+      : 'No resolved connections in this snapshot yet.',
     om.graphBlurb,
   ]
     .filter(Boolean)
@@ -924,38 +938,46 @@ function renderOverviewInspector(ctx) {
       ${graphGuidanceBlocksHtml(ctx)}
       ${graphExplorerNote}
       ${inspectSection(
-        'Palace summary',
+        'At a glance',
         `
         <div class="meta-block">
-          ${metaRow('Total drawers', formatNum(om.totalDrawers))}
+          ${metaRow('Drawers', formatNum(om.totalDrawers))}
           ${metaRow('Wings', formatNum(om.wingCount))}
-          ${metaRow('Rooms (taxonomy)', formatNum(om.roomCount))}
-          ${metaRow('Resolved graph edges', formatNum(om.graphEdgeCount))}
-          ${metaRow('Edge types', edgeTypeLine || '—')}
-          ${metaRow('Cross-wing (tunnels)', om.ga.hasResolvableEdges ? formatNum(om.crossWingEdges) : '—')}
-          ${metaRow('Rooms with no graph links', om.ga.hasResolvableEdges ? formatNum(om.roomsWithNoTunnels) : '—')}
-          ${metaRow('Upstream truncation', truncLine || 'none')}
+          ${metaRow('Rooms', formatNum(om.roomCount))}
+          ${metaRow('Resolved connections', formatNum(om.graphEdgeCount))}
+          ${metaRow('Cross-wing links', om.ga.hasResolvableEdges ? formatNum(om.crossWingEdges) : '—')}
+          ${metaRow('Rooms without links', om.ga.hasResolvableEdges ? formatNum(om.roomsWithNoTunnels) : '—')}
         </div>
-        ${completenessLine ? `<p class="inspect-muted inspect-muted--tight">${escapeHtml(completenessLine)}</p>` : ''}
         <p class="inspect-muted inspect-muted--tight">${escapeHtml(kgLine)}</p>
         `,
       )}
       ${inspectSection(
-        'Largest wings',
-        `<div class="inspect-rows">${topWings || '<p class="inspect-empty">No wing counts available.</p>'}</div>`,
+        'Notable wings',
+        `<div class="inspect-rows">${topWings || '<p class="inspect-empty">Wing sizing is unavailable in this snapshot.</p>'}</div>`,
       )}
       ${inspectSection(
-        'Most connected rooms',
-        topRooms || '<p class="inspect-empty">No resolvable tunnel edges, or graph endpoints do not match room names.</p>',
+        'Notable rooms',
+        topRooms || '<p class="inspect-empty">No room-level links are available yet.</p>',
       )}
       ${inspectSection(
-        'Most cross-linked wings',
-        topCross || '<p class="inspect-empty">No cross-wing tunnel edges resolved.</p>',
+        'Cross-wing hotspots',
+        topCross || '<p class="inspect-empty">No cross-wing links were resolved for this snapshot.</p>',
       )}
       ${renderDiscoverySectionOverview(ctx)}
+      ${inspectDisclosure(
+        'Data notes',
+        'Source and completeness details',
+        `
+        <div class="meta-block">
+          ${metaRow('Relationship mix', edgeTypeLine || '—')}
+          ${metaRow('Upstream truncation', truncLine || 'none')}
+        </div>
+        ${completenessLine ? `<p class="inspect-muted inspect-muted--tight">${escapeHtml(completenessLine)}</p>` : '<p class="inspect-muted inspect-muted--tight">No completeness warnings were reported by upstream sources.</p>'}
+        `,
+      )}
       <div class="inspect-card inspect-card--hint">
-        <strong>How to explore</strong>
-        <p class="inspect-muted inspect-muted--tight">Use <kbd>1</kbd>–<kbd>3</kbd> to switch views. Click wings and rooms to drill in; Pin keeps the inspector fixed. Search dims non-matching nodes.</p>
+        <strong>Navigate quickly</strong>
+        <p class="inspect-muted inspect-muted--tight">Use <kbd>1</kbd>–<kbd>3</kbd> to switch views, click any wing or room to drill in, and Pin to keep this panel locked while you move.</p>
       </div>
     </div>`;
 }
@@ -982,12 +1004,12 @@ function renderDiscoverySectionOverview(ctx) {
   const caveatItems = model.caveats.slice(0, 4);
   const caveatLines = caveatItems.map((c) => `<li>${escapeHtml(c)}</li>`).join('');
   return inspectSection(
-    'Discovery (derived)',
-    `<p class="inspect-muted inspect-muted--tight">Analysis from tunnel connectivity degree and optional drawer <strong>recent</strong> timestamps in tunnel rows. Separate from the knowledge graph and from semantic search relevance.</p>
-    <ul class="inspect-list-tight">${caveatLines || '<li class="inspect-muted">No provenance or metadata warnings for this snapshot.</li>'}</ul>
-    <p class="inspect-micro">Strongest tunnel hubs (normalized degree on tunnel connectivity)</p>
-    <div class="inspect-rows">${topHubs || '<p class="inspect-empty">No hub signal (no resolved edges).</p>'}</div>
-    <p class="inspect-muted inspect-muted--tight">Use <strong>Discovery overlays</strong> in Explore to tint room nodes (emissive emphasis only; tunnel topology is unchanged).</p>`,
+    'Discovery signals',
+    `<p class="inspect-muted inspect-muted--tight">Signals are derived from tunnel degree and optional tunnel-row <strong>recent</strong> timestamps. They highlight patterns only; they do not change graph truth.</p>
+    <p class="inspect-micro">Highest hub emphasis</p>
+    <div class="inspect-rows">${topHubs || '<p class="inspect-empty">No hub signal yet because no resolved links were found.</p>'}</div>
+    <ul class="inspect-list-tight">${caveatLines || '<li class="inspect-muted">No provenance or metadata caveats were reported for this snapshot.</li>'}</ul>
+    <p class="inspect-muted inspect-muted--tight">Enable <strong>Discovery overlays</strong> in Explore to tint rooms without changing structure.</p>`,
   );
 }
 
@@ -1015,10 +1037,10 @@ function renderWingInspector(ctx, wingName, _mode) {
 
   const sentence = [
     pctDrawers != null && dr
-      ? `This wing holds ${pctDrawers}% of all drawers and is the ${ordinal(dr.rank)} largest wing by drawer count.`
+      ? `This wing contains ${pctDrawers}% of palace drawers and ranks ${ordinal(dr.rank)} by size.`
       : null,
     pctRooms != null && rr && roomN
-      ? `It ranks ${ordinal(rr.rank)} among wings by room count (${pctRooms}% of all rooms).`
+      ? `${formatNum(roomN)} rooms are listed here (${pctRooms}% of all rooms, ${ordinal(rr.rank)} by room count).`
       : null,
   ]
     .filter(Boolean)
@@ -1093,7 +1115,7 @@ function renderWingInspector(ctx, wingName, _mode) {
 
   const structureExtra =
     roomN === 0
-      ? '<p class="inspect-empty">This wing has no room-level drawer breakdown in taxonomy.</p>'
+      ? '<p class="inspect-empty">This wing is present, but room-level drawer details are not available.</p>'
       : `
       ${metaRow('Rooms listed', formatNum(roomN))}
       ${metaRow('Drawers (wing total)', formatNum(d))}
@@ -1117,36 +1139,37 @@ function renderWingInspector(ctx, wingName, _mode) {
         ${pctDrawers != null ? `<div class="inspect-pct"><span>${pctDrawers}% of palace drawers</span>${pctBar(pctDrawers)}</div>` : ''}
       </div>
       ${inspectSection(
-        'Summary',
+        'Why it matters',
         `
         <div class="meta-block">
-          ${metaRow('Drawer count', formatNum(d))}
-          ${metaRow('Rank by drawers', dr ? `${ordinal(dr.rank)} of ${wingDrawerRank.length}` : '—')}
+          ${metaRow('Drawers', formatNum(d))}
+          ${metaRow('Size rank', dr ? `${ordinal(dr.rank)} of ${wingDrawerRank.length}` : '—')}
           ${metaRow('Rooms', formatNum(roomN))}
-          ${metaRow('Rank by room count', rr ? `${ordinal(rr.rank)} of ${roomRankList.length}` : '—')}
+          ${metaRow('Room-count rank', rr ? `${ordinal(rr.rank)} of ${roomRankList.length}` : '—')}
         </div>`,
       )}
-      ${inspectSection('Structure', `<div class="meta-block">${structureExtra}</div>`)}
       ${inspectSection(
-        'Connections',
+        'Key relationships',
         ga.hasResolvableEdges
           ? `<div class="meta-block">
-          ${metaRow('Edge types (global)', formatRelationshipTypeCounts(wFull.byType) || '—')}
-          ${ctx.graphFilterNarrowed ? metaRow('Edge types (visible)', formatRelationshipTypeCounts(wVis.byType) || '—') : ''}
-          ${ctx.graphFilterNarrowed ? metaRow('Cross-wing touches (visible)', formatNum(wVis.crossWingTouches)) : ''}
+          ${metaRow('Relationship mix', formatRelationshipTypeCounts(wFull.byType) || '—')}
+          ${ctx.graphFilterNarrowed ? metaRow('Relationship mix (visible)', formatRelationshipTypeCounts(wVis.byType) || '—') : ''}
+          ${ctx.graphFilterNarrowed ? metaRow('Cross-wing links (visible)', formatNum(wVis.crossWingTouches)) : ''}
         </div>
         ${wingRelNarrative ? `<p class="inspect-muted inspect-muted--tight">${escapeHtml(wingRelNarrative)}</p>` : ''}
-        ${externalBlock || `<p class="inspect-empty">No cross-wing tunnel relationships touch this wing.</p>`}
-             ${topByCross ? `<p class="inspect-micro">Rooms with cross-wing links (global)</p><div class="inspect-rows">${topByCross}</div>` : ''}`
-          : '<p class="inspect-empty">No tunnel relationships could be resolved against taxonomy rooms.</p>',
+        ${externalBlock || `<p class="inspect-empty">No cross-wing links touch this wing in the current graph.</p>`}
+             ${topByCross ? `<p class="inspect-micro">Rooms with the most cross-wing links</p><div class="inspect-rows">${topByCross}</div>` : ''}`
+          : '<p class="inspect-empty">No resolvable room links were found for this wing.</p>',
       )}
       ${inspectSection(
-        'Related rooms',
+        'Top rooms',
         `<p class="inspect-micro">Largest by drawers</p><div class="inspect-rows">${topByDrawers.join('')}</div>
-         ${topByDeg ? `<p class="inspect-micro">Most connected (tunnels)</p><div class="inspect-rows">${topByDeg}</div>` : '<p class="inspect-empty">No graph degree for rooms in this wing.</p>'}`,
+         ${topByDeg ? `<p class="inspect-micro">Most connected by links</p><div class="inspect-rows">${topByDeg}</div>` : '<p class="inspect-empty">No connectivity ranking is available for rooms in this wing.</p>'}`,
       )}
-      ${inspectSection(
-        'Structural readout (tunnels)',
+      ${inspectSection('Useful stats', `<div class="meta-block">${structureExtra}</div>`)}
+      ${inspectDisclosure(
+        'Diagnostics',
+        'Advanced structural note',
         `<p class="inspect-muted">${escapeHtml(
           ga.topCrossLinkedWings[0]?.wing === wingName
             ? 'This wing is among the most cross-linked in the tunnel graph.'
@@ -1178,9 +1201,9 @@ function renderRoomInspector(ctx, wingName, roomName, _mode) {
 
   const sentence = [
     rr && pctWing != null
-      ? `This room is the ${ordinal(rr.rank)} largest in “${wingName}” by drawers and holds about ${pctWing}% of that wing’s drawers (by room list).`
+      ? `${roomName} is the ${ordinal(rr.rank)} largest room in ${wingName} and holds about ${pctWing}% of the wing's drawers.`
       : null,
-    pctPalace != null ? `It is ${pctPalace}% of the entire palace by drawers.` : null,
+    pctPalace != null ? `It accounts for ${pctPalace}% of the full palace.` : null,
   ]
     .filter(Boolean)
     .join(' ');
@@ -1243,8 +1266,8 @@ function renderRoomInspector(ctx, wingName, roomName, _mode) {
 
   const bridgeNote =
     slice && slice.isBridge
-      ? 'Acts as a bridge: at least one cross-wing tunnel edge is incident to this room.'
-      : 'No bridge pattern detected (no cross-wing edges on this room).';
+      ? 'Acts as a bridge with at least one cross-wing link.'
+      : 'No cross-wing bridge pattern is present for this room.';
 
   const tunnelMeta = collectTunnelRowMeta(roomKey, edgesResolved);
   const hasTunnelMeta =
@@ -1270,16 +1293,17 @@ function renderRoomInspector(ctx, wingName, roomName, _mode) {
   const miningInner =
     hubW != null || actW != null
       ? `<div class="meta-block">
-          ${hubW != null ? metaRow('Hub emphasis (normalized degree)', `${(hubW * 100).toFixed(0)}%`) : ''}
-          ${actW != null ? metaRow('Recency emphasis (parseable recent)', `${(actW * 100).toFixed(0)}%`) : ''}
+          ${hubW != null ? metaRow('Hub emphasis', `${(hubW * 100).toFixed(0)}%`) : ''}
+          ${actW != null ? metaRow('Recency emphasis', `${(actW * 100).toFixed(0)}%`) : ''}
         </div>
-        ${actW != null ? '<p class="inspect-muted inspect-muted--tight">Recency ranks only among rooms with parseable tunnel-row <strong>recent</strong> values; others are omitted from the scale.</p>' : ''}
-        <p class="inspect-muted inspect-muted--tight">For 3D overlays only; does not add edges or change tunnel truth.</p>`
-      : '<p class="inspect-empty">No derived hub/recency scores for this room in the current snapshot.</p>';
-  const miningBlock = inspectSection('Discovery signals (derived)', miningInner);
+        ${actW != null ? '<p class="inspect-muted inspect-muted--tight">Recency is computed only for rooms with parseable tunnel-row <strong>recent</strong> values.</p>' : ''}
+        <p class="inspect-muted inspect-muted--tight">Discovery signals affect overlays only; they never add links.</p>`
+      : '<p class="inspect-empty">No derived discovery signal is available for this room in the current snapshot.</p>';
+  const miningBlock = inspectDisclosure('Discovery signals', 'Derived overlays', miningInner);
 
-  const traverseBlock = inspectSection(
-    'Palace traverse (MCP)',
+  const traverseBlock = inspectDisclosure(
+    'MCP traverse',
+    'Query neighbors from MemPalace',
     `<p class="inspect-muted inspect-muted--tight">Uses <code>mempalace_traverse</code> with <code>start_room</code> = <strong>${escapeHtml(
       roomName,
     )}</strong> (room name key in palace graph).</p>
@@ -1365,54 +1389,54 @@ function renderRoomInspector(ctx, wingName, roomName, _mode) {
         ${pctWing != null ? `<div class="inspect-pct"><span>${pctWing}% of wing drawers (room list)</span>${pctBar(pctWing)}</div>` : ''}
       </div>
       ${inspectSection(
-        'Summary',
+        'Why it matters',
         `
         <div class="meta-block">
-          ${metaRow('Parent wing', escapeHtml(wingName))}
+          ${metaRow('Wing', escapeHtml(wingName))}
           ${metaRow('Drawers', drawers != null ? formatNum(drawers) : '—')}
           ${metaRow('Share of palace', pctPalace != null ? `${pctPalace}%` : '—')}
         </div>`,
       )}
       ${inspectSection(
-        'Position in wing',
+        'Position',
         rooms.length
           ? `
         <div class="meta-block">
-          ${metaRow('Rank in wing (by drawers)', rr ? `${ordinal(rr.rank)} of ${ranked.length}` : '—')}
-          ${metaRow('Wing avg drawers / room', wingAvg != null ? wingAvg.toFixed(1) : '—')}
-          ${metaRow('vs average', cmp)}
+          ${metaRow('Rank in wing', rr ? `${ordinal(rr.rank)} of ${ranked.length}` : '—')}
+          ${metaRow('Wing average drawers', wingAvg != null ? wingAvg.toFixed(1) : '—')}
+          ${metaRow('Compared with wing average', cmp)}
         </div>`
-          : '<p class="inspect-empty">This wing has no room-level drawer breakdown.</p>',
+          : '<p class="inspect-empty">Room-level drawer breakdown is not available for this wing.</p>',
       )}
       ${inspectSection(
-        'Connections',
+        'Key relationships',
         graphAvailable && slice
           ? `
         <div class="meta-block">
-          ${metaRow(ctx.graphFilterNarrowed ? 'Degree (visible)' : 'Degree (global)', formatNum(visRoomInc.degree))}
-          ${ctx.graphFilterNarrowed ? metaRow('Degree (global)', formatNum(fullRoomInc.degree)) : ''}
-          ${metaRow(ctx.graphFilterNarrowed ? 'Cross-wing (visible)' : 'Cross-wing links', formatNum(visRoomInc.crossWingLinks))}
-          ${ctx.graphFilterNarrowed ? metaRow('Cross-wing (global)', formatNum(fullRoomInc.crossWingLinks)) : ''}
-          ${metaRow(ctx.graphFilterNarrowed ? 'Intra-wing (visible)' : 'Intra-wing links', formatNum(visRoomInc.intraWingLinks))}
-          ${ctx.graphFilterNarrowed ? metaRow('Intra-wing (global)', formatNum(fullRoomInc.intraWingLinks)) : ''}
-          ${metaRow('Relationship mix (global)', formatRelationshipTypeCounts(fullRoomInc.byType) || '—')}
+          ${metaRow(ctx.graphFilterNarrowed ? 'Links (visible)' : 'Links', formatNum(visRoomInc.degree))}
+          ${ctx.graphFilterNarrowed ? metaRow('Links (global)', formatNum(fullRoomInc.degree)) : ''}
+          ${metaRow(ctx.graphFilterNarrowed ? 'Cross-wing links (visible)' : 'Cross-wing links', formatNum(visRoomInc.crossWingLinks))}
+          ${ctx.graphFilterNarrowed ? metaRow('Cross-wing links (global)', formatNum(fullRoomInc.crossWingLinks)) : ''}
+          ${metaRow(ctx.graphFilterNarrowed ? 'Intra-wing links (visible)' : 'Intra-wing links', formatNum(visRoomInc.intraWingLinks))}
+          ${ctx.graphFilterNarrowed ? metaRow('Intra-wing links (global)', formatNum(fullRoomInc.intraWingLinks)) : ''}
+          ${metaRow('Relationship mix', formatRelationshipTypeCounts(fullRoomInc.byType) || '—')}
           ${ctx.graphFilterNarrowed ? metaRow('Relationship mix (visible)', formatRelationshipTypeCounts(visRoomInc.byType) || '—') : ''}
-          ${metaRow('Median degree (all rooms)', slice.medianDegree != null ? formatNum(slice.medianDegree) : '—')}
+          ${metaRow('Median links (all rooms)', slice.medianDegree != null ? formatNum(slice.medianDegree) : '—')}
         </div>
         ${relMixNote ? `<p class="inspect-muted inspect-muted--tight">${escapeHtml(relMixNote)}</p>` : ''}
         <p class="inspect-muted inspect-muted--tight">${escapeHtml(bridgeNote)}</p>
-        ${relRoomRows ? `<p class="inspect-micro">Related rooms (global graph)</p><div class="inspect-rows">${relRoomRows}</div>` : `<p class="inspect-empty">No tunnel neighbors found for this room.</p>${
+        ${relRoomRows ? `<p class="inspect-micro">Closest related rooms</p><div class="inspect-rows">${relRoomRows}</div>` : `<p class="inspect-empty">No neighboring links were found for this room.</p>${
           graphAvailable ? `<p class="inspect-muted inspect-muted--tight">${escapeHtml(roomWithNoTunnelNeighborsGuidance())}</p>` : ''
         }`}
-        ${relWingRows ? `<p class="inspect-micro">Related wings (global graph)</p><div class="inspect-rows">${relWingRows}</div>` : ''}
+        ${relWingRows ? `<p class="inspect-micro">Connected wings</p><div class="inspect-rows">${relWingRows}</div>` : ''}
         `
           : `<p class="inspect-empty">${escapeHtml(connectionsSectionNoExplicitEdgesLine())}</p>`,
       )}
-      ${hasTunnelMeta ? inspectSection('Tunnel metadata', tunnelMetaInner) : ''}
+      ${hasTunnelMeta ? inspectDisclosure('Tunnel metadata', 'Raw tunnel-row fields', tunnelMetaInner) : ''}
       ${miningBlock}
       ${traverseBlock}
       ${inspectSection(
-        'Structural insight (taxonomy + tunnels)',
+        'Structural read',
         `<p class="insight-chip">${escapeHtml(insight.label)}</p><p class="inspect-muted inspect-muted--tight">${escapeHtml(insight.detail)}</p>`,
       )}
     </div>`;
@@ -2520,10 +2544,10 @@ function renderInspector() {
   const badge = $('inspect-mode-badge');
   if (badge) {
     const labels = {
-      empty: 'Nothing selected',
-      live: 'Live preview',
+      empty: 'Overview',
+      live: 'Preview',
       selected: 'Selected',
-      pinned: 'Pinned',
+      pinned: 'Pinned context',
       graphFocus: 'Graph focus',
     };
     badge.textContent = labels[mode];
@@ -2549,8 +2573,8 @@ function renderInspector() {
         graphNote +
         `
         <div class="empty-state">
-          <strong>Hover a node</strong>
-          <p>Move the pointer over the scene for a quick preview, or select a wing or room.</p>
+          <strong>Choose a place to inspect</strong>
+          <p>Hover for a quick preview, or select a wing or room to lock a full readout.</p>
         </div>`;
     }
     updateFooterContextLine(null, ctx);
@@ -2570,7 +2594,7 @@ function renderInspector() {
   } else if (t.type === 'room') {
     body.innerHTML = strip + graphNote + renderRoomInspector(ctx, t.wing, t.name, mode);
   } else {
-    body.innerHTML = strip + graphNote + `<div class="inspect-card"><p class="inspect-muted">Unknown node type.</p></div>`;
+    body.innerHTML = strip + graphNote + `<div class="inspect-card"><p class="inspect-muted">This selection type is not supported in the inspector yet.</p></div>`;
   }
   updateFooterContextLine(t, ctx);
   assertGraphBackInvariant({
