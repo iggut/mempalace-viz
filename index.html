@@ -66,7 +66,7 @@
       </header>
 
       <div class="app-main" id="app-main-grid">
-        <nav class="panel panel--left" id="panel-left" aria-label="Explore and scene controls">
+        <nav class="panel panel--left" id="panel-left" aria-label="Explore, memory chat, and scene controls">
           <div class="panel-header">
             <span id="panel-left-title">Explore</span>
             <button
@@ -81,6 +81,34 @@
             </button>
           </div>
           <div class="panel-body" id="panel-left-body">
+            <div class="panel-left-modes" role="tablist" aria-label="Left panel mode">
+              <button
+                type="button"
+                id="btn-panel-left-explore"
+                class="panel-left-mode-btn"
+                role="tab"
+                aria-selected="true"
+                aria-controls="panel-left-explore-pane"
+              >
+                Explore
+              </button>
+              <button
+                type="button"
+                id="btn-panel-left-memchat"
+                class="panel-left-mode-btn"
+                role="tab"
+                aria-selected="false"
+                aria-controls="panel-left-memchat-pane"
+              >
+                Memory chat
+              </button>
+            </div>
+            <div
+              id="panel-left-explore-pane"
+              class="panel-left-pane panel-left-pane--explore"
+              role="tabpanel"
+              aria-labelledby="btn-panel-left-explore"
+            >
             <div class="search-wrap">
               <label id="search-wings-label" class="search-label" for="search-wings">Filter wings and rooms</label>
               <input
@@ -194,6 +222,80 @@
               <button type="button" id="btn-reset-cam" class="btn btn--ghost" title="Reset camera (shortcut R)">
                 Reset camera
               </button>
+            </div>
+            </div>
+
+            <div
+              id="panel-left-memchat-pane"
+              class="panel-left-pane panel-left-pane--memchat"
+              role="tabpanel"
+              aria-labelledby="btn-panel-left-memchat"
+              hidden
+            >
+              <p class="hint-row memchat-lead">
+                Ask questions grounded in your palace drawers. Uses the same semantic search as Explore, then sends evidence to
+                your <strong>local OpenAI-compatible</strong> endpoint — keys stay in this browser.
+              </p>
+              <details class="memchat-details" id="memchat-settings-details" open>
+                <summary class="memchat-details__summary">Local model settings</summary>
+                <div class="memchat-settings-body">
+                  <p class="hint-row memchat-helper">
+                    Use a local OpenAI-compatible endpoint (LM Studio, llama.cpp server, Open WebUI, etc.). Examples:
+                    <code>http://127.0.0.1:1234/v1</code> or <code>http://127.0.0.1:8080/v1</code>
+                  </p>
+                  <label class="search-label" for="memchat-endpoint">Endpoint URL</label>
+                  <input
+                    id="memchat-endpoint"
+                    class="search-input"
+                    type="url"
+                    inputmode="url"
+                    autocomplete="off"
+                    spellcheck="false"
+                    placeholder="http://127.0.0.1:1234/v1"
+                  />
+                  <label class="search-label search-label--secondary" for="memchat-apikey">API key (optional)</label>
+                  <input
+                    id="memchat-apikey"
+                    class="search-input"
+                    type="password"
+                    autocomplete="off"
+                    spellcheck="false"
+                    placeholder="Leave blank if your server allows unauthenticated access"
+                  />
+                  <label class="search-label search-label--secondary" for="memchat-model">Model name (optional)</label>
+                  <input
+                    id="memchat-model"
+                    class="search-input"
+                    type="text"
+                    autocomplete="off"
+                    spellcheck="false"
+                    placeholder="e.g. local-model — omit to let the server default"
+                  />
+                  <div class="memchat-settings-actions">
+                    <button type="button" class="btn btn--ghost btn--sm" id="memchat-test">Test connection</button>
+                    <button type="button" class="btn btn--ghost btn--sm" id="memchat-save-config">Save</button>
+                    <button type="button" class="btn btn--ghost btn--sm" id="memchat-reset-config">Reset</button>
+                  </div>
+                  <p id="memchat-config-status" class="memchat-config-status" role="status" aria-live="polite"></p>
+                </div>
+              </details>
+              <div id="memchat-messages" class="memchat-messages" role="log" aria-label="Memory chat messages"></div>
+              <div class="memchat-compose">
+                <label class="search-label" for="memchat-input">Message</label>
+                <textarea
+                  id="memchat-input"
+                  class="memchat-input"
+                  rows="3"
+                  placeholder="e.g. What do my notes say about…"
+                  aria-label="Chat message"
+                ></textarea>
+                <div class="memchat-compose-actions">
+                  <button type="button" class="btn" id="memchat-send">Send</button>
+                  <button type="button" class="btn btn--ghost" id="memchat-stop" disabled>Stop</button>
+                  <button type="button" class="btn btn--ghost" id="memchat-clear">Clear conversation</button>
+                </div>
+                <p id="memchat-send-status" class="memchat-send-status" role="status" aria-live="polite"></p>
+              </div>
             </div>
           </div>
         </nav>

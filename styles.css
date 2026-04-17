@@ -2921,3 +2921,309 @@ kbd {
     padding: 8px 14px;
   }
 }
+
+/* ----------------------------------------------------------------
+ * Left panel: Explore vs Memory chat
+ * ----------------------------------------------------------------*/
+.panel-left-modes {
+  display: flex;
+  gap: 6px;
+  margin: -4px 0 10px;
+  padding: 0;
+}
+
+.panel-left-mode-btn {
+  flex: 1;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--hairline);
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 0.76rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition:
+    color var(--transition-fast),
+    border-color var(--transition-fast),
+    background var(--transition-fast);
+}
+
+.panel-left-mode-btn[aria-selected='true'] {
+  color: var(--text);
+  border-color: var(--border-strong);
+  background: var(--surface-1);
+  box-shadow: 0 0 0 1px var(--accent-soft);
+}
+
+.panel-left-mode-btn:hover {
+  color: var(--text);
+  border-color: var(--border);
+}
+
+.panel-left-pane--explore {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-height: 0;
+}
+
+.panel-left-pane--memchat {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  flex: 1;
+}
+
+.memchat-lead {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.memchat-details {
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+  background: rgba(8, 12, 20, 0.35);
+  padding: 0;
+}
+
+.memchat-details__summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 8px 10px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.memchat-details__summary::-webkit-details-marker {
+  display: none;
+}
+
+.memchat-details__summary::before {
+  content: '▸';
+  display: inline-block;
+  margin-right: 6px;
+  transition: transform var(--transition-fast);
+}
+
+.memchat-details[open] .memchat-details__summary::before {
+  transform: rotate(90deg);
+}
+
+.memchat-settings-body {
+  padding: 0 10px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.memchat-helper {
+  margin: 0;
+  font-size: 0.72rem;
+}
+
+.memchat-helper code {
+  font-size: 0.68rem;
+  color: var(--accent-bright);
+}
+
+.memchat-settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.memchat-config-status {
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  min-height: 1.2em;
+}
+
+.memchat-messages {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: min(42vh, 420px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+  padding: 10px;
+  background: rgba(5, 8, 14, 0.45);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  -webkit-overflow-scrolling: touch;
+}
+
+.memchat-msg {
+  margin-bottom: 12px;
+  max-width: 100%;
+}
+
+.memchat-msg--user {
+  align-self: flex-end;
+  max-width: 95%;
+}
+
+.memchat-msg:last-child {
+  margin-bottom: 0;
+}
+
+.memchat-msg__bubble {
+  display: inline-block;
+  max-width: 100%;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 0.82rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.memchat-msg--user .memchat-msg__bubble {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+.memchat-msg--assistant {
+  align-self: stretch;
+}
+
+.memchat-msg__bubble--assistant {
+  background: linear-gradient(180deg, rgba(30, 40, 62, 0.55), rgba(18, 24, 38, 0.5));
+  border: 1px solid rgba(143, 169, 255, 0.12);
+  color: var(--text);
+}
+
+.memchat-msg__err {
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(239, 122, 122, 0.35);
+  background: rgba(60, 20, 20, 0.25);
+  color: var(--danger);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.memchat-msg__sources {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--hairline);
+}
+
+.memchat-msg__sources-title {
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+}
+
+.memchat-sources-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.memchat-source-card {
+  padding: 10px;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--hairline);
+  background: rgba(12, 16, 26, 0.5);
+}
+
+.memchat-source-card__meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.memchat-source-card__loc {
+  font-weight: 600;
+  color: var(--teal);
+}
+
+.memchat-source-card__id code {
+  font-size: 0.68rem;
+  color: var(--accent-bright);
+}
+
+.memchat-source-card__excerpt {
+  margin: 6px 0 8px;
+  font-size: 0.72rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.memchat-source-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.memchat-sources-empty {
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--text-dim);
+}
+
+.memchat-compose {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  flex-shrink: 0;
+}
+
+.memchat-input {
+  width: 100%;
+  resize: vertical;
+  min-height: 72px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--hairline);
+  background: rgba(12, 16, 26, 0.65);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.memchat-input:focus {
+  outline: none;
+  border-color: var(--accent-ring);
+  box-shadow: 0 0 0 1px var(--accent-soft);
+}
+
+.memchat-compose-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.memchat-send-status {
+  margin: 6px 0 0;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  min-height: 1.2em;
+}
+
+#panel-left.panel--collapsed .panel-left-modes,
+#panel-left.panel--collapsed .panel-left-pane {
+  display: none;
+}

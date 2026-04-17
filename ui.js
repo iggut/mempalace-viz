@@ -112,6 +112,7 @@ import {
   normalizeGetDrawerPayload,
   normalizeListDrawersPayload,
 } from './content-inspector.js';
+import { initMemoriesChat } from './memories-chat-ui.js';
 
 const LS_KEY = 'mempalace-viz-explorer-v1';
 const ROUTE_MODE_LS_KEY = 'mempalace-viz-route-mode-v1';
@@ -3850,6 +3851,12 @@ function wireControls() {
   wireSemanticSearch();
   wireMemoryLens();
   wireMiningOverlay();
+
+  initMemoriesChat({
+    navigateToRoom: (wing, room) => selectRoomFromInspector(wing, room),
+    openDrawerInRoom: (drawerId) => roomContentOpenDrawer(drawerId),
+    ensureInspectorVisible: () => setPanelCollapsed('right', false),
+  });
 
   $('graph-view-extras')?.addEventListener('click', (e) => {
     const btn = e.target.closest('[data-rel-type]');
