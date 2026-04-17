@@ -217,6 +217,8 @@ export function createPalaceScene(container, options = {}) {
   let pointerRafId = 0;
   let resizeRafId = 0;
   let resizeObserver = null;
+  let lastResizeW = 0;
+  let lastResizeH = 0;
 
   /** World-space squared; ignores float noise but catches real orbit/pan camera motion during the gesture. */
   const CAMERA_MOVE_EPS_SQ = 2.5e-5;
@@ -1234,17 +1236,17 @@ export function createPalaceScene(container, options = {}) {
       mat.emissiveIntensity = targetEmissive;
       entry.presentationEmissive = targetEmissive;
 
+      // Hover uses emissive/opacity only — scaling the sphere on hover caused visible twitch
+      // and feedback with layout/raycast. Selection and route still get modest scale cues.
       const emphasis =
         id === sid
           ? pin
             ? 1.18
             : 1.14
           : id === hid
-            ? sid && id !== sid
-              ? 1.05
-              : 1.08
+            ? 1
             : nbrFocus?.has(id)
-              ? 1.035
+              ? 1.02
               : 1;
       const dimScale = match ? 1 : 0.88;
       mesh.scale.setScalar(emphasis * dimScale * routeScale);
@@ -1667,7 +1669,6 @@ export function createPalaceScene(container, options = {}) {
       moveThresholdPx: pointerMoveThresholdPx(pointerGesture.pointerType),
       pointerType: pointerGesture.pointerType,
       cameraMoveEpsSq: CAMERA_MOVE_EPS_SQ,
-      cameraInteractionActive,
     });
     if (!release.shouldSelect) return;
 
@@ -1885,6 +1886,9 @@ export function createPalaceScene(container, options = {}) {
     const w = container.clientWidth;
     const h = container.clientHeight;
     if (w === 0 || h === 0) return;
+    if (w === lastResizeW && h === lastResizeH) return;
+    lastResizeW = w;
+    lastResizeH = h;
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
     // FRAGILE: pass `true` (updateStyle) so the canvas' CSS size tracks the

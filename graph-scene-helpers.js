@@ -321,6 +321,9 @@ export function pointerMoveThresholdPx(pointerType) {
 
 /**
  * Canonical pointer release classification for select vs drag/pan.
+ * OrbitControls dispatches `start` on mousedown before any movement, so a
+ * `cameraInteractionActive` flag tied to that event would block every click.
+ * Real orbit drags are distinguished by `cameraMovedSq` and pointer movement.
  * @param {{
  *  maxMoveSq: number,
  *  cameraMovedSq: number,
@@ -329,14 +332,11 @@ export function pointerMoveThresholdPx(pointerType) {
  *  cameraMoveEpsSq?: number,
  *  cameraInteractionActive?: boolean,
  * }} p
- * @returns {{ shouldSelect: boolean, reason: 'click'|'pointer-drag'|'camera-drag'|'camera-interaction' }}
+ * @returns {{ shouldSelect: boolean, reason: 'click'|'pointer-drag'|'camera-drag' }}
  */
 export function classifyPointerRelease(p) {
   const moveThresholdPx = p.moveThresholdPx ?? pointerMoveThresholdPx(p.pointerType);
   const cameraMoveEpsSq = p.cameraMoveEpsSq ?? 2.5e-5;
-  if (p.cameraInteractionActive) {
-    return { shouldSelect: false, reason: 'camera-interaction' };
-  }
   const movedPx = Math.sqrt(Math.max(0, p.maxMoveSq || 0));
   if (movedPx > moveThresholdPx) {
     return { shouldSelect: false, reason: 'pointer-drag' };

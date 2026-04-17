@@ -508,6 +508,7 @@ a {
 .canvas-column {
   position: relative;
   min-width: 0;
+  min-height: 0;
   background:
     radial-gradient(ellipse 85% 60% at 50% 42%, rgba(60, 100, 170, 0.07), transparent 60%),
     radial-gradient(ellipse 50% 50% at 50% 100%, rgba(10, 14, 22, 0.72), transparent 70%);
@@ -630,8 +631,33 @@ a {
 .panel-body {
   padding: 12px 14px 16px;
   overflow-y: auto;
+  overflow-x: hidden;
   flex: 1;
+  min-height: 0;
   font-size: 0.82rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+/* Keep inspector / explore content from stretching the grid row — scroll inside panels. */
+#panel-left .panel-body,
+#panel-right .panel-body {
+  min-height: 0;
+}
+
+#inspect-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+#panel-right .inspector-toolbar,
+#panel-right .breadcrumb,
+#panel-right .memory-lens {
+  flex-shrink: 0;
 }
 
 /* Edge tabs for restoring collapsed panels */
@@ -1128,6 +1154,33 @@ input[type="radio"] {
   border-radius: var(--radius);
   border: 1px solid var(--hairline);
   background: var(--surface-1);
+}
+
+.graph-mode-intro {
+  margin: 0 0 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.graph-mode-intro__title {
+  margin: 0 0 6px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent-bright);
+}
+
+.graph-mode-intro__body {
+  margin: 0;
+  font-size: 0.74rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.graph-mode-intro__body strong {
+  color: var(--text);
+  font-weight: 600;
 }
 
 .graph-rel-toolbar {
@@ -1789,6 +1842,7 @@ input[type="radio"] {
   justify-content: space-between;
   padding: 7px 22px;
   min-height: var(--footer-h);
+  flex-shrink: 0;
   border-top: 1px solid var(--hairline);
   background: linear-gradient(0deg, rgba(9, 13, 20, 0.64), rgba(9, 13, 20, 0.2));
   backdrop-filter: blur(16px) saturate(130%);
@@ -1823,6 +1877,8 @@ input[type="radio"] {
   color: var(--text-dim);
   line-height: 1.4;
   max-width: 72ch;
+  max-height: 3.2em;
+  overflow: hidden;
 }
 
 .metric--context .metric__v {

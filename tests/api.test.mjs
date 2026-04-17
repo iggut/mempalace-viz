@@ -1,6 +1,17 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { normalizePalaceBundle } from '../api.js';
+import { createApiUrl, fetchSemanticSearch, normalizePalaceBundle } from '../api.js';
+
+test('createApiUrl builds absolute URLs (no empty-base Invalid URL)', () => {
+  const u = createApiUrl('/api/search');
+  assert.match(u.href, /\/api\/search$/);
+  assert.ok(u.href.startsWith('http://localhost:8767') || u.href.includes('://'));
+});
+
+test('fetchSemanticSearch rejects empty query without URL constructor errors', async () => {
+  await assert.rejects(() => fetchSemanticSearch('   '), /empty/i);
+  await assert.rejects(() => fetchSemanticSearch(''), /empty/i);
+});
 
 test('normalizePalaceBundle exposes graph.edgesResolved and overviewStats', () => {
   const bundle = normalizePalaceBundle({

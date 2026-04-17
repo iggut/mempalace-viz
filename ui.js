@@ -17,6 +17,7 @@ import {
   fetchDiaryRead,
   fetchCheckDuplicate,
 } from './api.js';
+import { hoverTargetKey, shouldUpdateInspectorOnHover } from './ui-hover-policy.js';
 import { makeRoomId, parseRoomId } from './canonical.js';
 import {
   buildPalaceMiningModel,
@@ -113,7 +114,11 @@ let miningOverlayMode = 'off';
 const VIEWS = [
   { id: 'wings', title: 'Wings', hint: 'High-level structure by domain or project.' },
   { id: 'rooms', title: 'Rooms', hint: 'Rooms within each wing, orbiting their parent.' },
-  { id: 'graph', title: 'Graph', hint: 'Explicit MemPalace tunnel links (same room name across wings).' },
+  {
+    id: 'graph',
+    title: 'Graph',
+    hint: 'Relationship view: explicit MCP tunnel edges between rooms (not the same as folder layout in Wings/Rooms).',
+  },
 ];
 
 /** Canonical app state — single source of truth for navigation & selection */
@@ -160,6 +165,9 @@ let traversePreviewByRoom = {};
 let semanticSearchDebounce = null;
 /** @type {Array<{ wing: string, room: string, similarity: number, preview: string }>} */
 let semanticSearchHits = [];
+
+/** Dedupe hover-driven inspector refreshes (see `ui-hover-policy.js`). */
+let lastInspectorHoverKey = '';
 
 /**
  * Graph route (room → room) — 3D path highlight + inspector context.
@@ -1323,7 +1331,8 @@ function renderRoomInspector(ctx, wingName, roomName, _mode) {
 
   const graphViewNote =
     appState.view === 'graph'
-      ? '<p class="inspect-muted inspect-muted--tight">Graph view: layout is force-directed; tunnel metrics match the same resolved edges as Rooms/Wings.</p>'
+      ? `<p class="inspect-muted inspect-muted--tight"><strong>Relationship view.</strong> Lines are resolved MCP tunnel edges (declared links between rooms). Brightness and the inspector below describe this room’s neighborhood — not wing/folder hierarchy.</p>
+        <p class="inspect-muted inspect-muted--tight">Use <kbd>[</kbd> / <kbd>]</kbd> to step linked rooms, <kbd>U</kbd> for prior focus, and <strong>Frame neighborhood</strong> in Explore to re-center the camera.</p>`
       : '';
 
   const sceneRoomId = `room:${wingName}:${roomName}`;
@@ -2491,6 +2500,7 @@ function goAllWings() {
   appState.currentRoom = null;
   appState.selected = null;
   appState.pinned = false;
+  lastInspectorHoverKey = '';
   sceneApi?.setView('wings', null);
   syncScenePresentation();
   setActiveViewButtons();
@@ -2510,6 +2520,7 @@ function navigateToWing(wing) {
   appState.view = 'rooms';
   appState.selected = null;
   appState.pinned = false;
+  lastInspectorHoverKey = '';
   sceneApi?.setView('rooms', wing);
   syncScenePresentation();
   setActiveViewButtons();
@@ -2705,6 +2716,7 @@ function applyView(view) {
     graphFocusHistory.length = 0;
     clearGraphRoute();
   }
+  lastInspectorHoverKey = '';
   appState.view = view;
   if (view === 'wings') {
     appState.currentWing = null;
@@ -2712,7 +2724,10 @@ function applyView(view) {
   }
   if (view === 'graph' && !sessionStorage.getItem('mempalace-graph-enter-hint')) {
     sessionStorage.setItem('mempalace-graph-enter-hint', '1');
-    showToast('Graph: drag to orbit · click spheres to focus · [ ] step links · U prior focus', 7000);
+    showToast(
+      'Graph = tunnel links between rooms. Drag to orbit · click a node to lock the inspector · [ ] steps along links · U back · Wings/Rooms for folder layout.',
+      8500,
+    );
   }
   const focusWing = view === 'rooms' ? appState.currentWing : null;
   sceneApi?.setView(view, focusWing);
@@ -2740,6 +2755,7 @@ function clearSelection() {
   appState.selected = null;
   appState.currentRoom = null;
   appState.pinned = false;
+  lastInspectorHoverKey = '';
   syncScenePresentation();
   renderInspector();
   persistState();
@@ -2751,6 +2767,7 @@ function handleSceneClick(ud) {
     if (!appState.pinned) {
       appState.selected = null;
       appState.currentRoom = null;
+      lastInspectorHoverKey = '';
     }
     syncScenePresentation();
     renderInspector();
@@ -2849,7 +2866,11 @@ function setupScene() {
           appState.hovered = null;
           fillHoverCard(null);
           positionHoverCard(0, 0, false);
-          renderInspector();
+          const nextKey = '';
+          if (shouldUpdateInspectorOnHover(!!appState.selected, lastInspectorHoverKey, nextKey)) {
+            lastInspectorHoverKey = nextKey;
+            renderInspector();
+          }
           return;
         }
         if (shouldIgnoreHover()) {
@@ -2858,7 +2879,16 @@ function setupScene() {
           return;
         }
         appState.hovered = { ...data };
-        renderInspector();
+        const hk = hoverTargetKey(data);
+        if (appState.selected) {
+          fillHoverCard(data);
+          positionHoverCard(px, py, true);
+          return;
+        }
+        if (shouldUpdateInspectorOnHover(false, lastInspectorHoverKey, hk)) {
+          lastInspectorHoverKey = hk;
+          renderInspector();
+        }
         fillHoverCard(data);
         positionHoverCard(px, py, true);
       },

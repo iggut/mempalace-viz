@@ -309,8 +309,8 @@ test('classifyPointerRelease handles click, drag, pan and jitter tolerance', () 
       moveThresholdPx: 8,
       cameraMoveEpsSq: 0.001,
       cameraInteractionActive: true,
-    }).reason,
-    'camera-interaction',
+    }).shouldSelect,
+    true,
   );
 });
 

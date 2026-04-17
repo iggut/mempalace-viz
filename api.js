@@ -30,6 +30,21 @@ export function getApiBase() {
   return 'http://localhost:8767';
 }
 
+/**
+ * Build an absolute URL for same-origin `/api/...` fetches. Required because
+ * `new URL('/api/x')` without a base throws; `new URL('' + '/api/x')` also throws when base is empty.
+ * @param {string} pathname - begins with `/`, e.g. `/api/search`
+ */
+export function createApiUrl(pathname) {
+  const p = pathname.startsWith('/') ? pathname : `/${pathname}`;
+  if (typeof globalThis !== 'undefined' && globalThis.location?.origin) {
+    return new URL(p, globalThis.location.origin);
+  }
+  const base = getApiBase();
+  const origin = base && /^https?:\/\//i.test(base) ? base.replace(/\/$/, '') : 'http://localhost:8767';
+  return new URL(p, origin);
+}
+
 async function fetchJson(url, { timeoutMs = 12000 } = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -59,9 +74,10 @@ export function parseTaxonomy(taxonomyRaw) {
 /** Optional: fetch room list for a wing from `/api/rooms?wing=`. */
 export async function fetchRoomsForWing(wing) {
   if (!wing) return null;
-  const base = getApiBase();
   try {
-    return await fetchJson(`${base}/api/rooms?wing=${encodeURIComponent(wing)}`);
+    const u = createApiUrl('/api/rooms');
+    u.searchParams.set('wing', wing);
+    return await fetchJson(u.toString());
   } catch {
     return null;
   }
@@ -176,9 +192,8 @@ export function normalizePalaceBundle(parts) {
  * @returns {Promise<{ tools?: Array<{ name: string }> }|null>}
  */
 export async function fetchMcpToolsList() {
-  const base = getApiBase();
   try {
-    return await fetchJson(`${base}/api/mcp-tools`);
+    return await fetchJson(createApiUrl('/api/mcp-tools').toString());
   } catch {
     return null;
   }
@@ -189,9 +204,17 @@ export async function fetchMcpToolsList() {
  * @param {{ limit?: number, wing?: string, room?: string }} [opts]
  */
 export async function fetchSemanticSearch(query, opts = {}) {
-  const base = getApiBase();
-  const u = new URL(`${base}/api/search`);
-  u.searchParams.set('query', query);
+  const q = typeof query === 'string' ? query.trim() : '';
+  if (!q) {
+    return Promise.reject(new Error('Search query is empty.'));
+  }
+  let u;
+  try {
+    u = createApiUrl('/api/search');
+  } catch (e) {
+    return Promise.reject(new Error(`Invalid API URL: ${e?.message || e}`));
+  }
+  u.searchParams.set('query', q);
   if (opts.limit != null) u.searchParams.set('limit', String(opts.limit));
   if (opts.wing) u.searchParams.set('wing', opts.wing);
   if (opts.room) u.searchParams.set('room', opts.room);
@@ -203,8 +226,7 @@ export async function fetchSemanticSearch(query, opts = {}) {
  * @param {number} [maxHops]
  */
 export async function fetchPalaceTraverse(startRoom, maxHops = 2) {
-  const base = getApiBase();
-  const u = new URL(`${base}/api/traverse`);
+  const u = createApiUrl('/api/traverse');
   u.searchParams.set('start_room', startRoom);
   u.searchParams.set('max_hops', String(maxHops));
   return fetchJson(u.toString(), { timeoutMs: 25000 });
@@ -215,8 +237,7 @@ export async function fetchPalaceTraverse(startRoom, maxHops = 2) {
  * @param {{ as_of?: string, direction?: string }} [opts]
  */
 export async function fetchKgQuery(entity, opts = {}) {
-  const base = getApiBase();
-  const u = new URL(`${base}/api/kg-query`);
+  const u = createApiUrl('/api/kg-query');
   u.searchParams.set('entity', entity);
   if (opts.as_of) u.searchParams.set('as_of', opts.as_of);
   if (opts.direction) u.searchParams.set('direction', opts.direction);
@@ -225,23 +246,20 @@ export async function fetchKgQuery(entity, opts = {}) {
 
 /** @param {string} [entity] — omit for full timeline */
 export async function fetchKgTimeline(entity) {
-  const base = getApiBase();
-  const u = new URL(`${base}/api/kg-timeline`);
+  const u = createApiUrl('/api/kg-timeline');
   if (entity && entity.trim()) u.searchParams.set('entity', entity.trim());
   return fetchJson(u.toString(), { timeoutMs: 25000 });
 }
 
 export async function fetchAaakSpec() {
-  const base = getApiBase();
-  return fetchJson(`${base}/api/aaak-spec`, { timeoutMs: 20000 });
+  return fetchJson(createApiUrl('/api/aaak-spec').toString(), { timeoutMs: 20000 });
 }
 
 /**
  * @param {{ agent?: string, last_n?: number }} [opts]
  */
 export async function fetchDiaryRead(opts = {}) {
-  const base = getApiBase();
-  const u = new URL(`${base}/api/diary`);
+  const u = createApiUrl('/api/diary');
   if (opts.agent) u.searchParams.set('agent', opts.agent);
   if (opts.last_n != null) u.searchParams.set('last_n', String(opts.last_n));
   return fetchJson(u.toString(), { timeoutMs: 25000 });
@@ -252,8 +270,7 @@ export async function fetchDiaryRead(opts = {}) {
  * @param {number} [threshold]
  */
 export async function fetchCheckDuplicate(content, threshold = 0.9) {
-  const base = getApiBase();
-  const res = await fetch(`${base}/api/check-duplicate`, {
+  const res = await fetch(createApiUrl('/api/check-duplicate').toString(), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify({ content, threshold }),
@@ -266,10 +283,8 @@ export async function fetchCheckDuplicate(content, threshold = 0.9) {
 }
 
 export async function loadPalaceData() {
-  const base = getApiBase();
-  const prefix = `${base}/api`;
   try {
-    const snapshot = await fetchJson(`${prefix}/palace`);
+    const snapshot = await fetchJson(createApiUrl('/api/palace').toString());
     const graphStats = {
       graphContractVersion: snapshot.graphContractVersion,
       fetchedAt: snapshot.fetchedAt,
