@@ -16,7 +16,7 @@
 import { spawn } from 'child_process';
 import { createServer } from 'http';
 import { fileURLToPath } from 'url';
-import { dirname, join, extname } from 'path';
+import { dirname, join, extname, resolve, sep } from 'path';
 import { promises as fs } from 'fs';
 import {
   parseTaxonomyCanonical,
@@ -81,6 +81,9 @@ const MIME_TYPES = {
   '.css': 'text/css; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
 };
+
+/** Single-segment paths only; must stay under `__dirname` (no `..`). */
+const STATIC_ROOT_EXT = new Set(['.js', '.css', '.html', '.json']);
 
 /** Small LRU for stable payloads (wings list). */
 class LRUCache {
@@ -253,8 +256,24 @@ async function buildPalaceSnapshot() {
 
 async function serveStatic(req, res, pathname) {
   const mapped = STATIC_FILES[pathname];
-  if (!mapped) return false;
-  const filePath = join(__dirname, mapped);
+  let filePath;
+  if (mapped) {
+    filePath = join(__dirname, mapped);
+  } else {
+    const name = pathname.startsWith('/') ? pathname.slice(1) : pathname;
+    if (!name || name.includes('/') || name.includes('..')) return false;
+    const ext = extname(name);
+    if (!STATIC_ROOT_EXT.has(ext)) return false;
+    const root = resolve(__dirname);
+    filePath = resolve(__dirname, name);
+    if (filePath !== root && !filePath.startsWith(root + sep)) return false;
+    try {
+      const st = await fs.stat(filePath);
+      if (!st.isFile()) return false;
+    } catch {
+      return false;
+    }
+  }
   const content = await fs.readFile(filePath);
   res.writeHead(200, { 'Content-Type': MIME_TYPES[extname(filePath)] || 'text/plain; charset=utf-8' });
   res.end(content);
