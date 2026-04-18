@@ -68,6 +68,11 @@ const STATIC_FILES = {
   '/three-runtime.js': 'three-runtime.js',
   '/ui-hover-policy.js': 'ui-hover-policy.js',
   '/content-inspector.js': 'content-inspector.js',
+  '/memories-chat-ui.js': 'memories-chat-ui.js',
+  '/memories-chat-config.js': 'memories-chat-config.js',
+  '/memories-chat-llm.js': 'memories-chat-llm.js',
+  '/memories-chat-prompt.js': 'memories-chat-prompt.js',
+  '/memories-chat-retrieval.js': 'memories-chat-retrieval.js',
 };
 
 const MIME_TYPES = {
