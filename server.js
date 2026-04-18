@@ -195,6 +195,14 @@ async function callMcp(toolName, params = {}, timeout = 10000) {
   return result;
 }
 
+async function callStatusMcp(timeout = 10000) {
+  try {
+    return await callMcp('mempalace_status', { verbose: true }, timeout);
+  } catch {
+    return callMcp('mempalace_status', {}, timeout);
+  }
+}
+
 /** Official tool catalog (same as MCP `tools/list`). */
 async function listMcpTools(timeout = 8000) {
   return rpcMcp('tools/list', {}, timeout);
@@ -207,7 +215,7 @@ async function listMcpTools(timeout = 8000) {
 async function buildPalaceSnapshot() {
   const fetchedAt = new Date().toISOString();
   const [status, wingsRaw, taxonomyRaw, tunnelsResult, rawGraphStats, kgStats] = await Promise.all([
-    callMcp('mempalace_status'),
+    callStatusMcp(),
     callMcp('mempalace_list_wings'),
     callMcp('mempalace_get_taxonomy'),
     callMcp('mempalace_find_tunnels'),
@@ -459,7 +467,7 @@ const server = createServer(async (req, res) => {
 
     switch (pathname) {
       case '/api/status':
-        result = await callMcp('mempalace_status');
+        result = await callStatusMcp();
         break;
 
       case '/api/wings': {
