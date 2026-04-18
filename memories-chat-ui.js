@@ -99,7 +99,7 @@ export function initMemoriesChat(hooks) {
   /** @type {'explore' | 'memchat'} */
   let mode = 'explore';
 
-  /** @type {Array<{ role: string, content: string, sources?: unknown[], error?: string, partial?: boolean }>} */
+  /** @type {Array<{ role: string, content: string, sources?: unknown[], error?: string, partial?: boolean, completionMode?: 'stream' | 'json' }>} */
   let thread = loadThread();
 
   /** @type {AbortController | null} */
@@ -116,6 +116,14 @@ export function initMemoriesChat(hooks) {
 
   /** @type {ReturnType<typeof setTimeout> | null} */
   let completionStatusTimer = null;
+
+  /** @type {ReturnType<typeof setTimeout> | null} */
+  let composeHintTimer = null;
+
+  /** @type {number} */
+  let streamStartedAt = 0;
+
+  const composeHintEl = $('memchat-compose-hint');
 
   let stickToBottom = true;
   messagesEl.addEventListener(
@@ -222,12 +230,19 @@ export function initMemoriesChat(hooks) {
 
   function startStreamStatusTicker() {
     stopStreamStatusTicker();
+    streamStartedAt = Date.now();
     streamStatusInterval = setInterval(() => {
       if (!sendStatusEl || !streamingAssistant) return;
       const len = streamingAssistant.content.length;
+      const elapsed = Date.now() - streamStartedAt;
+      const longGen = len >= 900 || elapsed >= 2800;
+      if (!longGen) {
+        sendStatusEl.textContent = 'Generating answer…';
+        return;
+      }
       const n = len >= 1000 ? `${(len / 1000).toFixed(1)}k` : String(len);
-      sendStatusEl.textContent = `Generating answer… ${n} chars`;
-    }, 480);
+      sendStatusEl.textContent = `Still writing… ${n} chars`;
+    }, 520);
   }
 
   function scheduleCompletionStatus(message, clearAfterMs = 0) {
@@ -271,17 +286,39 @@ export function initMemoriesChat(hooks) {
     if (!trust.showBanner) return '';
     const parts = [];
     if (trust.sparse) {
-      parts.push('Few drawers matched — the model only saw limited evidence.');
+      parts.push('Only a couple of drawers matched this search, so the model had little to go on.');
     }
     if (trust.maxSimilarity != null && trust.weakMatch) {
       parts.push(
-        `Best match score is ${(trust.maxSimilarity * 100).toFixed(0)}% (weak). Treat the answer as tentative.`,
+        `The closest snippet is only about ${(trust.maxSimilarity * 100).toFixed(0)}% similar — verify anything important in the palace.`,
       );
     } else if (trust.maxSimilarity == null && trust.sparse && trust.count > 1) {
-      parts.push('Similarity scores were missing; spot-check in the palace if unsure.');
+      parts.push('Search did not report similarity scores; spot-check in the palace if unsure.');
     }
-    const body = parts.length ? parts.join(' ') : 'Retrieval looks thin — double-check important claims.';
+    const body = parts.length ? parts.join(' ') : 'Evidence is thin for this question — double-check important claims.';
     return `<div class="memchat-trust-banner" role="status"><span class="memchat-trust-banner__label">Retrieval note</span> ${escapeHtml(body)}</div>`;
+  }
+
+  /**
+   * @param {number | null} simNum
+   */
+  function similarityHuman(simNum) {
+    if (simNum == null || !Number.isFinite(simNum)) return { text: '—', low: false };
+    if (simNum >= 0.55) return { text: 'Strong match', low: false };
+    if (simNum >= 0.35) return { text: 'Fair match', low: false };
+    return { text: 'Weak match', low: true };
+  }
+
+  /**
+   * @param {string} ex
+   */
+  function excerptHeadline(ex) {
+    const t = String(ex ?? '').trim();
+    if (!t) return 'Snippet';
+    const line = t.split('\n').find((l) => l.trim()) || t;
+    const one = line.trim();
+    if (one.length <= 80) return one;
+    return `${one.slice(0, 77)}…`;
   }
 
   /**
@@ -290,42 +327,41 @@ export function initMemoriesChat(hooks) {
    */
   function renderSourcesBlock(sources, msgIdx) {
     if (!Array.isArray(sources) || !sources.length) {
-      return '<p class="memchat-sources-empty">No evidence excerpts for this turn.</p>';
+      return '<p class="memchat-sources-empty">No snippets were attached to this turn.</p>';
     }
     const trust = assessRetrievalEvidence(sources);
     const banner = renderTrustBanner(trust);
-    return `${banner}<ul class="memchat-sources-list" aria-label="Evidence excerpts">
+    return `${banner}<ul class="memchat-sources-list" aria-label="Supporting memories">
       ${sources
         .map((s, i) => {
           const wing = s.wing || '';
           const room = s.room || '';
           const did = s.drawerId ? String(s.drawerId) : '';
-          const ex = escapeHtml((s.excerpt || '').slice(0, 360));
-          const long = (s.excerpt || '').length > 360;
+          const rawEx = s.excerpt || '';
+          const ex = escapeHtml(rawEx.slice(0, 360));
+          const long = rawEx.length > 360;
           const simNum = typeof s.similarity === 'number' && Number.isFinite(s.similarity) ? s.similarity : null;
-          const sim =
-            simNum != null
-              ? `${(simNum * 100).toFixed(1)}%`
-              : '—';
-          const low = simNum != null && simNum < 0.35;
-          const loc = wing && room ? `${escapeHtml(wing)} / ${escapeHtml(room)}` : escapeHtml(wing || room || '—');
+          const sim = similarityHuman(simNum);
+          const low = sim.low;
+          const loc = wing && room ? `${escapeHtml(wing)} · ${escapeHtml(room)}` : escapeHtml(wing || room || '—');
+          const headline = escapeHtml(excerptHeadline(rawEx));
           const cardCls = `memchat-source-card${low ? ' memchat-source-card--low' : ''}`;
           return `<li class="${cardCls}">
             <div class="memchat-source-card__head">
-              <span class="memchat-source-card__rank" aria-hidden="true">${i + 1}</span>
               <div class="memchat-source-card__head-text">
+                <div class="memchat-source-card__title">${headline}</div>
                 <div class="memchat-source-card__meta">
                   <span class="memchat-source-card__loc">${loc}</span>
-                  <span class="memchat-source-card__sim${low ? ' memchat-source-card__sim--low' : ''}">${escapeHtml(sim)} match</span>
+                  <span class="memchat-source-card__sim${low ? ' memchat-source-card__sim--low' : ''}" title="Search similarity">${escapeHtml(sim.text)}</span>
                 </div>
-                ${did ? `<div class="memchat-source-card__id"><code>${escapeHtml(did)}</code></div>` : ''}
+                ${did ? `<div class="memchat-source-card__id"><span class="memchat-source-card__id-label">Drawer</span> <code>${escapeHtml(did)}</code></div>` : ''}
               </div>
             </div>
             <p class="memchat-source-card__excerpt">${ex}${long ? '…' : ''}</p>
             <div class="memchat-source-card__actions">
               ${
                 wing && room
-                  ? `<button type="button" class="btn btn--ghost btn--sm memchat-jump-room" data-wing="${escapeHtml(wing)}" data-room="${escapeHtml(room)}">Jump to room</button>`
+                  ? `<button type="button" class="btn btn--ghost btn--sm memchat-jump-room" data-wing="${escapeHtml(wing)}" data-room="${escapeHtml(room)}">Open in map</button>`
                   : ''
               }
               ${
@@ -333,7 +369,7 @@ export function initMemoriesChat(hooks) {
                   ? `<button type="button" class="btn btn--ghost btn--sm memchat-open-drawer" data-drawer-id="${escapeHtml(did)}" data-wing="${escapeHtml(wing)}" data-room="${escapeHtml(room)}">Open drawer</button>`
                   : ''
               }
-              <button type="button" class="btn btn--ghost btn--sm memchat-quote" data-msg-idx="${msgIdx}" data-src-idx="${i}" title="Insert quoted excerpt at cursor. Shift+click: new paragraph before quote.">Insert quote</button>
+              <button type="button" class="btn btn--ghost btn--sm memchat-quote" data-msg-idx="${msgIdx}" data-src-idx="${i}" title="Insert quoted excerpt at cursor. Shift+click: new paragraph before quote.">Quote in message</button>
             </div>
           </li>`;
         })
@@ -343,10 +379,10 @@ export function initMemoriesChat(hooks) {
 
   function renderEvidenceSection(sources, msgIdx) {
     const inner = renderSourcesBlock(sources, msgIdx);
-    return `<section class="memchat-evidence" aria-label="Evidence for this turn">
+    return `<section class="memchat-evidence" aria-label="Supporting memories for this turn">
       <div class="memchat-evidence__head">
-        <span class="memchat-evidence__title">Evidence for this turn</span>
-        <span class="memchat-evidence__hint">Retrieved from your palace; not model text</span>
+        <span class="memchat-evidence__title">Supporting memories</span>
+        <span class="memchat-evidence__hint">Excerpts from your palace the model was allowed to read</span>
       </div>
       <div class="memchat-evidence__body">${inner}</div>
     </section>`;
@@ -355,59 +391,168 @@ export function initMemoriesChat(hooks) {
   /**
    * @param {boolean} streaming
    * @param {boolean} [partial]
+   * @param {{ contentLen?: number, completionMode?: 'stream' | 'json' }} [meta]
    */
-  function renderAnswerHeading(streaming, partial) {
+  function renderAnswerHeading(streaming, partial, meta = {}) {
+    const { contentLen = 0, completionMode } = meta;
+    const longAnswer = contentLen >= 520;
+    const showJsonNote = completionMode === 'json' && contentLen >= 240;
     const badge = streaming
       ? '<span class="memchat-live-pill" aria-live="polite"><span class="memchat-live-pill__dot" aria-hidden="true"></span> Generating</span>'
       : partial
         ? '<span class="memchat-partial-pill">Stopped mid-answer</span>'
         : '';
+    const showQuietMeta = !streaming && !partial && (longAnswer || showJsonNote);
+    const quietMeta = showQuietMeta
+      ? `<div class="memchat-answer-meta" aria-hidden="false">
+            ${longAnswer ? '<span class="memchat-answer-meta__chip memchat-answer-meta__chip--done">Finished</span>' : ''}
+            ${showJsonNote ? '<span class="memchat-answer-meta__chip memchat-answer-meta__chip--fallback" title="Server returned a full message instead of a token stream">Non-streaming response</span>' : ''}
+          </div>`
+      : '';
     return `<div class="memchat-answer-head">
       <span class="memchat-answer-head__label">Answer</span>
       ${badge}
+      ${quietMeta}
     </div>`;
   }
 
-  function renderMessages() {
-    if (!messagesEl) return;
-    messagesEl.setAttribute('aria-busy', streamingAssistant ? 'true' : 'false');
-    const html = thread
-      .map((m, mi) => {
-        if (m.role === 'user') {
-          return `<div class="memchat-msg memchat-msg--user" role="article"><div class="memchat-msg__bubble">${escapeHtml(m.content)}</div></div>`;
-        }
-        if (m.role === 'assistant') {
-          const err = m.error ? `<div class="memchat-msg__err">${escapeHtml(m.error)}</div>` : '';
-          if (m.error) {
-            return `<div class="memchat-msg memchat-msg--assistant" role="article">${err}</div>`;
-          }
-          const partial = Boolean(m.partial);
-          const head = renderAnswerHeading(false, partial);
-          const body = m.content
-            ? `<div class="memchat-msg__bubble memchat-msg__bubble--assistant">${escapeHtml(m.content)}</div>`
-            : '';
-          const src = m.sources ? renderEvidenceSection(m.sources, mi) : '';
-          return `<div class="memchat-msg memchat-msg--assistant" role="article">${head}${body}${src}</div>`;
-        }
-        return '';
-      })
-      .join('');
+  /**
+   * @param {string} content
+   * @param {number} turnNum
+   */
+  function renderUserMessage(content, turnNum) {
+    return `<div class="memchat-msg memchat-msg--user" role="article">
+      <div class="memchat-msg__skim">
+        <span class="memchat-msg__skim-label">Question</span>
+        <span class="memchat-msg__skim-num" aria-label="Turn ${turnNum}">#${turnNum}</span>
+      </div>
+      <div class="memchat-msg__bubble">${escapeHtml(content)}</div>
+    </div>`;
+  }
 
-    const streamBlock =
-      streamingAssistant != null
-        ? `<div class="memchat-msg memchat-msg--assistant memchat-msg--streaming" role="article" aria-busy="true">
+  /**
+   * @param {typeof thread[0]} m
+   * @param {number} mi
+   */
+  function renderAssistantMessageHtml(m, mi) {
+    const err = m.error ? `<div class="memchat-msg__err">${escapeHtml(m.error)}</div>` : '';
+    if (m.error) {
+      return `<div class="memchat-msg memchat-msg--assistant memchat-msg--assistant-error" role="article">${err}</div>`;
+    }
+    const partial = Boolean(m.partial);
+    const contentLen = (m.content || '').length;
+    const head = renderAnswerHeading(false, partial, {
+      contentLen,
+      completionMode: m.completionMode,
+    });
+    const body = m.content
+      ? `<div class="memchat-msg__bubble memchat-msg__bubble--assistant${partial ? ' memchat-msg__bubble--partial' : ''}">${escapeHtml(m.content)}</div>`
+      : '';
+    const src =
+      Array.isArray(m.sources) && m.sources.length ? renderEvidenceSection(m.sources, mi) : '';
+    return `<div class="memchat-msg memchat-msg--assistant${partial ? ' memchat-msg--partial' : ''}" role="article">${head}${body}${src}</div>`;
+  }
+
+  function renderStreamingAssistantHtml() {
+    if (!streamingAssistant) return '';
+    return `<div class="memchat-msg memchat-msg--assistant memchat-msg--streaming" role="article" aria-busy="true">
             ${renderAnswerHeading(true, false)}
             <div class="memchat-msg__bubble memchat-msg__bubble--assistant memchat-msg__bubble--streaming">
               <span id="memchat-streaming-text" class="memchat-streaming-text"></span><span class="memchat-streaming-caret" aria-hidden="true">▍</span>
               <span id="memchat-stream-anchor" class="memchat-stream-anchor" aria-hidden="true"></span>
             </div>
             ${renderEvidenceSection(streamingAssistant.sources, -1)}
-          </div>`
-        : '';
+          </div>`;
+  }
 
-    messagesEl.innerHTML = html + streamBlock;
+  /**
+   * @param {number} turnNum
+   * @param {string | null} userContent
+   * @param {typeof thread[0] | null} assistantMsg
+   * @param {number} assistantIdx
+   * @param {boolean} withStream
+   */
+  function renderTurnBlock(turnNum, userContent, assistantMsg, assistantIdx, withStream) {
+    const trust =
+      assistantMsg?.sources && Array.isArray(assistantMsg.sources)
+        ? assessRetrievalEvidence(assistantMsg.sources)
+        : streamingAssistant?.sources
+          ? assessRetrievalEvidence(streamingAssistant.sources)
+          : null;
+    const weak = trust?.showBanner;
+    const turnClass = `memchat-turn${weak ? ' memchat-turn--weak' : ''}`;
+    const assistantHtml = withStream
+      ? renderStreamingAssistantHtml()
+      : assistantMsg
+        ? renderAssistantMessageHtml(assistantMsg, assistantIdx)
+        : '';
+    return `<div class="${turnClass}" data-memchat-turn="${turnNum}">
+      <div class="memchat-turn__rail" aria-hidden="true"></div>
+      <div class="memchat-turn__body">
+        ${userContent != null ? renderUserMessage(userContent, turnNum) : ''}
+        ${assistantHtml}
+      </div>
+    </div>`;
+  }
+
+  function renderThreadHtml() {
+    const chunks = [];
+    let turnNum = 0;
+    let i = 0;
+    while (i < thread.length) {
+      const m = thread[i];
+      if (m.role === 'user') {
+        turnNum += 1;
+        const u = m.content;
+        const pendingStream =
+          Boolean(streamingAssistant) && i === thread.length - 1 && m.role === 'user';
+        if (pendingStream) {
+          chunks.push(renderTurnBlock(turnNum, u, null, -1, true));
+          i += 1;
+          break;
+        }
+        const next = thread[i + 1];
+        if (next && next.role === 'assistant') {
+          chunks.push(renderTurnBlock(turnNum, u, next, i + 1, false));
+          i += 2;
+        } else {
+          chunks.push(renderTurnBlock(turnNum, u, null, -1, false));
+          i += 1;
+        }
+      } else {
+        turnNum += 1;
+        chunks.push(renderTurnBlock(turnNum, null, m, i, false));
+        i += 1;
+      }
+    }
+    return chunks.join('');
+  }
+
+  function renderMessages() {
+    if (!messagesEl) return;
+    messagesEl.setAttribute('aria-busy', streamingAssistant ? 'true' : 'false');
+    const html = renderThreadHtml();
+    messagesEl.innerHTML = html;
     flushStreamingDom();
     maybeScrollToBottom();
+  }
+
+  function showComposeHint(text, clearAfterMs = 4200) {
+    if (composeHintTimer != null) {
+      clearTimeout(composeHintTimer);
+      composeHintTimer = null;
+    }
+    if (composeHintEl) {
+      composeHintEl.hidden = false;
+      composeHintEl.textContent = text;
+    }
+    composeHintTimer = setTimeout(() => {
+      composeHintTimer = null;
+      if (composeHintEl) {
+        composeHintEl.textContent = '';
+        composeHintEl.hidden = true;
+      }
+    }, clearAfterMs);
   }
 
   messagesEl.addEventListener('click', (e) => {
@@ -460,11 +605,20 @@ export function initMemoriesChat(hooks) {
       const caret = start + inserted.length;
       ta.selectionStart = ta.selectionEnd = caret;
       ta.focus();
+      showComposeHint('Quote added — add a follow-up question below, or edit the quote first.');
     }
   });
 
   clearBtn?.addEventListener('click', () => {
     stopStreamStatusTicker();
+    if (composeHintTimer != null) {
+      clearTimeout(composeHintTimer);
+      composeHintTimer = null;
+    }
+    if (composeHintEl) {
+      composeHintEl.textContent = '';
+      composeHintEl.hidden = true;
+    }
     if (completionStatusTimer != null) {
       clearTimeout(completionStatusTimer);
       completionStatusTimer = null;
@@ -489,6 +643,14 @@ export function initMemoriesChat(hooks) {
     if (!text) return;
 
     stopStreamStatusTicker();
+    if (composeHintTimer != null) {
+      clearTimeout(composeHintTimer);
+      composeHintTimer = null;
+    }
+    if (composeHintEl) {
+      composeHintEl.textContent = '';
+      composeHintEl.hidden = true;
+    }
     if (completionStatusTimer != null) {
       clearTimeout(completionStatusTimer);
       completionStatusTimer = null;
@@ -596,10 +758,11 @@ export function initMemoriesChat(hooks) {
         role: 'assistant',
         content: r.content,
         sources: retrieval.sources,
+        completionMode: r.mode === 'json' ? 'json' : 'stream',
       });
       streamingAssistant = null;
-      if (r.mode === 'json') {
-        scheduleCompletionStatus('Answer received (non-streaming).', 2800);
+      if (r.mode === 'json' && r.content.length >= 400) {
+        scheduleCompletionStatus('Full reply (non-streaming).', 2200);
       } else if (sendStatusEl) {
         sendStatusEl.textContent = '';
       }
@@ -616,7 +779,7 @@ export function initMemoriesChat(hooks) {
             partial: true,
           });
         }
-        scheduleCompletionStatus('Stopped — partial answer saved.', 3200);
+        scheduleCompletionStatus('Partial answer saved.', 2600);
         persistThread();
         renderMessages();
         sendBtn.disabled = false;

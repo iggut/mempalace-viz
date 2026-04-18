@@ -3061,8 +3061,48 @@ kbd {
   -webkit-overflow-scrolling: touch;
 }
 
+.memchat-turn {
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(143, 169, 255, 0.1);
+}
+
+.memchat-turn:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
+.memchat-turn--weak {
+  border-top-color: rgba(255, 200, 120, 0.15);
+}
+
+.memchat-turn__rail {
+  flex-shrink: 0;
+  width: 3px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, rgba(120, 170, 255, 0.45), rgba(120, 170, 255, 0.12));
+  align-self: stretch;
+  min-height: 1.5rem;
+}
+
+.memchat-turn--weak .memchat-turn__rail {
+  background: linear-gradient(180deg, rgba(255, 200, 140, 0.55), rgba(255, 200, 140, 0.15));
+}
+
+.memchat-turn__body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 .memchat-msg {
-  margin-bottom: 12px;
+  margin-bottom: 0;
   max-width: 100%;
 }
 
@@ -3071,8 +3111,29 @@ kbd {
   max-width: 95%;
 }
 
-.memchat-msg:last-child {
-  margin-bottom: 0;
+.memchat-msg__skim {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+  padding: 0 1px;
+}
+
+.memchat-msg__skim-label {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.memchat-msg__skim-num {
+  font-size: 0.6rem;
+  font-weight: 600;
+  color: var(--text-dim);
+  opacity: 0.72;
+  font-variant-numeric: tabular-nums;
 }
 
 .memchat-msg__bubble {
@@ -3102,6 +3163,11 @@ kbd {
   color: var(--text);
 }
 
+.memchat-msg__bubble--partial {
+  border-left: 3px solid rgba(255, 200, 120, 0.55);
+  background: linear-gradient(180deg, rgba(40, 34, 24, 0.45), rgba(22, 20, 16, 0.45));
+}
+
 .memchat-msg--streaming .memchat-msg__bubble--streaming {
   border-color: rgba(143, 169, 255, 0.28);
   box-shadow: 0 0 0 1px rgba(135, 180, 255, 0.08);
@@ -3109,9 +3175,10 @@ kbd {
 
 .memchat-answer-head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 10px;
+  flex-wrap: wrap;
+  gap: 8px 12px;
   margin-bottom: 8px;
 }
 
@@ -3121,6 +3188,36 @@ kbd {
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--accent-bright);
+}
+
+.memchat-answer-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin-left: auto;
+  justify-content: flex-end;
+}
+
+.memchat-answer-meta__chip {
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 2px 9px;
+  border-radius: 999px;
+  line-height: 1.3;
+}
+
+.memchat-answer-meta__chip--done {
+  color: var(--text-dim);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(143, 169, 255, 0.12);
+}
+
+.memchat-answer-meta__chip--fallback {
+  color: var(--text-muted);
+  background: rgba(100, 150, 255, 0.08);
+  border: 1px solid rgba(120, 160, 255, 0.22);
 }
 
 .memchat-live-pill {
@@ -3284,34 +3381,44 @@ kbd {
   gap: 8px;
 }
 
-.memchat-source-card__rank {
-  flex-shrink: 0;
-  min-width: 1.25rem;
-  padding-top: 3px;
-  font-size: 0.62rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  color: var(--text-dim);
-  text-align: center;
-}
-
 .memchat-source-card__head-text {
   flex: 1;
   min-width: 0;
+}
+
+.memchat-source-card__title {
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--text);
+  margin: 0 0 6px;
 }
 
 .memchat-source-card__meta {
   display: flex;
   justify-content: space-between;
   gap: 8px;
-  font-size: 0.72rem;
+  font-size: 0.7rem;
   color: var(--text-muted);
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 
 .memchat-source-card__loc {
   font-weight: 600;
   color: var(--teal);
+}
+
+.memchat-source-card__id {
+  margin-top: 4px;
+}
+
+.memchat-source-card__id-label {
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-right: 4px;
 }
 
 .memchat-source-card__id code {
@@ -3325,9 +3432,9 @@ kbd {
 }
 
 .memchat-source-card__excerpt {
-  margin: 6px 0 8px;
-  font-size: 0.72rem;
-  line-height: 1.45;
+  margin: 8px 0 8px;
+  font-size: 0.74rem;
+  line-height: 1.5;
   color: var(--text-muted);
 }
 
@@ -3368,6 +3475,22 @@ kbd {
   outline: none;
   border-color: var(--accent-ring);
   box-shadow: 0 0 0 1px var(--accent-soft);
+}
+
+.memchat-compose-hint {
+  margin: 6px 0 0;
+  font-size: 0.72rem;
+  line-height: 1.4;
+  color: var(--teal);
+  min-height: 0;
+}
+
+.memchat-compose-hint:empty {
+  display: none;
+}
+
+.memchat-compose-hint[hidden] {
+  display: none !important;
 }
 
 .memchat-compose-actions {
