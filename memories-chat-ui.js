@@ -72,6 +72,7 @@ export function initMemoriesChat(hooks) {
   const memchatCard = $('memchat-card');
   const memchatCardDrag = $('memchat-card-drag');
   const memchatCardCollapse = $('memchat-card-collapse');
+  const memchatCardResize = $('memchat-card-resize');
 
   const endpointEl = $('memchat-endpoint');
   const apiKeyEl = $('memchat-apikey');
@@ -161,6 +162,12 @@ export function initMemoriesChat(hooks) {
         memchatCard.style.setProperty('--memchat-card-left', `${j.left}px`);
         memchatCard.style.setProperty('--memchat-card-top', `${j.top}px`);
       }
+      if (typeof j.width === 'number' && j.width > 0) {
+        memchatCard.style.setProperty('--memchat-card-width', `${j.width}px`);
+      }
+      if (typeof j.height === 'number' && j.height > 0) {
+        memchatCard.style.setProperty('--memchat-card-height', `${j.height}px`);
+      }
       if (j.collapsed === true) {
         memchatCard.classList.add('memchat-card--collapsed');
         if (memchatCardCollapse) {
@@ -181,8 +188,15 @@ export function initMemoriesChat(hooks) {
     const left = leftVar ? parseFloat(leftVar) : r.left;
     const top = topVar ? parseFloat(topVar) : r.top;
     const collapsed = memchatCard.classList.contains('memchat-card--collapsed');
+    const wVar = memchatCard.style.getPropertyValue('--memchat-card-width').trim();
+    const hVar = memchatCard.style.getPropertyValue('--memchat-card-height').trim();
+    const width = wVar ? parseFloat(wVar) : r.width;
+    const height = hVar ? parseFloat(hVar) : r.height;
     try {
-      localStorage.setItem(MEMCHAT_CARD_LS_KEY, JSON.stringify({ left, top, collapsed }));
+      localStorage.setItem(
+        MEMCHAT_CARD_LS_KEY,
+        JSON.stringify({ left, top, collapsed, width, height }),
+      );
     } catch {
       /* ignore */
     }
@@ -191,20 +205,32 @@ export function initMemoriesChat(hooks) {
   /** @type {{ ox: number, oy: number } | null} */
   let memchatDrag = null;
 
-  function clampMemchatCardPosition() {
+  const MEMCHAT_MIN_W = 280;
+  const MEMCHAT_MIN_H = 240;
+  const MEMCHAT_PAD = 8;
+
+  function clampMemchatCardBounds() {
     if (!memchatCard) return;
     const rect = memchatCard.getBoundingClientRect();
-    const w = rect.width;
-    const h = rect.height;
+    let w = parseFloat(memchatCard.style.getPropertyValue('--memchat-card-width')) || rect.width;
+    let h = parseFloat(memchatCard.style.getPropertyValue('--memchat-card-height')) || rect.height;
+    const maxW = window.innerWidth - MEMCHAT_PAD * 2;
+    const maxH = window.innerHeight - MEMCHAT_PAD * 2;
+    w = Math.max(MEMCHAT_MIN_W, Math.min(w, maxW));
+    h = Math.max(MEMCHAT_MIN_H, Math.min(h, maxH));
+    memchatCard.style.setProperty('--memchat-card-width', `${w}px`);
+    memchatCard.style.setProperty('--memchat-card-height', `${h}px`);
+
     let left = parseFloat(memchatCard.style.getPropertyValue('--memchat-card-left')) || rect.left;
     let top = parseFloat(memchatCard.style.getPropertyValue('--memchat-card-top')) || rect.top;
-    left = Math.max(8, Math.min(left, window.innerWidth - w - 8));
-    top = Math.max(8, Math.min(top, window.innerHeight - h - 8));
+    left = Math.max(MEMCHAT_PAD, Math.min(left, window.innerWidth - w - MEMCHAT_PAD));
+    top = Math.max(MEMCHAT_PAD, Math.min(top, window.innerHeight - h - MEMCHAT_PAD));
     memchatCard.style.setProperty('--memchat-card-left', `${left}px`);
     memchatCard.style.setProperty('--memchat-card-top', `${top}px`);
   }
 
   loadMemchatCardLayout();
+  clampMemchatCardBounds();
 
   memchatCardDrag?.addEventListener('pointerdown', (e) => {
     if (!memchatCard || e.button !== 0) return;
@@ -225,8 +251,8 @@ export function initMemoriesChat(hooks) {
     let top = e.clientY - memchatDrag.oy;
     const w = memchatCard.offsetWidth;
     const h = memchatCard.offsetHeight;
-    left = Math.max(8, Math.min(left, window.innerWidth - w - 8));
-    top = Math.max(8, Math.min(top, window.innerHeight - h - 8));
+    left = Math.max(MEMCHAT_PAD, Math.min(left, window.innerWidth - w - MEMCHAT_PAD));
+    top = Math.max(MEMCHAT_PAD, Math.min(top, window.innerHeight - h - MEMCHAT_PAD));
     memchatCard.style.setProperty('--memchat-card-left', `${left}px`);
     memchatCard.style.setProperty('--memchat-card-top', `${top}px`);
   });
@@ -241,6 +267,53 @@ export function initMemoriesChat(hooks) {
   memchatCardDrag?.addEventListener('pointerup', endMemchatDrag);
   memchatCardDrag?.addEventListener('pointercancel', endMemchatDrag);
 
+  /** @type {{ startX: number, startY: number, startW: number, startH: number } | null} */
+  let memchatResize = null;
+
+  memchatCardResize?.addEventListener('pointerdown', (e) => {
+    if (!memchatCard || e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const rect = memchatCard.getBoundingClientRect();
+    memchatResize = {
+      startX: e.clientX,
+      startY: e.clientY,
+      startW: rect.width,
+      startH: rect.height,
+    };
+    memchatCard.classList.add('memchat-card--resizing');
+    try {
+      memchatCardResize.setPointerCapture(e.pointerId);
+    } catch {
+      /* ignore */
+    }
+  });
+
+  memchatCardResize?.addEventListener('pointermove', (e) => {
+    if (!memchatResize || !memchatCard) return;
+    const dw = e.clientX - memchatResize.startX;
+    const dh = e.clientY - memchatResize.startY;
+    const maxW = window.innerWidth - MEMCHAT_PAD * 2;
+    const maxH = window.innerHeight - MEMCHAT_PAD * 2;
+    let w = memchatResize.startW + dw;
+    let h = memchatResize.startH + dh;
+    w = Math.max(MEMCHAT_MIN_W, Math.min(w, maxW));
+    h = Math.max(MEMCHAT_MIN_H, Math.min(h, maxH));
+    memchatCard.style.setProperty('--memchat-card-width', `${w}px`);
+    memchatCard.style.setProperty('--memchat-card-height', `${h}px`);
+    clampMemchatCardBounds();
+  });
+
+  function endMemchatResize() {
+    if (!memchatResize) return;
+    memchatResize = null;
+    memchatCard?.classList.remove('memchat-card--resizing');
+    saveMemchatCardLayout();
+  }
+
+  memchatCardResize?.addEventListener('pointerup', endMemchatResize);
+  memchatCardResize?.addEventListener('pointercancel', endMemchatResize);
+
   memchatCardCollapse?.addEventListener('click', (e) => {
     e.stopPropagation();
     if (!memchatCard) return;
@@ -252,7 +325,7 @@ export function initMemoriesChat(hooks) {
   });
 
   window.addEventListener('resize', () => {
-    clampMemchatCardPosition();
+    clampMemchatCardBounds();
     saveMemchatCardLayout();
   });
 

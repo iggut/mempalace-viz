@@ -2993,8 +2993,11 @@ kbd {
   z-index: 45;
   left: var(--memchat-card-left, 12px);
   top: var(--memchat-card-top, 72px);
-  width: min(420px, calc(100vw - 24px));
-  max-height: min(78vh, 880px);
+  box-sizing: border-box;
+  width: var(--memchat-card-width, min(420px, calc(100vw - 24px)));
+  max-width: calc(100vw - 16px);
+  height: var(--memchat-card-height, min(560px, calc(100vh - 96px)));
+  max-height: min(92vh, calc(100vh - 16px));
   display: flex;
   flex-direction: column;
   border-radius: 12px;
@@ -3009,13 +3012,33 @@ kbd {
   display: none !important;
 }
 
+.memchat-card.memchat-card--collapsed {
+  /* Keep explicit width; drop fixed height so the shell is not a large empty box. */
+  height: auto;
+  max-height: none;
+}
+
 .memchat-card--collapsed .memchat-card__content {
   display: none;
+}
+
+.memchat-card--collapsed .memchat-card__resize {
+  display: none;
+}
+
+.memchat-card--collapsed .memchat-card__header {
+  border-bottom: none;
+  border-radius: 12px;
 }
 
 .memchat-card--dragging {
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.55);
   cursor: grabbing;
+}
+
+.memchat-card--resizing {
+  user-select: none;
+  cursor: nwse-resize;
 }
 
 .memchat-card__header {
@@ -3082,14 +3105,58 @@ kbd {
   flex-direction: column;
   gap: 10px;
   min-height: 0;
-  flex: 1;
+  flex: 1 1 auto;
   padding: 10px 12px 12px;
+  padding-bottom: 4px;
   overflow: hidden;
 }
 
+.memchat-card__content .memchat-lead {
+  flex-shrink: 0;
+}
+
+.memchat-card__content .memchat-details {
+  flex-shrink: 0;
+}
+
 .memchat-card__content .memchat-messages {
-  min-height: 120px;
-  max-height: min(38vh, 360px);
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+}
+
+.memchat-card__content .memchat-compose {
+  flex-shrink: 0;
+}
+
+.memchat-card__resize {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 18px;
+  height: 18px;
+  margin: 2px;
+  border-radius: 0 0 10px 0;
+  cursor: nwse-resize;
+  touch-action: none;
+  background: linear-gradient(
+    135deg,
+    transparent 0%,
+    transparent 45%,
+    var(--hairline) 45%,
+    var(--hairline) 48%,
+    transparent 48%,
+    transparent 58%,
+    var(--hairline) 58%,
+    var(--hairline) 61%,
+    transparent 61%
+  );
+  opacity: 0.65;
+}
+
+.memchat-card__resize:hover {
+  opacity: 1;
+  background-color: rgba(80, 120, 200, 0.12);
 }
 
 .memchat-lead {

@@ -233,9 +233,10 @@
               hidden
             >
               <p class="hint-row memchat-tab-hint">
-                The conversation opens in the floating card on the canvas. Drag the header to move it; use
-                <strong>−</strong> to collapse. Loopback endpoints (<code>127.0.0.1</code> / <code>localhost</code>) are
-                reached via this app’s server so the browser avoids cross-origin errors.
+                The conversation opens in the floating card on the canvas. Drag <strong>⋮⋮</strong> to move,
+                drag the <strong>bottom-right corner</strong> to resize, and use <strong>−</strong> to collapse.
+                Local model settings stay under “Local model settings” (collapsed until you open them). Loopback URLs
+                use this app’s server to avoid cross-origin errors.
               </p>
             </div>
           </div>
@@ -274,7 +275,7 @@
               Ask questions grounded in your palace drawers. Uses the same semantic search as Explore, then sends evidence to
               your <strong>local OpenAI-compatible</strong> endpoint — keys stay in this browser.
             </p>
-            <details class="memchat-details" id="memchat-settings-details" open>
+            <details class="memchat-details" id="memchat-settings-details">
               <summary class="memchat-details__summary">Local model settings</summary>
               <div class="memchat-settings-body">
                 <p class="hint-row memchat-helper">
@@ -336,6 +337,12 @@
               <p id="memchat-send-status" class="memchat-send-status" role="status" aria-live="polite"></p>
             </div>
           </div>
+          <div
+            class="memchat-card__resize"
+            id="memchat-card-resize"
+            aria-label="Resize chat panel"
+            title="Drag to resize"
+          ></div>
         </div>
 
         <main class="canvas-column" id="main-canvas-wrap">
