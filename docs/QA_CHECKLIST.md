@@ -33,6 +33,7 @@ Short regression pass before releases or after copy / routing / graph changes. T
 - [ ] **Memory lens** (`GET /api/kg-query`, diary, AAAK, duplicate-check) loads without breaking the scene; KG is not drawn as palace edges.
 - [ ] Room inspector: **Palace traverse** returns JSON; **Tunnel metadata** shows halls/recent when MCP supplied them.
 - [ ] **Discovery overlays**: default Off; hubs/recency tint **room emissive only** (no extra lines); Activity mode does nothing harmful when `recent` is missing or unparseable.
+- [ ] Drawer endpoints (`/api/list-drawers`, `/api/drawer`) load without breaking the scene; content-only, no graph edges produced.
 - [ ] Route uses only visible explicit edges (respects relationship filters).
 - [ ] Route stepping / history coherent when neighbors are missing.
 - [ ] Canvas stays primary; panels don't steal the viewport.

@@ -29,8 +29,10 @@ This viewer uses a **stateless HTTP bridge** (`server.js`) that spawns the MCP s
 | `mempalace_delete_drawer` | No | Write — use MCP. |
 | `mempalace_diary_write` | No | Write — use MCP. |
 | `mempalace_diary_read` | Yes — `GET /api/diary` | Memory lens (`MEMPALACE_VIZ_DIARY_AGENT` env for default agent label). |
+| `mempalace_list_drawers` | Yes — `GET /api/list-drawers` | Paginated drawer listing; content-only, not graph edges. |
+| `mempalace_get_drawer` | Yes — `GET /api/drawer` | Single drawer by id; content-only, not graph edges. |
 
-**Introspection:** `GET /api/mcp-tools` returns the same payload as MCP `tools/list` (official names + schemas).
+  **Introspection:** `GET /api/mcp-tools` returns the same payload as MCP `tools/list` (official names + schemas).
 
 ### Important: `mempalace_graph_stats` vs `mempalace_find_tunnels`
 

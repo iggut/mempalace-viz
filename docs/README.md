@@ -4,7 +4,7 @@ Concise references for MemPalace Viz. Product behavior lives in the root `README
 
 | Doc | Contents |
 | --- | --- |
-| [**API_CONTRACT.md**](API_CONTRACT.md) | HTTP API fields, canonical ids (`wingId`, `roomId`), `graph-stats` / `overview`, MCP notes |
+| [**API_CONTRACT.md**](API_CONTRACT.md) | HTTP API fields, canonical ids (`wingId`, `roomId`), `graph-stats` / `overview`, drawer endpoints, MCP notes |
 | [**GRAPH_SEMANTICS.md**](GRAPH_SEMANTICS.md) | `edgesResolved`, relationship types, `graphMeta`, summary stats |
 | [**MCP_CONNECTION_CAPABILITIES.md**](MCP_CONNECTION_CAPABILITIES.md) | Official MCP **tool coverage matrix** vs this HTTP bridge (including semantic search, traverse, KG reads, diary); `graph_stats` vs `find_tunnels`; writes still via MCP clients only |
 | [**SOURCE_AUDIT.md**](SOURCE_AUDIT.md) | Where tunnel vs KG vs other data comes from |
@@ -15,7 +15,7 @@ Concise references for MemPalace Viz. Product behavior lives in the root `README
 
 **Terminology (aligned with UI copy):**
 
-- **Explicit MCP/API edges** — Rows from MemPalace tools, normalized to `edgesResolved` (stock: **tunnels**).
+- **Explicit MCP/API edges** — Rows from MemPalace tools (`find_tunnels`, taxonomy), normalized to `edgesResolved` (stock: **tunnels**). Drawer reads via `/api/list-drawers` / `/api/drawer` are content-only, not graph edges.
 - **Resolved edges** — Endpoints matched to taxonomy; appear in the 3D graph.
 - **Tunnels** — Same **room name** in **≥2 wings** (upstream discovery).
 - **KG stats** — Knowledge graph aggregates; **not** the palace tunnel graph.

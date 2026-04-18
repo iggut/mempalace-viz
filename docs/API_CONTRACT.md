@@ -139,12 +139,23 @@ These routes spawn the same Python MCP server as other `/api/*` calls. Shapes ma
 | `GET` | `/api/aaak-spec` | `mempalace_get_aaak_spec` | — |
 | `GET` | `/api/diary` | `mempalace_diary_read` | `agent`, `last_n` |
 | `POST` | `/api/check-duplicate` | `mempalace_check_duplicate` | JSON body `{ content, threshold? }` |
+| `GET` | `/api/list-drawers` | `mempalace_list_drawers` | `wing`, `room`, `limit`, `offset` |
+| `GET` | `/api/drawer` | `mempalace_get_drawer` | `id` (required) |
 
-CORS allows `POST` for `/api/check-duplicate` only (alongside `GET` / `OPTIONS`).
+  CORS allows `POST` for `/api/check-duplicate` only (alongside `GET` / `OPTIONS`).
 
 ---
 
 ## Migration notes
+
+### Drawer endpoints
+
+| Field | Description |
+| --- | --- |
+| `/api/list-drawers?wing=&room=&limit=&offset=` | Paginated list of drawers; mirrors MCP `mempalace_list_drawers`. Returns `{ drawers, total, limit, offset }`. |
+| `/api/drawer?id=` | Single drawer content by id; mirrors MCP `mempalace_get_drawer`. Returns `{ drawer_id, wing, room, content, ... }`. |
+
+These are **content-only** reads — they do not produce graph edges or modify `edgesResolved`.
 
 ### Older clients
 

@@ -9,6 +9,8 @@ This is a concise map of **where graph-related relationship data comes from** in
 | **`build_graph` → tunnel rooms** | Explicit: same `room` name appears in **≥2 wings** (Chroma metadata) | Upstream **`find_tunnels` returns at most 50 rows** (`palace_graph.py`). The viz HTTP API **does not** patch MemPalace; it **heuristically** flags possible truncation when the MCP JSON array has length 50. | One full collection scan in batches (1000 rows); linear in drawer count. |
 | **`mempalace_graph_stats`** | Summary over the same graph (room counts, tunnel room count, `total_edges`, …) | `total_edges` counts **hall-labeled** edge rows in `build_graph` and can be **0** when metadata has no `hall`, even if tunnel rooms exist — do not use it as the viz edge count. Use `find_tunnels` for tunnel rows. | Same scan as `build_graph`. |
 | **`mempalace_get_taxonomy`** | Explicit hierarchy: wing → room → drawer count | Taxonomy is authoritative for **which** `(wing, room)` pairs exist for resolution. | MCP/Chroma read. |
+| **`mempalace_list_drawers`** | Paginated drawer listing per wing/room | Content-only; exposed via `/api/list-drawers`. Not graph edges. | MCP read. |
+| **`mempalace_get_drawer`** | Single drawer by id | Content-only; exposed via `/api/drawer?id=`. Not graph edges. | MCP read. |
 
 ## Viz HTTP API (`server.js` + `canonical.js`)
 
@@ -23,6 +25,7 @@ This is a concise map of **where graph-related relationship data comes from** in
 | --- | --- |
 | **SQLite knowledge graph (`mempalace_kg_*`)** | Entity/triple graph — **not** the Chroma palace tunnel graph. Exposed read-only via `/api/kg-stats`, `/api/kg-query`, `/api/kg-timeline`, and the Memory panel — never as fake room–room links. |
 | **Semantic search / traverse / diary** | Official MCP tools (`mempalace_search`, `mempalace_traverse`, `mempalace_diary_read`, …) — HTTP passthrough + UI panels; **do not** add edges to `edgesResolved`. |
+| **Drawer reads (`mempalace_list_drawers`, `mempalace_get_drawer`)** | Content-only MCP tools exposed via `/api/list-drawers` and `/api/drawer`; never produce graph edges or modify `edgesResolved`. |
 
 ## Discovery overlays (`data-mining.js`)
 
