@@ -119,6 +119,36 @@ const ROUTE_MODE_LS_KEY = 'mempalace-viz-route-mode-v1';
 const PANEL_STATE_KEY = 'mempalace-viz-panel-state-v1';
 const MINING_OVERLAY_LS_KEY = 'mempalace-viz-mining-overlay-v1';
 
+/** User-resized sidebar widths (px); applied on `document.documentElement`. */
+const PANEL_WIDTH_MIN = 220;
+const PANEL_WIDTH_MAX = 560;
+
+/**
+ * @param {number} px
+ */
+function clampPanelWidthPx(px) {
+  const cap = Math.min(PANEL_WIDTH_MAX, Math.floor(window.innerWidth * 0.46));
+  const max = Math.max(PANEL_WIDTH_MIN, cap);
+  return Math.max(PANEL_WIDTH_MIN, Math.min(px, max));
+}
+
+function clampPanelWidthsToViewport() {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return;
+  try {
+    if (window.matchMedia('(max-width: 900px)').matches) return;
+  } catch {
+    return;
+  }
+  for (const prop of ['--panel-left-w', '--panel-right-w']) {
+    const raw = document.documentElement.style.getPropertyValue(prop).trim();
+    if (!raw) continue;
+    const n = parseFloat(raw);
+    if (!Number.isFinite(n)) continue;
+    const w = clampPanelWidthPx(n);
+    if (w !== n) document.documentElement.style.setProperty(prop, `${w}px`);
+  }
+}
+
 /** Enabled relationship types for graph view; normalized when palace data loads. */
 let graphRelEnabledTypes = new Set();
 
@@ -3687,10 +3717,17 @@ function applyPanelLayoutFromStorage() {
       const p = JSON.parse(raw);
       leftCollapsed = !!p.leftCollapsed;
       rightCollapsed = !!p.rightCollapsed;
+      if (typeof p.panelLeftW === 'string' && p.panelLeftW.trim()) {
+        document.documentElement.style.setProperty('--panel-left-w', p.panelLeftW.trim());
+      }
+      if (typeof p.panelRightW === 'string' && p.panelRightW.trim()) {
+        document.documentElement.style.setProperty('--panel-right-w', p.panelRightW.trim());
+      }
     }
   } catch {
     /* ignore */
   }
+  clampPanelWidthsToViewport();
   const main = $('app-main-grid');
   const pl = $('panel-left');
   const pr = $('panel-right');
@@ -3707,12 +3744,16 @@ function applyPanelLayoutFromStorage() {
 
 function persistPanelLayout() {
   const main = $('app-main-grid');
+  const leftW = document.documentElement.style.getPropertyValue('--panel-left-w').trim();
+  const rightW = document.documentElement.style.getPropertyValue('--panel-right-w').trim();
   try {
     localStorage.setItem(
       PANEL_STATE_KEY,
       JSON.stringify({
         leftCollapsed: main?.classList.contains('has-left-collapsed') ?? false,
         rightCollapsed: main?.classList.contains('has-right-collapsed') ?? false,
+        ...(leftW ? { panelLeftW: leftW } : {}),
+        ...(rightW ? { panelRightW: rightW } : {}),
       }),
     );
   } catch {
@@ -3747,6 +3788,86 @@ function wirePanelCollapse() {
   // Edge restore handles — always-visible affordance when a panel is collapsed.
   $('panel-restore-left')?.addEventListener('click', () => setPanelCollapsed('left', false));
   $('panel-restore-right')?.addEventListener('click', () => setPanelCollapsed('right', false));
+}
+
+function wirePanelResize() {
+  const main = $('app-main-grid');
+  const leftHandle = $('panel-resize-left');
+  const rightHandle = $('panel-resize-right');
+  const leftEl = $('panel-left');
+  const rightEl = $('panel-right');
+  if (!main || !leftHandle || !rightHandle || !leftEl || !rightEl) return;
+
+  /** @type {{ side: 'left'|'right', startX: number, startW: number } | null} */
+  let drag = null;
+
+  function scheduleSceneResize() {
+    requestAnimationFrame(() => {
+      try {
+        sceneApi?.resize?.();
+      } catch {
+        /* ignore */
+      }
+    });
+  }
+
+  /**
+   * @param {'left'|'right'} side
+   * @param {PointerEvent} e
+   */
+  function onPointerDown(side, e) {
+    if (e.button !== 0) return;
+    const panel = side === 'left' ? leftEl : rightEl;
+    if (panel.classList.contains('panel--collapsed')) return;
+    e.preventDefault();
+    e.stopPropagation();
+    drag = {
+      side,
+      startX: e.clientX,
+      startW: panel.getBoundingClientRect().width,
+    };
+    main.classList.add('app-main--panel-resizing');
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  /** @param {PointerEvent} e */
+  function onPointerMove(e) {
+    if (!drag) return;
+    let w =
+      drag.side === 'left'
+        ? drag.startW + (e.clientX - drag.startX)
+        : drag.startW - (e.clientX - drag.startX);
+    w = clampPanelWidthPx(w);
+    const prop = drag.side === 'left' ? '--panel-left-w' : '--panel-right-w';
+    document.documentElement.style.setProperty(prop, `${w}px`);
+    scheduleSceneResize();
+  }
+
+  function endDrag() {
+    if (!drag) return;
+    drag = null;
+    main.classList.remove('app-main--panel-resizing');
+    persistPanelLayout();
+    scheduleSceneResize();
+  }
+
+  leftHandle.addEventListener('pointerdown', (e) => onPointerDown('left', e));
+  rightHandle.addEventListener('pointerdown', (e) => onPointerDown('right', e));
+  leftHandle.addEventListener('pointermove', onPointerMove);
+  rightHandle.addEventListener('pointermove', onPointerMove);
+  leftHandle.addEventListener('pointerup', endDrag);
+  rightHandle.addEventListener('pointerup', endDrag);
+  leftHandle.addEventListener('pointercancel', endDrag);
+  rightHandle.addEventListener('pointercancel', endDrag);
+
+  window.addEventListener('resize', () => {
+    clampPanelWidthsToViewport();
+    scheduleSceneResize();
+  });
 }
 
 function wireControls() {
@@ -3848,6 +3969,7 @@ function wireControls() {
   wireHelpFocusTrap();
   applyPanelLayoutFromStorage();
   wirePanelCollapse();
+  wirePanelResize();
   wireSemanticSearch();
   wireMemoryLens();
   wireMiningOverlay();

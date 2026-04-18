@@ -61,7 +61,8 @@
   /* Layout */
   --header-h: 54px;
   --footer-h: 40px;
-  --panel-w: clamp(280px, 18vw, 352px);
+  --panel-left-w: clamp(280px, 18vw, 352px);
+  --panel-right-w: clamp(280px, 18vw, 352px);
   --shell-gap: clamp(8px, 1vw, 16px);
 
   /* Motion */
@@ -497,7 +498,7 @@ a {
  * ----------------------------------------------------------------*/
 .app-main {
   display: grid;
-  grid-template-columns: var(--panel-w) 1fr var(--panel-w);
+  grid-template-columns: var(--panel-left-w) 1fr var(--panel-right-w);
   min-height: 0;
   position: relative;
   gap: var(--shell-gap);
@@ -581,6 +582,36 @@ a {
 
 .panel--right {
   border-right: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.panel-edge-resize {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  z-index: 8;
+  touch-action: none;
+  cursor: ew-resize;
+}
+
+.panel-edge-resize--left {
+  right: -4px;
+}
+
+.panel-edge-resize--right {
+  left: -4px;
+}
+
+.panel-edge-resize:hover {
+  background: rgba(143, 169, 255, 0.08);
+}
+
+.panel--collapsed .panel-edge-resize {
+  display: none;
+}
+
+.app-main.app-main--panel-resizing {
+  transition: none !important;
 }
 
 .panel--collapsed {
@@ -2634,11 +2665,11 @@ kbd {
 }
 
 .app-main.has-left-collapsed {
-  grid-template-columns: 0 minmax(0, 1fr) var(--panel-w);
+  grid-template-columns: 0 minmax(0, 1fr) var(--panel-right-w);
 }
 
 .app-main.has-right-collapsed {
-  grid-template-columns: var(--panel-w) minmax(0, 1fr) 0;
+  grid-template-columns: var(--panel-left-w) minmax(0, 1fr) 0;
 }
 
 .app-main.has-left-collapsed.has-right-collapsed {
@@ -2853,17 +2884,23 @@ kbd {
  * ----------------------------------------------------------------*/
 @media (max-width: 1200px) {
   :root {
-    --panel-w: clamp(250px, 27vw, 308px);
+    --panel-left-w: clamp(250px, 27vw, 308px);
+    --panel-right-w: clamp(250px, 27vw, 308px);
   }
 }
 
 @media (max-width: 1000px) {
   :root {
-    --panel-w: clamp(232px, 30vw, 276px);
+    --panel-left-w: clamp(232px, 30vw, 276px);
+    --panel-right-w: clamp(232px, 30vw, 276px);
   }
 }
 
 @media (max-width: 900px) {
+  .panel-edge-resize {
+    display: none !important;
+  }
+
   .app-main {
     grid-template-columns: 1fr;
     grid-template-rows: auto 1fr auto;
