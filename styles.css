@@ -2976,6 +2976,122 @@ kbd {
   flex: 1;
 }
 
+.memchat-tab-hint {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.memchat-tab-hint code {
+  font-size: 0.7rem;
+  color: var(--accent-bright);
+}
+
+.memchat-card {
+  position: fixed;
+  z-index: 45;
+  left: var(--memchat-card-left, 12px);
+  top: var(--memchat-card-top, 72px);
+  width: min(420px, calc(100vw - 24px));
+  max-height: min(78vh, 880px);
+  display: flex;
+  flex-direction: column;
+  border-radius: 12px;
+  border: 1px solid var(--hairline);
+  background: var(--surface-0, rgba(10, 14, 22, 0.96));
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.memchat-card[hidden] {
+  display: none !important;
+}
+
+.memchat-card--collapsed .memchat-card__content {
+  display: none;
+}
+
+.memchat-card--dragging {
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.55);
+  cursor: grabbing;
+}
+
+.memchat-card__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--hairline);
+  background: rgba(6, 10, 18, 0.6);
+  border-radius: 12px 12px 0 0;
+  user-select: none;
+}
+
+.memchat-card__drag {
+  cursor: grab;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  letter-spacing: -0.12em;
+  line-height: 1;
+  padding: 4px 2px;
+  border-radius: 4px;
+}
+
+.memchat-card__drag:hover {
+  color: var(--text);
+  background: var(--surface-1);
+}
+
+.memchat-card--dragging .memchat-card__drag {
+  cursor: grabbing;
+}
+
+.memchat-card__title {
+  flex: 1;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.memchat-card__collapse-btn {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.memchat-card__collapse-btn:hover {
+  color: var(--text);
+  border-color: var(--border);
+  background: var(--surface-1);
+}
+
+.memchat-card__content {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  flex: 1;
+  padding: 10px 12px 12px;
+  overflow: hidden;
+}
+
+.memchat-card__content .memchat-messages {
+  min-height: 120px;
+  max-height: min(38vh, 360px);
+}
+
 .memchat-lead {
   margin: 0;
   font-size: 0.78rem;

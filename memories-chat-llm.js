@@ -3,7 +3,53 @@
  * Requests go only to the configured base; optional Bearer when apiKey non-empty.
  */
 
-import { chatCompletionsUrl, modelsListUrl, normalizeOpenAiApiRoot } from './memories-chat-config.js';
+import { createApiUrl } from './api.js';
+import {
+  chatCompletionsUrl,
+  isLoopbackOpenAiUrl,
+  modelsListUrl,
+  normalizeOpenAiApiRoot,
+} from './memories-chat-config.js';
+
+/**
+ * Same-origin proxy for loopback OpenAI URLs so the browser does not hit cross-origin CORS
+ * (local servers often omit Access-Control headers; OPTIONS may log errors).
+ * @param {string} url
+ * @param {RequestInit} [init]
+ */
+async function openAiFetch(url, init = {}) {
+  const u = String(url);
+  if (typeof globalThis !== 'undefined' && globalThis.location && isLoopbackOpenAiUrl(u)) {
+    const proxyUrl = createApiUrl('/api/memories-chat/openai-proxy').toString();
+    const hi = init.headers;
+    const forwardHeaders = {};
+    if (hi instanceof Headers) {
+      hi.forEach((v, k) => {
+        forwardHeaders[k] = v;
+      });
+    } else if (hi && typeof hi === 'object') {
+      Object.assign(forwardHeaders, /** @type {Record<string, string>} */ (hi));
+    }
+    const bodyStr =
+      typeof init.body === 'string'
+        ? init.body
+        : init.body != null
+          ? String(init.body)
+          : null;
+    return fetch(proxyUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        targetUrl: u,
+        method: init.method || 'GET',
+        headers: forwardHeaders,
+        body: bodyStr,
+      }),
+      signal: init.signal,
+    });
+  }
+  return fetch(u, init);
+}
 
 /**
  * Parse a single SSE `data:` line payload (OpenAI chat completions stream).
@@ -117,7 +163,7 @@ export async function testOpenAiCompatibleConnection(endpointInput, opts = {}) {
   const t = setTimeout(() => controller.abort(), timeoutMs);
   const signal = opts.signal ? combineAbortSignals(opts.signal, controller.signal) : controller.signal;
   try {
-    const res = await fetch(url, { method: 'GET', headers, signal });
+    const res = await openAiFetch(url, { method: 'GET', headers, signal });
     const text = await res.text();
     let data;
     try {
@@ -229,7 +275,7 @@ export async function openAiChatCompletions({
 
   let res;
   try {
-    res = await fetch(url, {
+    res = await openAiFetch(url, {
       method: 'POST',
       headers,
       body: JSON.stringify(body),
@@ -366,7 +412,7 @@ export async function openAiChatCompletionsStreamRequest({
 
   let res;
   try {
-    res = await fetch(url, {
+    res = await openAiFetch(url, {
       method: 'POST',
       headers,
       body: JSON.stringify(body),

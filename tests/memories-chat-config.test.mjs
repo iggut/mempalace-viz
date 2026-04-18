@@ -4,6 +4,7 @@ import {
   chatCompletionsUrl,
   clearMemoriesChatConfigStorage,
   defaultMemoriesChatConfig,
+  isLoopbackOpenAiUrl,
   loadMemoriesChatConfig,
   MEMORIES_CHAT_CONFIG_LS_KEY,
   normalizeOpenAiApiRoot,
@@ -26,6 +27,12 @@ test('normalizeOpenAiApiRoot rejects bad URLs', () => {
 
 test('chatCompletionsUrl appends single /chat/completions', () => {
   assert.equal(chatCompletionsUrl('http://127.0.0.1:1/v1'), 'http://127.0.0.1:1/v1/chat/completions');
+});
+
+test('isLoopbackOpenAiUrl', () => {
+  assert.equal(isLoopbackOpenAiUrl('http://127.0.0.1:1/v1/models'), true);
+  assert.equal(isLoopbackOpenAiUrl('http://localhost:99/v1/chat/completions'), true);
+  assert.equal(isLoopbackOpenAiUrl('http://example.com/v1/models'), false);
 });
 
 test('save/load roundtrip for endpoint config (no key echo in assertion)', () => {

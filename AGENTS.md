@@ -7,7 +7,7 @@
 
 ## Shipped surfaces
 - `/`, `/index.html`, `/viz`, `/3d`, `/palace3d` all serve the same viewer.
-- API: `/api/status`, `/api/wings`, `/api/rooms`, `/api/taxonomy`, `/api/palace`, `/api/graph-stats`, `/api/overview`, `/api/kg-stats`, `/api/mcp-tools`, `/api/search`, `/api/traverse`, `/api/kg-query`, `/api/kg-timeline`, `/api/aaak-spec`, `/api/diary`, `POST /api/check-duplicate`.
+- API: `/api/status`, `/api/wings`, `/api/rooms`, `/api/taxonomy`, `/api/palace`, `/api/graph-stats`, `/api/overview`, `/api/kg-stats`, `/api/mcp-tools`, `/api/search`, `/api/traverse`, `/api/kg-query`, `/api/kg-timeline`, `/api/aaak-spec`, `/api/diary`, `POST /api/check-duplicate`, `POST /api/memories-chat/openai-proxy` (loopback OpenAI-compatible proxy for Memories Chat).
 
 ## Key files
 - `index.html` — shell (header / panels / footer).

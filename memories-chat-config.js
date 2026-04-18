@@ -59,6 +59,22 @@ export function modelsListUrl(apiRoot) {
 }
 
 /**
+ * True when the URL points at this machine — browser may use the viz server proxy to avoid CORS.
+ * @param {string} urlString — full URL (e.g. models or chat/completions URL)
+ */
+export function isLoopbackOpenAiUrl(urlString) {
+  let u;
+  try {
+    u = new URL(urlString);
+  } catch {
+    return false;
+  }
+  if (u.protocol !== 'http:' && u.protocol !== 'https:') return false;
+  const h = u.hostname.toLowerCase();
+  return h === 'localhost' || h === '127.0.0.1' || h === '[::1]' || h === '::1';
+}
+
+/**
  * @param {unknown} raw
  * @returns {MemoriesChatConfig}
  */

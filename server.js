@@ -7,7 +7,7 @@
  *       /api/mcp-tools, /api/search, /api/traverse, /api/kg-query,
  *       /api/kg-timeline, /api/aaak-spec, /api/diary,
  *       /api/list-drawers, /api/drawer
- *   POST /api/check-duplicate
+ *   POST /api/check-duplicate, POST /api/memories-chat/openai-proxy (loopback OpenAI-compatible proxy)
  *
  * Every request spawns `mempalace.mcp_server` as a short-lived child process
  * via the venv Python. Palace snapshots fan out MCP calls in parallel and
@@ -18,6 +18,9 @@ import { createServer } from 'http';
 import { fileURLToPath } from 'url';
 import { dirname, join, extname, resolve, sep } from 'path';
 import { promises as fs } from 'fs';
+import { Readable } from 'stream';
+import { pipeline } from 'stream/promises';
+import { isLoopbackOpenAiUrl } from './memories-chat-config.js';
 import {
   parseTaxonomyCanonical,
   buildEnrichedGraphFromTaxonomyAndTunnels,
@@ -280,6 +283,81 @@ async function serveStatic(req, res, pathname) {
   return true;
 }
 
+function sanitizeOpenAiForwardHeaders(h) {
+  if (!h || typeof h !== 'object') return {};
+  const out = {};
+  const allow = new Set(['accept', 'authorization', 'content-type']);
+  for (const [k, v] of Object.entries(h)) {
+    if (typeof k === 'string' && typeof v === 'string' && allow.has(k.toLowerCase())) {
+      out[k] = v;
+    }
+  }
+  return out;
+}
+
+/**
+ * Browser-safe fetch to loopback OpenAI-compatible servers (avoids cross-origin CORS).
+ * @param {import('http').IncomingMessage} req
+ * @param {import('http').ServerResponse} res
+ * @param {() => Promise<unknown>} readJsonBody
+ */
+async function handleOpenAiProxy(req, res, readJsonBody) {
+  let body;
+  try {
+    body = await readJsonBody();
+  } catch {
+    res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+    res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+    return;
+  }
+  const targetUrl = typeof body.targetUrl === 'string' ? body.targetUrl.trim() : '';
+  const method = body.method === 'POST' || body.method === 'GET' ? body.method : null;
+  if (!method || !isLoopbackOpenAiUrl(targetUrl)) {
+    res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+    res.end(JSON.stringify({ error: 'Invalid or disallowed target (loopback http(s) only).' }));
+    return;
+  }
+  const headers = sanitizeOpenAiForwardHeaders(body.headers);
+  const rawBody = typeof body.body === 'string' ? body.body : undefined;
+
+  const ac = new AbortController();
+  const onClose = () => ac.abort();
+  req.on('close', onClose);
+
+  try {
+    const upstream = await fetch(targetUrl, {
+      method,
+      headers,
+      body: method === 'POST' ? rawBody : undefined,
+      signal: ac.signal,
+    });
+
+    const outHeaders = /** @type {Record<string, string>} */ ({});
+    const ct = upstream.headers.get('content-type');
+    if (ct) outHeaders['Content-Type'] = ct;
+
+    res.writeHead(upstream.status, outHeaders);
+    if (upstream.body) {
+      await pipeline(Readable.fromWeb(upstream.body), res);
+    } else {
+      res.end();
+    }
+  } catch (e) {
+    if (!res.headersSent) {
+      res.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ error: e?.message || 'Upstream request failed' }));
+    } else {
+      try {
+        res.end();
+      } catch {
+        /* ignore */
+      }
+    }
+  } finally {
+    req.removeListener('close', onClose);
+  }
+}
+
 process.on('uncaughtException', (error) => {
   console.error('Uncaught exception:', error?.stack || error);
 });
@@ -343,6 +421,11 @@ const server = createServer(async (req, res) => {
       res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
       res.end(JSON.stringify({ error: error.message }));
     }
+    return;
+  }
+
+  if (pathname === '/api/memories-chat/openai-proxy' && req.method === 'POST') {
+    await handleOpenAiProxy(req, res, readJsonBody);
     return;
   }
 

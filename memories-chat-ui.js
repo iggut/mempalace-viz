@@ -20,6 +20,7 @@ import {
 import { fetchDrawerById, fetchSemanticSearch } from './api.js';
 
 const THREAD_SS_KEY = 'mempalace-viz-memories-chat-thread-v1';
+const MEMCHAT_CARD_LS_KEY = 'mempalace-viz-memchat-card-layout-v1';
 
 function escapeHtml(s) {
   return String(s ?? '')
@@ -68,6 +69,9 @@ export function initMemoriesChat(hooks) {
   const explorePane = $('panel-left-explore-pane');
   const memPane = $('panel-left-memchat-pane');
   const titleEl = $('panel-left-title');
+  const memchatCard = $('memchat-card');
+  const memchatCardDrag = $('memchat-card-drag');
+  const memchatCardCollapse = $('memchat-card-collapse');
 
   const endpointEl = $('memchat-endpoint');
   const apiKeyEl = $('memchat-apikey');
@@ -142,9 +146,115 @@ export function initMemoriesChat(hooks) {
     memBtn.setAttribute('aria-selected', isExplore ? 'false' : 'true');
     explorePane.hidden = !isExplore;
     memPane.hidden = isExplore;
+    if (memchatCard) memchatCard.hidden = isExplore;
     if (titleEl) titleEl.textContent = isExplore ? 'Explore' : 'Chat with memories';
     hooks.onModeChange?.(next);
   }
+
+  function loadMemchatCardLayout() {
+    if (typeof localStorage === 'undefined' || !memchatCard) return;
+    try {
+      const raw = localStorage.getItem(MEMCHAT_CARD_LS_KEY);
+      if (!raw) return;
+      const j = JSON.parse(raw);
+      if (typeof j.left === 'number' && typeof j.top === 'number') {
+        memchatCard.style.setProperty('--memchat-card-left', `${j.left}px`);
+        memchatCard.style.setProperty('--memchat-card-top', `${j.top}px`);
+      }
+      if (j.collapsed === true) {
+        memchatCard.classList.add('memchat-card--collapsed');
+        if (memchatCardCollapse) {
+          memchatCardCollapse.setAttribute('aria-expanded', 'false');
+          memchatCardCollapse.textContent = '+';
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function saveMemchatCardLayout() {
+    if (typeof localStorage === 'undefined' || !memchatCard) return;
+    const leftVar = memchatCard.style.getPropertyValue('--memchat-card-left').trim();
+    const topVar = memchatCard.style.getPropertyValue('--memchat-card-top').trim();
+    const r = memchatCard.getBoundingClientRect();
+    const left = leftVar ? parseFloat(leftVar) : r.left;
+    const top = topVar ? parseFloat(topVar) : r.top;
+    const collapsed = memchatCard.classList.contains('memchat-card--collapsed');
+    try {
+      localStorage.setItem(MEMCHAT_CARD_LS_KEY, JSON.stringify({ left, top, collapsed }));
+    } catch {
+      /* ignore */
+    }
+  }
+
+  /** @type {{ ox: number, oy: number } | null} */
+  let memchatDrag = null;
+
+  function clampMemchatCardPosition() {
+    if (!memchatCard) return;
+    const rect = memchatCard.getBoundingClientRect();
+    const w = rect.width;
+    const h = rect.height;
+    let left = parseFloat(memchatCard.style.getPropertyValue('--memchat-card-left')) || rect.left;
+    let top = parseFloat(memchatCard.style.getPropertyValue('--memchat-card-top')) || rect.top;
+    left = Math.max(8, Math.min(left, window.innerWidth - w - 8));
+    top = Math.max(8, Math.min(top, window.innerHeight - h - 8));
+    memchatCard.style.setProperty('--memchat-card-left', `${left}px`);
+    memchatCard.style.setProperty('--memchat-card-top', `${top}px`);
+  }
+
+  loadMemchatCardLayout();
+
+  memchatCardDrag?.addEventListener('pointerdown', (e) => {
+    if (!memchatCard || e.button !== 0) return;
+    e.preventDefault();
+    const rect = memchatCard.getBoundingClientRect();
+    memchatDrag = { ox: e.clientX - rect.left, oy: e.clientY - rect.top };
+    memchatCard.classList.add('memchat-card--dragging');
+    try {
+      memchatCardDrag.setPointerCapture(e.pointerId);
+    } catch {
+      /* ignore */
+    }
+  });
+
+  memchatCardDrag?.addEventListener('pointermove', (e) => {
+    if (!memchatDrag || !memchatCard) return;
+    let left = e.clientX - memchatDrag.ox;
+    let top = e.clientY - memchatDrag.oy;
+    const w = memchatCard.offsetWidth;
+    const h = memchatCard.offsetHeight;
+    left = Math.max(8, Math.min(left, window.innerWidth - w - 8));
+    top = Math.max(8, Math.min(top, window.innerHeight - h - 8));
+    memchatCard.style.setProperty('--memchat-card-left', `${left}px`);
+    memchatCard.style.setProperty('--memchat-card-top', `${top}px`);
+  });
+
+  function endMemchatDrag() {
+    if (!memchatDrag) return;
+    memchatDrag = null;
+    memchatCard?.classList.remove('memchat-card--dragging');
+    saveMemchatCardLayout();
+  }
+
+  memchatCardDrag?.addEventListener('pointerup', endMemchatDrag);
+  memchatCardDrag?.addEventListener('pointercancel', endMemchatDrag);
+
+  memchatCardCollapse?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (!memchatCard) return;
+    memchatCard.classList.toggle('memchat-card--collapsed');
+    const collapsed = memchatCard.classList.contains('memchat-card--collapsed');
+    memchatCardCollapse.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    memchatCardCollapse.textContent = collapsed ? '+' : '−';
+    saveMemchatCardLayout();
+  });
+
+  window.addEventListener('resize', () => {
+    clampMemchatCardPosition();
+    saveMemchatCardLayout();
+  });
 
   exploreBtn.addEventListener('click', () => setMode('explore'));
   memBtn.addEventListener('click', () => setMode('memchat'));
