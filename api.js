@@ -353,3 +353,215 @@ export async function loadPalaceData() {
     };
   }
 }
+
+// ==================== TUNNEL MANAGEMENT ====================
+
+/**
+ * Find tunnels bridging two wings.
+ * @param {{ wing_a?: string, wing_b?: string }} [opts]
+ */
+export async function fetchFindTunnels(opts = {}) {
+  const u = createApiUrl('/api/find-tunnels');
+  if (opts.wing_a) u.searchParams.set('wing_a', opts.wing_a);
+  if (opts.wing_b) u.searchParams.set('wing_b', opts.wing_b);
+  return fetchJson(u.toString(), { timeoutMs: 25000 });
+}
+
+/**
+ * List all explicit cross-wing tunnels, optionally filtered by wing.
+ * @param {string} [wing]
+ */
+export async function fetchListTunnels(wing) {
+  const u = createApiUrl('/api/list-tunnels');
+  if (wing && String(wing).trim()) u.searchParams.set('wing', String(wing).trim());
+  return fetchJson(u.toString(), { timeoutMs: 25000 });
+}
+
+/**
+ * Follow tunnels from a room to see what it connects to in other wings.
+ * @param {string} wing
+ * @param {string} room
+ */
+export async function fetchFollowTunnels(wing, room) {
+  const u = createApiUrl('/api/follow-tunnels');
+  u.searchParams.set('wing', wing);
+  u.searchParams.set('room', room);
+  return fetchJson(u.toString(), { timeoutMs: 25000 });
+}
+
+/**
+ * Create a cross-wing tunnel.
+ * @param {{ source_wing: string, source_room: string, target_wing: string, target_room: string, label?: string, source_drawer_id?: string, target_drawer_id?: string }} params
+ */
+export async function fetchCreateTunnel(params) {
+  const res = await fetch(createApiUrl('/api/create-tunnel').toString(), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify(params),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(text || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+/**
+ * Delete an explicit tunnel by ID.
+ * @param {string} tunnelId
+ */
+export async function fetchDeleteTunnel(tunnelId) {
+  const res = await fetch(createApiUrl('/api/delete-tunnel').toString(), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ tunnel_id: tunnelId }),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(text || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+// ==================== KNOWLEDGE GRAPH MUTATION ====================
+
+/**
+ * Add a fact to the knowledge graph.
+ * @param {{ subject: string, predicate: string, object: string, valid_from?: string, source_closet?: string }} params
+ */
+export async function fetchKgAdd(params) {
+  const res = await fetch(createApiUrl('/api/kg-add').toString(), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify(params),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(text || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+/**
+ * Invalidate a fact (mark as no longer true).
+ * @param {{ subject: string, predicate: string, object: string, ended?: string }} params
+ */
+export async function fetchKgInvalidate(params) {
+  const res = await fetch(createApiUrl('/api/kg-invalidate').toString(), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify(params),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(text || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+// ==================== DRAWER MUTATION ====================
+
+/**
+ * File verbatim content into the palace.
+ * @param {{ wing: string, room: string, content: string, source_file?: string, added_by?: string }} params
+ */
+export async function fetchAddDrawer(params) {
+  const res = await fetch(createApiUrl('/api/add-drawer').toString(), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify(params),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(text || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+/**
+ * Delete a drawer by ID.
+ * @param {string} drawerId
+ */
+export async function fetchDeleteDrawer(drawerId) {
+  const res = await fetch(createApiUrl('/api/delete-drawer').toString(), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ drawer_id: drawerId }),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(text || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+/**
+ * Update an existing drawer's content and/or metadata.
+ * @param {{ drawer_id: string, content?: string, wing?: string, room?: string }} params
+ */
+export async function fetchUpdateDrawer(params) {
+  const res = await fetch(createApiUrl('/api/update-drawer').toString(), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify(params),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(text || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+// ==================== DIARY WRITE ====================
+
+/**
+ * Write to an agent's personal diary.
+ * @param {{ agent_name: string, entry: string, topic?: string }} params
+ */
+export async function fetchDiaryWrite(params) {
+  const res = await fetch(createApiUrl('/api/diary-write').toString(), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify(params),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(text || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+// ==================== HOOK SETTINGS ====================
+
+/**
+ * Get or set hook behavior settings.
+ * @param {{ silent_save?: boolean, desktop_toast?: boolean }} [params]
+ */
+export async function fetchHookSettings(params = {}) {
+  const res = await fetch(createApiUrl('/api/hook-settings').toString(), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify(params),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(text || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+// ==================== MAINTENANCE ====================
+
+/**
+ * Check if a recent palace checkpoint was saved.
+ */
+export async function fetchMemoriesFiledAway() {
+  return fetchJson(createApiUrl('/api/memories-filed-away').toString(), { timeoutMs: 15000 });
+}
+
+/**
+ * Force reconnect to the palace database (rebuilds HNSW index).
+ */
+export async function fetchReconnect() {
+  return fetchJson(createApiUrl('/api/reconnect').toString(), { timeoutMs: 15000 });
+}

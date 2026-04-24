@@ -1,13 +1,18 @@
 /**
  * MemPalace Viz — Node bridge to the Python MemPalace MCP server.
  *
- * Exposes palace data and selected official MCP tools over HTTP:
- *   GET /api/status, /api/wings, /api/rooms, /api/taxonomy,
+ * Exposes palace data and all official MCP tools over HTTP:
+ *   GET  /api/status, /api/wings, /api/rooms, /api/taxonomy,
  *       /api/palace, /api/graph-stats, /api/overview, /api/kg-stats,
  *       /api/mcp-tools, /api/search, /api/traverse, /api/kg-query,
  *       /api/kg-timeline, /api/aaak-spec, /api/diary,
- *       /api/list-drawers, /api/drawer
- *   POST /api/check-duplicate, POST /api/memories-chat/openai-proxy (loopback OpenAI-compatible proxy)
+ *       /api/list-drawers, /api/drawer,
+ *       /api/find-tunnels, /api/list-tunnels, /api/follow-tunnels,
+ *   POST /api/check-duplicate, /api/create-tunnel, /api/delete-tunnel,
+ *        /api/kg-add, /api/kg-invalidate, /api/add-drawer,
+ *        /api/delete-drawer, /api/update-drawer, /api/diary-write,
+ *        /api/hook-settings, /api/memories-filed-away, /api/reconnect,
+ *        /api/memories-chat/openai-proxy (loopback OpenAI-compatible proxy)
  *
  * Every request spawns `mempalace.mcp_server` as a short-lived child process
  * via the venv Python. Palace snapshots fan out MCP calls in parallel and
@@ -442,6 +447,7 @@ const server = createServer(async (req, res) => {
   try {
     let result;
 
+    // --- POST handlers (must come before the GET-only guard) ---
     if (pathname === '/api/check-duplicate' && req.method === 'POST') {
       const body = await readJsonBody();
       const content = typeof body.content === 'string' ? body.content : '';
@@ -454,6 +460,175 @@ const server = createServer(async (req, res) => {
         content,
         threshold: typeof body.threshold === 'number' ? body.threshold : 0.9,
       });
+      res.writeHead(200);
+      res.end(JSON.stringify(result));
+      return;
+    }
+
+    if (pathname === '/api/create-tunnel' && req.method === 'POST') {
+      const body = await readJsonBody();
+      const sourceWing = typeof body.source_wing === 'string' ? body.source_wing : '';
+      const sourceRoom = typeof body.source_room === 'string' ? body.source_room : '';
+      const targetWing = typeof body.target_wing === 'string' ? body.target_wing : '';
+      const targetRoom = typeof body.target_room === 'string' ? body.target_room : '';
+      if (!sourceWing || !sourceRoom || !targetWing || !targetRoom) {
+        res.writeHead(400);
+        res.end(JSON.stringify({ error: 'source_wing, source_room, target_wing, target_room required' }));
+        return;
+      }
+      result = await callMcp('mempalace_create_tunnel', {
+        source_wing: sourceWing,
+        source_room: sourceRoom,
+        target_wing: targetWing,
+        target_room: targetRoom,
+        label: typeof body.label === 'string' ? body.label : undefined,
+        source_drawer_id: typeof body.source_drawer_id === 'string' ? body.source_drawer_id : undefined,
+        target_drawer_id: typeof body.target_drawer_id === 'string' ? body.target_drawer_id : undefined,
+      }, 20000);
+      res.writeHead(200);
+      res.end(JSON.stringify(result));
+      return;
+    }
+
+    if (pathname === '/api/delete-tunnel' && req.method === 'POST') {
+      const body = await readJsonBody();
+      const tunnelId = typeof body.tunnel_id === 'string' ? body.tunnel_id : '';
+      if (!tunnelId) {
+        res.writeHead(400);
+        res.end(JSON.stringify({ error: 'tunnel_id required' }));
+        return;
+      }
+      result = await callMcp('mempalace_delete_tunnel', { tunnel_id: tunnelId }, 20000);
+      res.writeHead(200);
+      res.end(JSON.stringify(result));
+      return;
+    }
+
+    if (pathname === '/api/kg-add' && req.method === 'POST') {
+      const body = await readJsonBody();
+      const subject = typeof body.subject === 'string' ? body.subject : '';
+      const predicate = typeof body.predicate === 'string' ? body.predicate : '';
+      const object = typeof body.object === 'string' ? body.object : '';
+      if (!subject || !predicate || !object) {
+        res.writeHead(400);
+        res.end(JSON.stringify({ error: 'subject, predicate, object required' }));
+        return;
+      }
+      result = await callMcp('mempalace_kg_add', {
+        subject,
+        predicate,
+        object,
+        valid_from: typeof body.valid_from === 'string' ? body.valid_from : undefined,
+        source_closet: typeof body.source_closet === 'string' ? body.source_closet : undefined,
+      }, 20000);
+      res.writeHead(200);
+      res.end(JSON.stringify(result));
+      return;
+    }
+
+    if (pathname === '/api/kg-invalidate' && req.method === 'POST') {
+      const body = await readJsonBody();
+      const subject = typeof body.subject === 'string' ? body.subject : '';
+      const predicate = typeof body.predicate === 'string' ? body.predicate : '';
+      const object = typeof body.object === 'string' ? body.object : '';
+      if (!subject || !predicate || !object) {
+        res.writeHead(400);
+        res.end(JSON.stringify({ error: 'subject, predicate, object required' }));
+        return;
+      }
+      result = await callMcp('mempalace_kg_invalidate', {
+        subject,
+        predicate,
+        object,
+        ended: typeof body.ended === 'string' ? body.ended : undefined,
+      }, 20000);
+      res.writeHead(200);
+      res.end(JSON.stringify(result));
+      return;
+    }
+
+    if (pathname === '/api/add-drawer' && req.method === 'POST') {
+      const body = await readJsonBody();
+      const wing = typeof body.wing === 'string' ? body.wing : '';
+      const room = typeof body.room === 'string' ? body.room : '';
+      const content = typeof body.content === 'string' ? body.content : '';
+      if (!wing || !room || !content) {
+        res.writeHead(400);
+        res.end(JSON.stringify({ error: 'wing, room, content required' }));
+        return;
+      }
+      result = await callMcp('mempalace_add_drawer', {
+        wing,
+        room,
+        content,
+        source_file: typeof body.source_file === 'string' ? body.source_file : undefined,
+        added_by: typeof body.added_by === 'string' ? body.added_by : undefined,
+      }, 20000);
+      res.writeHead(200);
+      res.end(JSON.stringify(result));
+      return;
+    }
+
+    if (pathname === '/api/delete-drawer' && req.method === 'POST') {
+      const body = await readJsonBody();
+      const drawerId = typeof body.drawer_id === 'string' ? body.drawer_id : '';
+      if (!drawerId) {
+        res.writeHead(400);
+        res.end(JSON.stringify({ error: 'drawer_id required' }));
+        return;
+      }
+      result = await callMcp('mempalace_delete_drawer', { drawer_id: drawerId }, 20000);
+      res.writeHead(200);
+      res.end(JSON.stringify(result));
+      return;
+    }
+
+    if (pathname === '/api/update-drawer' && req.method === 'POST') {
+      const body = await readJsonBody();
+      const drawerId = typeof body.drawer_id === 'string' ? body.drawer_id : '';
+      if (!drawerId) {
+        res.writeHead(400);
+        res.end(JSON.stringify({ error: 'drawer_id required' }));
+        return;
+      }
+      result = await callMcp('mempalace_update_drawer', {
+        drawer_id: drawerId,
+        content: typeof body.content === 'string' ? body.content : undefined,
+        wing: typeof body.wing === 'string' ? body.wing : undefined,
+        room: typeof body.room === 'string' ? body.room : undefined,
+      }, 20000);
+      res.writeHead(200);
+      res.end(JSON.stringify(result));
+      return;
+    }
+
+    if (pathname === '/api/diary-write' && req.method === 'POST') {
+      const body = await readJsonBody();
+      const agentName = typeof body.agent_name === 'string' ? body.agent_name : '';
+      const entry = typeof body.entry === 'string' ? body.entry : '';
+      if (!agentName || !entry) {
+        res.writeHead(400);
+        res.end(JSON.stringify({ error: 'agent_name and entry required' }));
+        return;
+      }
+      result = await callMcp('mempalace_diary_write', {
+        agent_name: agentName,
+        entry,
+        topic: typeof body.topic === 'string' ? body.topic : undefined,
+      }, 20000);
+      res.writeHead(200);
+      res.end(JSON.stringify(result));
+      return;
+    }
+
+    if (pathname === '/api/hook-settings' && req.method === 'POST') {
+      const body = await readJsonBody();
+      const silentSave = typeof body.silent_save === 'boolean' ? body.silent_save : undefined;
+      const desktopToast = typeof body.desktop_toast === 'boolean' ? body.desktop_toast : undefined;
+      result = await callMcp('mempalace_hook_settings', {
+        ...(silentSave !== undefined && { silent_save: silentSave }),
+        ...(desktopToast !== undefined && { desktop_toast: desktopToast }),
+      }, 10000);
       res.writeHead(200);
       res.end(JSON.stringify(result));
       return;
@@ -643,6 +818,44 @@ const server = createServer(async (req, res) => {
         break;
       }
 
+      // --- Tunnel management (GET) ---
+      case '/api/find-tunnels': {
+        const wingA = requestUrl.searchParams.get('wing_a')?.trim() || undefined;
+        const wingB = requestUrl.searchParams.get('wing_b')?.trim() || undefined;
+        result = await callMcp('mempalace_find_tunnels', { ...(wingA && { wing_a: wingA }), ...(wingB && { wing_b: wingB }) }, 20000);
+        break;
+      }
+
+      case '/api/list-tunnels': {
+        const wing = requestUrl.searchParams.get('wing')?.trim() || undefined;
+        result = await callMcp('mempalace_list_tunnels', wing ? { wing } : {}, 20000);
+        break;
+      }
+
+      case '/api/follow-tunnels': {
+        const wing = requestUrl.searchParams.get('wing')?.trim() || '';
+        const room = requestUrl.searchParams.get('room')?.trim() || '';
+        if (!wing || !room) {
+          res.writeHead(400);
+          res.end(JSON.stringify({ error: 'wing and room parameters required' }));
+          return;
+        }
+        result = await callMcp('mempalace_follow_tunnels', { wing, room }, 20000);
+        break;
+      }
+
+      // --- Memories filed away (GET) ---
+      case '/api/memories-filed-away': {
+        result = await callMcp('mempalace_memories_filed_away', {}, 10000);
+        break;
+      }
+
+      // --- Reconnect (GET) ---
+      case '/api/reconnect': {
+        result = await callMcp('mempalace_reconnect', {}, 10000);
+        break;
+      }
+
       default:
         res.writeHead(404);
         res.end(JSON.stringify({ error: 'Not found' }));
@@ -665,11 +878,16 @@ const AUTO_EXIT_MS = Number(process.env.AUTO_EXIT_MS || 0);
 server.listen(PORT, HOST, () => {
   console.log(`MemPalace Viz API running at http://${HOST}:${PORT}`);
   console.log('  Static: /, /viz, /3d, /palace3d  →  index.html');
-  console.log('  API:    /api/status, /api/wings, /api/rooms, /api/taxonomy,');
+  console.log('  API (GET):  /api/status, /api/wings, /api/rooms, /api/taxonomy,');
   console.log('          /api/palace, /api/graph-stats, /api/overview, /api/kg-stats,');
   console.log('          /api/mcp-tools, /api/search, /api/traverse, /api/kg-query,');
   console.log('          /api/kg-timeline, /api/aaak-spec, /api/diary, /api/list-drawers, /api/drawer,');
-  console.log('          POST /api/check-duplicate');
+  console.log('          /api/find-tunnels, /api/list-tunnels, /api/follow-tunnels,');
+  console.log('          /api/memories-filed-away, /api/reconnect');
+  console.log('  API (POST): /api/check-duplicate, /api/create-tunnel, /api/delete-tunnel,');
+  console.log('          /api/kg-add, /api/kg-invalidate, /api/add-drawer,');
+  console.log('          /api/delete-drawer, /api/update-drawer, /api/diary-write,');
+  console.log('          /api/hook-settings, /api/memories-chat/openai-proxy');
   console.log('  Set HOST=127.0.0.1 to restrict to local-only access.');
   if (AUTO_EXIT_MS > 0) {
     console.log(`  Auto-exit enabled after ${AUTO_EXIT_MS}ms (dev restart mode).`);

@@ -146,6 +146,81 @@ These routes spawn the same Python MCP server as other `/api/*` calls. Shapes ma
 
 ---
 
+## Tunnel management endpoints
+
+These routes expose explicit tunnel CRUD operations from the MCP server.
+
+### Read-only (GET)
+
+| Method | Path | MCP tool | Parameters |
+| --- | --- | --- | --- |
+| `GET` | `/api/find-tunnels` | `mempalace_find_tunnels` | `wing_a`, `wing_b` (optional — filters to tunnels between specific wings) |
+| `GET` | `/api/list-tunnels` | `mempalace_list_tunnels` | `wing` (optional — filter by wing) |
+| `GET` | `/api/follow-tunnels` | `mempalace_follow_tunnels` | `wing`, `room` (both required) |
+
+### Mutation (POST)
+
+| Method | Path | MCP tool | JSON body |
+| --- | --- | --- | --- |
+| `POST` | `/api/create-tunnel` | `mempalace_create_tunnel` | `{ source_wing, source_room, target_wing, target_room, label?, source_drawer_id?, target_drawer_id? }` |
+| `POST` | `/api/delete-tunnel` | `mempalace_delete_tunnel` | `{ tunnel_id }` (required) |
+
+---
+
+## Knowledge graph mutation endpoints
+
+These routes allow adding and invalidating facts in the palace knowledge graph.
+
+### Mutation (POST)
+
+| Method | Path | MCP tool | JSON body |
+| --- | --- | --- | --- |
+| `POST` | `/api/kg-add` | `mempalace_kg_add` | `{ subject, predicate, object }` (all required), optional: `valid_from`, `source_closet` |
+| `POST` | `/api/kg-invalidate` | `mempalace_kg_invalidate` | `{ subject, predicate, object }` (all required), optional: `ended` |
+
+---
+
+## Drawer mutation endpoints
+
+These routes allow filing content and updating existing drawers.
+
+### Mutation (POST)
+
+| Method | Path | MCP tool | JSON body |
+| --- | --- | --- | --- |
+| `POST` | `/api/add-drawer` | `mempalace_add_drawer` | `{ wing, room, content }` (all required), optional: `source_file`, `added_by` |
+| `POST` | `/api/delete-drawer` | `mempalace_delete_drawer` | `{ drawer_id }` (required) |
+| `POST` | `/api/update-drawer` | `mempalace_update_drawer` | `{ drawer_id }` (required), optional: `content`, `wing`, `room` |
+
+---
+
+## Diary write endpoint
+
+| Method | Path | MCP tool | JSON body |
+| --- | --- | --- | --- |
+| `POST` | `/api/diary-write` | `mempalace_diary_write` | `{ agent_name, entry }` (all required), optional: `topic` |
+
+---
+
+## Hook settings endpoint
+
+| Method | Path | MCP tool | JSON body |
+| --- | --- | --- | --- |
+| `POST` | `/api/hook-settings` | `mempalace_hook_settings` | `{ silent_save?, desktop_toast? }` (all optional) |
+
+---
+
+## Maintenance endpoints
+
+These routes expose palace maintenance / status checks.
+
+| Method | Path | MCP tool | Parameters |
+| --- | --- | --- | --- |
+| `GET` | `/api/memories-filed-away` | `mempalace_memories_filed_away` | — |
+| `GET` | `/api/reconnect` | `mempalace_reconnect` | — |
+
+---
+
 ## Migration notes
 
 ### Drawer endpoints
