@@ -62,13 +62,13 @@ const CONFIG = {
   },
   nodeSizes: {
     wingMin: 3.2,
-    wingMax: 8.4,
+    wingMax: 5.0,
     roomMin: 0.9,
-    roomMax: 2.6,
+    roomMax: 1.5,
   },
   spacing: {
-    wingSeparation: 44,
-    roomRadius: 16,
+    wingSeparation: 52,
+    roomRadius: 18,
     verticalDrift: 6,
   },
   accent: {
@@ -1535,10 +1535,8 @@ export function createPalaceScene(container, options = {}) {
     }
 
     seedWingClusteredLayout(nodeList, wingNames, graphSceneMetrics);
-    runGraphForceLayout(nodeList, graphEdges, graphSceneMetrics, findRoomNodeForEdge);
 
-    // Ensure node sizes are set so collision radii match actual geometry.
-    // Wings scale with drawer counts; rooms scale with their drawer counts.
+    // Set node sizes before force layout so repulsion accounts for visual radius.
     nodeList.forEach((n) => {
       if (n.type === 'wing') {
         const drawerCount = (wingsData && wingsData[n.name]) || 1;
@@ -1548,7 +1546,9 @@ export function createPalaceScene(container, options = {}) {
       }
     });
 
-    separateGraphNodes(nodeList, graphSceneMetrics.collisionMinDist, 12);
+    runGraphForceLayout(nodeList, graphEdges, graphSceneMetrics, findRoomNodeForEdge);
+
+    separateGraphNodes(nodeList, graphSceneMetrics.collisionMinDist, 16);
 
     if (scene.fog && scene.fog.isFogExp2) {
       scene.fog.density = graphSceneMetrics.fogDensity;

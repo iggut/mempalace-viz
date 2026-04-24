@@ -96,7 +96,7 @@ export function hash01(s) {
  */
 export function seedWingClusteredLayout(nodeList, wingNamesSorted, metrics) {
   const nW = Math.max(1, wingNamesSorted.length);
-  const baseRing = 26 + Math.min(48, nodeList.length * 0.35);
+  const baseRing = 30 + Math.min(48, nodeList.length * 0.35);
   const verticalSpread = 7 + metrics.tier * 2.2;
   const clusterR = 9 + metrics.tier * 1.8;
 
@@ -168,7 +168,10 @@ export function runGraphForceLayout(nodeList, edges, metrics, findRoomNodeForEdg
         const dy = nodeList[i].y - nodeList[j].y;
         const dz = nodeList[i].z - nodeList[j].z;
         const dist = Math.sqrt(dx * dx + dy * dy + dz * dz) + 0.12;
-        let force = repelStrength / (dist * dist);
+        const sizeI = nodeList[i].size || 0;
+        const sizeJ = nodeList[j].size || 0;
+        const sizeFactor = 1 + (sizeI + sizeJ) * 0.12;
+        let force = (repelStrength * sizeFactor) / (dist * dist);
         const wi = nodeList[i].wing;
         const wj = nodeList[j].wing;
         if (wi && wj && wi !== wj) force *= 1.12;
