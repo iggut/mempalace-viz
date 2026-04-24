@@ -1536,6 +1536,18 @@ export function createPalaceScene(container, options = {}) {
 
     seedWingClusteredLayout(nodeList, wingNames, graphSceneMetrics);
     runGraphForceLayout(nodeList, graphEdges, graphSceneMetrics, findRoomNodeForEdge);
+
+    // Ensure node sizes are set so collision radii match actual geometry.
+    // Wings scale with drawer counts; rooms scale with their drawer counts.
+    nodeList.forEach((n) => {
+      if (n.type === 'wing') {
+        const drawerCount = (wingsData && wingsData[n.name]) || 1;
+        n.size = THREE.MathUtils.mapLinear(drawerCount, 1, 200, CONFIG.nodeSizes.wingMin, CONFIG.nodeSizes.wingMax);
+      } else {
+        n.size = THREE.MathUtils.mapLinear(n.drawers || 1, 1, 80, CONFIG.nodeSizes.roomMin, CONFIG.nodeSizes.roomMax);
+      }
+    });
+
     separateGraphNodes(nodeList, graphSceneMetrics.collisionMinDist, 12);
 
     if (scene.fog && scene.fog.isFogExp2) {

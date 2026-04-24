@@ -217,11 +217,28 @@ export function runGraphForceLayout(nodeList, edges, metrics, findRoomNodeForEdg
 
 /**
  * Push apart nodes closer than `minDist` (simple iterative projection).
- * @param {Array<{ x: number, y: number, z: number }>} nodeList
- * @param {number} minDist
+ * Uses node-aware collision distance: each node's radius is derived from its
+ * type so that large wing/room spheres never overlap.
+ * @param {Array<{ x: number, y: number, z: number, type?: string }>} nodeList
+ * @param {number} minDist — base minimum (for small nodes); scaled up for large nodes.
  * @param {number} [passes]
  */
 export function separateGraphNodes(nodeList, minDist, passes = 10) {
+  // Node radii must match what scene.js creates:
+  //   wing: CONFIG.nodeSizes.wingMin + 0.4  = 3.6
+  //   room: CONFIG.nodeSizes.roomMin + 0.2  = 1.1
+  const RADIUS_BY_TYPE = {
+    wing: 3.6,
+    room: 1.1,
+  };
+
+  function effectiveMinDist(a, b) {
+    const ra = (typeof a.size === 'number' ? a.size : RADIUS_BY_TYPE[a.type] ?? 0);
+    const rb = (typeof b.size === 'number' ? b.size : RADIUS_BY_TYPE[b.type] ?? 0);
+    // Minimum separation = sum of radii + base clearance (mirrors intent of minDist).
+    return Math.max(minDist, ra + rb + minDist * 0.35);
+  }
+
   for (let p = 0; p < passes; p += 1) {
     for (let i = 0; i < nodeList.length; i += 1) {
       for (let j = i + 1; j < nodeList.length; j += 1) {
@@ -231,8 +248,9 @@ export function separateGraphNodes(nodeList, minDist, passes = 10) {
         let dy = a.y - b.y;
         let dz = a.z - b.z;
         const dist = Math.sqrt(dx * dx + dy * dy + dz * dz) + 1e-8;
-        if (dist < minDist) {
-          const push = (minDist - dist) * 0.52;
+        const threshold = effectiveMinDist(a, b);
+        if (dist < threshold) {
+          const push = (threshold - dist) * 0.52;
           const nx = dx / dist;
           const ny = dy / dist;
           const nz = dz / dist;
