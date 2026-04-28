@@ -1,9 +1,11 @@
 ````md
 # 🏛️ MemPalace Viz
 
-> A local-first 3D visualization and control surface for MemPalace — turning wings, rooms, drawers, tunnels, knowledge-graph reads, diary entries, and memory search into an explorable cognitive map.
+> A local-first 3D visualization and control surface for MemPalace — turning wings, rooms, drawers, tunnels, knowledge-graph reads, diary entries,
+and memory search into an explorable cognitive map.
 
-**MemPalace Viz** is a browser-based Three.js interface backed by a lightweight Node bridge to the official MemPalace Python MCP server. It renders your palace as an organic 3D landscape: wings become regions, rooms become memory loci, and explicit MCP/API tunnel links become navigable graph edges.
+**MemPalace Viz** is a browser-based Three.js interface backed by a lightweight Node bridge to the official MemPalace Python MCP server. It renders
+your palace as an organic 3D landscape: wings become regions, rooms become memory loci, and explicit MCP/API tunnel links become navigable graph edges.
 
 It is designed for one core principle:
 
@@ -54,7 +56,8 @@ Interaction model:
 - **Route/focus tools** to highlight paths on the visible explicit graph.
 - **Discovery overlays** to emphasize tunnel hubs or parseable recency metadata.
 
-The right-hand Memory & Knowledge panel is intentionally separate from the tunnel graph. Knowledge-graph stats, diary reads, AAAK spec data, duplicate checks, and semantic search are related memory surfaces, but they do not become graph edges unless the MCP/API exposes them as such.
+The right-hand Memory & Knowledge panel is intentionally separate from the tunnel graph. Knowledge-graph stats, diary reads, AAAK spec data, duplicate checks,
+and semantic search are related memory surfaces, but they do not become graph edges unless the MCP/API exposes them as such.
 
 ---
 
@@ -396,7 +399,8 @@ See [`docs/QA_CHECKLIST.md`](docs/QA_CHECKLIST.md) for the full manual pass.
 
 ## 🗺️ Project status
 
-MemPalace Viz is an active local-first visualization layer for MemPalace. It is optimized for development, inspection, and personal memory-system workflows rather than hosted multi-user deployment.
+MemPalace Viz is an active local-first visualization layer for MemPalace. It is optimized for development, inspection, and personal memory-system workflows 
+rather than hosted multi-user deployment.
 
 ---
 
