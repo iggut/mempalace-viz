@@ -9,6 +9,12 @@ function clean(value) {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+function fmt(value) {
+  if (value == null || value === '') return '—';
+  const n = Number(value);
+  return Number.isFinite(n) ? n.toLocaleString() : String(value);
+}
+
 export function describeNavigationMode({ view = 'wings', currentWing = '', currentRoom = '', selected = null } = {}) {
   const wing = clean(currentWing || selected?.wing || selected?.wingId);
   const room = clean(currentRoom || selected?.name);
@@ -16,22 +22,22 @@ export function describeNavigationMode({ view = 'wings', currentWing = '', curre
   if (view === 'graph') {
     if (selected?.type === 'room' && room) {
       return {
-        eyebrow: wing ? `Graph focus · ${wing}` : 'Graph focus',
+        eyebrow: wing ? `Graph · ${wing}` : 'Graph',
         title: room,
-        hint: 'Neural connections are live here — step links, route between rooms, or open the same room in the Rooms tree.',
+        hint: 'Explicit tunnel graph. Click neighbors or inspect useful data.',
       };
     }
     if (selected?.type === 'wing' && clean(selected.name)) {
       return {
-        eyebrow: 'Graph focus',
+        eyebrow: 'Graph',
         title: clean(selected.name),
-        hint: 'This wing is highlighted in the relationship graph. Select a connected room to inspect its neighborhood.',
+        hint: 'Wing focus. Select a room to see useful data.',
       };
     }
     return {
-      eyebrow: 'Neural graph',
+      eyebrow: 'Graph',
       title: 'Connected rooms',
-      hint: 'Search or click a node to focus; electrical pulses show explicit MemPalace tunnels and relationships.',
+      hint: 'Find or click a node to focus.',
     };
   }
 
@@ -40,27 +46,27 @@ export function describeNavigationMode({ view = 'wings', currentWing = '', curre
       return {
         eyebrow: `Rooms · ${wing}`,
         title: room,
-        hint: 'Inspect stored drawers for this room, or jump back to the graph to see relationship context.',
+        hint: 'Stored drawers, neighbors, and next actions.',
       };
     }
     if (wing) {
       return {
         eyebrow: 'Rooms',
         title: `Rooms in ${wing}`,
-        hint: 'Choose a room to inspect its stored drawers, tunnel context, and knowledge tools.',
+        hint: 'Choose a room to inspect its useful data.',
       };
     }
     return {
       eyebrow: 'Rooms',
       title: 'All rooms',
-      hint: 'Browse rooms by wing, then select one to inspect its stored content.',
+      hint: 'Browse rooms by wing.',
     };
   }
 
   return {
     eyebrow: 'Overview',
     title: 'All wings',
-    hint: 'Start with domains, then drill into rooms or switch to the neural graph.',
+    hint: 'Start with Find, Browse, or Graph hubs.',
   };
 }
 
@@ -69,22 +75,25 @@ export function summarizeGraphDensity({ roomCount = 0, edgeCount = 0 } = {}) {
   const edges = Math.max(0, Number(edgeCount) || 0);
   if (rooms >= 60 || edges >= 240) {
     return {
+      visible: true,
       tone: 'dense',
       label: 'Dense graph',
-      detail: 'Use search, focus canvas, and relationship filters to reduce visual noise.',
+      detail: 'Find or focus canvas to reduce noise.',
     };
   }
   if (rooms >= 24 || edges >= 80) {
     return {
+      visible: true,
       tone: 'active',
       label: 'Active graph',
-      detail: 'Click a node to spotlight neighbors, or route between connected rooms.',
+      detail: 'Use Find or click a node to narrow the scene.',
     };
   }
   return {
+    visible: false,
     tone: 'calm',
     label: 'Calm graph',
-    detail: 'Explore directly by clicking wings, rooms, and tunnel links.',
+    detail: '',
   };
 }
 
@@ -95,24 +104,108 @@ export function nextFocusPanelState({ left = false, right = false } = {}) {
 }
 
 export function buildCanvasActionModel({ view = 'wings', selected = null, panelsCollapsed = {} } = {}) {
-  const rightCollapsed = !!panelsCollapsed.right;
+  const bothCollapsed = !!panelsCollapsed.left && !!panelsCollapsed.right;
   const hasSelection = !!selected && selected.type !== 'center';
-  const primaryAction = rightCollapsed
-    ? { id: 'show-inspector', label: hasSelection ? 'Show selection' : 'Show inspector' }
-    : { id: 'focus-search', label: view === 'graph' ? 'Find node' : 'Filter' };
+  let primaryAction;
+  if (bothCollapsed) primaryAction = { id: 'show-panels', label: 'Show panels' };
+  else if (hasSelection) primaryAction = { id: 'show-details', label: 'Show details' };
+  else primaryAction = { id: 'focus-search', label: 'Find' };
 
   return {
     viewIds: [...VIEW_IDS],
     primaryAction,
     focusAction: {
       id: 'focus-canvas',
-      label: panelsCollapsed.left && panelsCollapsed.right ? 'Show panels' : 'Focus canvas',
+      label: bothCollapsed ? 'Show panels' : 'Focus canvas',
     },
-    shortcuts: [
-      { key: '/', label: 'Find structure' },
-      { key: '⌘K', label: 'Semantic search' },
-      { key: 'R', label: 'Reset camera' },
-      { key: 'Esc', label: 'Back' },
+    secondaryActions: [{ id: 'reset-camera', label: 'Reset' }],
+    shortcuts: [],
+  };
+}
+
+export function usefulDataActionsForView(summary = {}, { view = 'wings' } = {}) {
+  return (summary.actions || []).filter((action) => {
+    if ((action.id === 'show-neighbors' || action.id === 'route-from-here') && view !== 'graph') return false;
+    return true;
+  });
+}
+
+export function compactFooterMetricIds(width) {
+  const w = Number(width) || 0;
+  if (w > 0 && w < 800) return ['drawers', 'rooms', 'edges'];
+  return ['drawers', 'wings', 'rooms', 'edges', 'focus'];
+}
+
+export function shouldAutoCollapseInspector({ width = 0, selected = null } = {}) {
+  const w = Number(width) || 0;
+  return w > 0 && w < 900 && (!selected || selected.type === 'center');
+}
+
+export function subjectForInspectorMode({ mode = 'empty', selected = null, hovered = null } = {}) {
+  if (mode === 'pinned' || mode === 'selected' || mode === 'graphFocus') return selected;
+  if (mode === 'live') return hovered;
+  return null;
+}
+
+export function buildRoomUsefulDataSummary({
+  wingName = '',
+  roomName = '',
+  drawers = null,
+  visibleDegree = 0,
+  totalDegree = null,
+  crossWingLinks = 0,
+  recent = '',
+  topDrawerPreviews = [],
+  graphAvailable = false,
+} = {}) {
+  const metrics = [
+    { label: 'Drawers', value: fmt(drawers) },
+    { label: graphAvailable ? 'Visible links' : 'Links', value: fmt(visibleDegree) },
+    { label: 'Cross-wing', value: fmt(crossWingLinks) },
+  ];
+  const signals = [];
+  if (totalDegree != null && Number(totalDegree) !== Number(visibleDegree)) signals.push(`${fmt(totalDegree)} total tunnel links`);
+  if (recent) signals.push(`Recent: ${recent}`);
+  return {
+    kind: 'Room',
+    title: clean(roomName) || 'Room',
+    location: clean(wingName) && clean(roomName) ? `${clean(wingName)} / ${clean(roomName)}` : clean(wingName),
+    metrics,
+    signals,
+    previews: (topDrawerPreviews || []).filter(Boolean).slice(0, 3),
+    actions: [
+      { id: 'open-drawers', label: 'Open drawers' },
+      { id: 'show-neighbors', label: 'Show neighbors' },
+      { id: 'route-from-here', label: 'Route from here' },
+      { id: 'search-in-room', label: 'Search memories' },
+    ],
+  };
+}
+
+export function buildWingUsefulDataSummary({
+  wingName = '',
+  drawerCount = null,
+  roomCount = 0,
+  topRooms = [],
+  bridgeRooms = [],
+  graphAvailable = false,
+} = {}) {
+  const bridges = (bridgeRooms || []).filter(Boolean);
+  return {
+    kind: 'Wing',
+    title: clean(wingName) || 'Wing',
+    location: clean(wingName),
+    metrics: [
+      { label: 'Rooms', value: fmt(roomCount) },
+      { label: 'Drawers', value: fmt(drawerCount) },
+      { label: 'Bridge rooms', value: graphAvailable ? fmt(bridges.length) : '—' },
+    ],
+    topRooms: (topRooms || []).slice(0, 5).map((r) => `${r.name} (${fmt(r.drawers)})`),
+    signals: bridges.slice(0, 3).map((r) => `Bridge: ${r.name} (${fmt(r.degree)} links)`),
+    actions: [
+      { id: 'open-rooms', label: 'Open rooms' },
+      { id: 'show-graph-focus', label: 'Show graph focus' },
+      { id: 'search-within-wing', label: 'Find in wing' },
     ],
   };
 }

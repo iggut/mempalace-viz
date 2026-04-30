@@ -22,9 +22,14 @@ import {
 import { hoverTargetKey, shouldUpdateInspectorOnHover } from './ui-hover-policy.js';
 import {
   buildCanvasActionModel,
+  buildRoomUsefulDataSummary,
+  buildWingUsefulDataSummary,
   describeNavigationMode,
   nextFocusPanelState,
+  shouldAutoCollapseInspector,
+  subjectForInspectorMode,
   summarizeGraphDensity,
+  usefulDataActionsForView,
 } from './ui-production-helpers.js';
 import { makeRoomId, parseRoomId } from './canonical.js';
 import {
@@ -1015,6 +1020,51 @@ function clickRow(label, sub, attrs) {
   </button>`;
 }
 
+function usefulDataCardHtml(summary, context = {}) {
+  const metrics = (summary.metrics || [])
+    .map((m) => `<span class="useful-metric"><span class="useful-metric__k">${escapeHtml(m.label)}</span><strong>${escapeHtml(m.value)}</strong></span>`)
+    .join('');
+  const signals = (summary.signals || [])
+    .map((x) => `<li>${escapeHtml(x)}</li>`)
+    .join('');
+  const previews = (summary.previews || summary.topRooms || [])
+    .slice(0, 3)
+    .map((x) => `<li>${escapeHtml(x)}</li>`)
+    .join('');
+  const visibleActions = usefulDataActionsForView(summary, { view: context.view });
+  const actionAttrs = (id) => {
+    if (id === 'open-drawers') return 'data-useful-action="open-drawers"';
+    if (id === 'show-neighbors') return 'data-graph-action="frame-nbr"';
+    if (id === 'route-from-here') return 'data-route-action="set-start"';
+    if (id === 'search-in-room') return 'data-useful-action="search-room"';
+    if (id === 'open-rooms') return `data-inspect-action="go-wing" data-wing="${escapeHtml(context.wingName || '')}"`;
+    if (id === 'show-graph-focus') return 'data-useful-action="graph-focus"';
+    if (id === 'search-within-wing') return 'data-useful-action="search-wing"';
+    return '';
+  };
+  const actions = visibleActions
+    .map((a) => `<button type="button" class="btn btn--ghost btn--sm useful-action" ${actionAttrs(a.id)}>${escapeHtml(a.label)}</button>`)
+    .join('');
+  return `
+    <section class="inspect-card inspect-card--useful" aria-label="Useful data">
+      <div class="useful-card__head">
+        <span class="badge">${escapeHtml(summary.kind || 'Useful')}</span>
+        <div>
+          <div class="inspect-title">${escapeHtml(summary.title || '')}</div>
+          ${summary.location ? `<p class="inspect-muted inspect-muted--tight">${escapeHtml(summary.location)}</p>` : ''}
+        </div>
+      </div>
+      ${metrics ? `<div class="useful-metrics">${metrics}</div>` : ''}
+      ${signals ? `<p class="inspect-micro">Strong signals</p><ul class="useful-list">${signals}</ul>` : ''}
+      ${previews ? `<p class="inspect-micro">Useful data</p><ul class="useful-list">${previews}</ul>` : ''}
+      ${actions ? `<div class="useful-actions">${actions}</div>` : ''}
+    </section>`;
+}
+
+function contextWingFromSelection() {
+  return appState.currentWing || appState.selected?.wing || appState.selected?.wingId || '';
+}
+
 function renderOverviewInspector(ctx) {
   const om = buildOverviewModel(ctx, appState.view);
   const edgeTypeLine =
@@ -1634,14 +1684,18 @@ function renderWingInspector(ctx, wingName, _mode) {
     detailNav: wingDetailNav,
   });
 
+  const wingUsefulSummary = buildWingUsefulDataSummary({
+    wingName,
+    drawerCount: d,
+    roomCount: roomN,
+    topRooms: ranked.slice(0, 3).map((r) => ({ name: r.name, drawers: r.drawers })),
+    bridgeRooms: tunnel.topRoomsByCrossWing.slice(0, 3).map((r) => ({ name: r.room, degree: r.crossEdges })),
+    graphAvailable: ga.hasResolvableEdges,
+  });
+
   return `
     <div class="inspect-stack">
-      <div class="inspect-card inspect-card--hero">
-        <span class="badge">Wing</span>
-        <div class="inspect-title">${escapeHtml(wingName)}</div>
-        <p class="inspect-lead">${escapeHtml(sentence || 'Wing footprint in the palace.')}</p>
-        ${pctDrawers != null ? `<div class="inspect-pct"><span>${pctDrawers}% of palace drawers</span>${pctBar(pctDrawers)}</div>` : ''}
-      </div>
+      ${usefulDataCardHtml(wingUsefulSummary, { wingName, view: appState.view })}
       ${wingStoredHtml}
       ${graphWingNeighborhoodSection}
       ${inspectSection(
@@ -1985,14 +2039,21 @@ function renderRoomInspector(ctx, wingName, roomName, _mode) {
         )
       : '';
 
+  const roomUsefulSummary = buildRoomUsefulDataSummary({
+    wingName,
+    roomName,
+    drawers,
+    visibleDegree: visRoomInc.degree,
+    totalDegree: fullRoomInc.degree,
+    crossWingLinks: visRoomInc.crossWingLinks,
+    recent: slice?.recent || '',
+    topDrawerPreviews: roomView.items.map((it) => it.preview || it.id),
+    graphAvailable,
+  });
+
   return `
     <div class="inspect-stack">
-      <div class="inspect-card inspect-card--hero">
-        <span class="badge">Room</span>
-        <div class="inspect-title">${escapeHtml(roomName)}</div>
-        <p class="inspect-lead">${escapeHtml(sentence || 'Room in the palace taxonomy.')}</p>
-        ${pctWing != null ? `<div class="inspect-pct"><span>${pctWing}% of wing drawers (room list)</span>${pctBar(pctWing)}</div>` : ''}
-      </div>
+      ${usefulDataCardHtml(roomUsefulSummary, { wingName, roomName, view: appState.view })}
       ${storedContentHtml}
       ${graphLocalNeighborhoodSection}
       ${graphLinkedRoomsSection}
@@ -2232,6 +2293,22 @@ function onInspectorClick(e) {
     if (act === 'traverse-room') {
       const rm = mcp.getAttribute('data-room');
       if (rm) runTraverseForRoom(rm);
+    }
+    return;
+  }
+  const useful = e.target.closest('[data-useful-action]');
+  if (useful) {
+    const act = useful.getAttribute('data-useful-action');
+    if (act === 'open-drawers') {
+      document.querySelector('.inspect-section--stored')?.scrollIntoView?.({ block: 'start', behavior: 'smooth' });
+      document.querySelector('.inspect-section--stored input, .inspect-section--stored button')?.focus?.({ preventScroll: true });
+    } else if (act === 'search-room' || act === 'search-wing') {
+      setPanelCollapsed('left', false);
+      const input = act === 'search-room' ? $('semantic-search') : $('search-wings');
+      if (act === 'search-wing' && input && contextWingFromSelection()) input.value = contextWingFromSelection();
+      input?.focus?.();
+    } else if (act === 'graph-focus') {
+      applyView('graph');
     }
     return;
   }
@@ -3308,9 +3385,7 @@ function renderInspector() {
     badge.dataset.mode = mode;
   }
 
-  let subject = null;
-  if (mode === 'pinned' || mode === 'selected') subject = appState.selected;
-  else if (mode === 'live') subject = appState.hovered;
+  let subject = subjectForInspectorMode({ mode, selected: appState.selected, hovered: appState.hovered });
 
   renderBreadcrumb();
   updateNavScope();
@@ -3339,6 +3414,7 @@ function renderInspector() {
     });
     restoreStoredContentFilterFocus(body);
     updatePinButton();
+    reconcileResponsiveInspectorLayout();
     return;
   }
 
@@ -3359,6 +3435,7 @@ function renderInspector() {
   });
   restoreStoredContentFilterFocus(body);
   updatePinButton();
+  reconcileResponsiveInspectorLayout();
 }
 
 function metaRow(k, v) {
@@ -3454,7 +3531,10 @@ function updateCanvasCommandDock() {
   });
 
   const primary = document.querySelector('[data-canvas-action="primary"]');
-  if (primary) primary.textContent = actions.primaryAction.label;
+  if (primary) {
+    primary.textContent = actions.primaryAction.label;
+    primary.dataset.canvasPrimaryId = actions.primaryAction.id;
+  }
   const focus = document.querySelector('[data-canvas-action="focus"]');
   if (focus) focus.textContent = actions.focusAction.label;
   const labels = document.querySelector('[data-canvas-action="labels"]');
@@ -3462,7 +3542,8 @@ function updateCanvasCommandDock() {
   const densityEl = $('canvas-density-pill');
   if (densityEl) {
     densityEl.dataset.tone = density.tone;
-    densityEl.textContent = `${density.label} · ${density.detail}`;
+    densityEl.hidden = !density.visible;
+    densityEl.textContent = density.visible ? `${density.label} · ${density.detail}` : '';
   }
   dock.classList.toggle('canvas-command-dock--graph', appState.view === 'graph');
 }
@@ -3490,9 +3571,18 @@ function wireCanvasCommandDock() {
     if (!actionBtn) return;
     const action = actionBtn.getAttribute('data-canvas-action');
     if (action === 'primary') {
+      const primaryId = actionBtn.dataset.canvasPrimaryId || 'focus-search';
       const main = $('app-main-grid');
-      if (main?.classList.contains('has-right-collapsed')) setPanelCollapsed('right', false);
-      focusGraphSearchInput();
+      if (primaryId === 'show-panels') {
+        setPanelCollapsed('left', false);
+        setPanelCollapsed('right', false);
+      } else if (primaryId === 'show-details') {
+        setPanelCollapsed('right', false);
+        $('inspect-body')?.focus?.({ preventScroll: true });
+      } else {
+        if (main?.classList.contains('has-left-collapsed')) setPanelCollapsed('left', false);
+        focusGraphSearchInput();
+      }
     } else if (action === 'semantic') {
       const main = $('app-main-grid');
       if (main?.classList.contains('has-left-collapsed')) setPanelCollapsed('left', false);
@@ -3865,6 +3955,48 @@ function persistPanelLayout() {
   }
 }
 
+function setPanelCollapsedEphemeral(side, collapsed) {
+  const main = $('app-main-grid');
+  if (!main) return;
+  if (side === 'right') {
+    main.classList.toggle('has-right-collapsed', collapsed);
+    $('panel-right')?.classList.toggle('panel--collapsed', collapsed);
+    $('btn-collapse-right')?.setAttribute('aria-expanded', String(!collapsed));
+    setPanelInteractiveState('panel-right', 'panel-right-body', collapsed);
+  } else {
+    main.classList.toggle('has-left-collapsed', collapsed);
+    $('panel-left')?.classList.toggle('panel--collapsed', collapsed);
+    $('btn-collapse-left')?.setAttribute('aria-expanded', String(!collapsed));
+    setPanelInteractiveState('panel-left', 'panel-left-body', collapsed);
+  }
+  syncPanelRestoreVisibility(main.classList.contains('has-left-collapsed'), main.classList.contains('has-right-collapsed'));
+  try { sceneApi?.resize?.(); } catch { /* ignore */ }
+  updateCanvasCommandDock();
+}
+
+function reconcileResponsiveInspectorLayout() {
+  if (typeof window === 'undefined') return;
+  const shouldCollapse = shouldAutoCollapseInspector({ width: window.innerWidth, selected: appState.selected });
+  const main = $('app-main-grid');
+  const rightCollapsed = main?.classList.contains('has-right-collapsed') ?? false;
+  if (shouldCollapse && !rightCollapsed) setPanelCollapsedEphemeral('right', true);
+  if (!shouldCollapse && rightCollapsed && window.innerWidth < 900 && appState.selected && appState.selected.type !== 'center') {
+    setPanelCollapsedEphemeral('right', false);
+  }
+}
+
+function wireResponsiveLayout() {
+  reconcileResponsiveInspectorLayout();
+  let raf = 0;
+  window.addEventListener('resize', () => {
+    if (raf) cancelAnimationFrame(raf);
+    raf = requestAnimationFrame(() => {
+      raf = 0;
+      reconcileResponsiveInspectorLayout();
+    });
+  });
+}
+
 function wireMiningOverlay() {
   document.querySelectorAll('input[name="mining-mode"]').forEach((el) => {
     el.addEventListener('change', (e) => {
@@ -4076,6 +4208,7 @@ function wireControls() {
   updateCanvasCommandDock();
   wirePanelCollapse();
   wirePanelResize();
+  wireResponsiveLayout();
   wireSemanticSearch();
   wireMemoryLens();
   wireMiningOverlay();

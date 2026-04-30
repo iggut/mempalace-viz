@@ -66,9 +66,9 @@
       </header>
 
       <div class="app-main" id="app-main-grid">
-        <nav class="panel panel--left" id="panel-left" aria-label="Explore, chat with memories, and scene controls">
+        <nav class="panel panel--left" id="panel-left" aria-label="Find, browse, and memory chat">
           <div class="panel-header">
-            <span id="panel-left-title">Explore</span>
+            <span id="panel-left-title">Find / Browse</span>
             <button
               type="button"
               id="btn-collapse-left"
@@ -90,7 +90,7 @@
                 aria-selected="true"
                 aria-controls="panel-left-explore-pane"
               >
-                Explore
+                Find / Browse
               </button>
               <button
                 type="button"
@@ -109,41 +109,37 @@
               role="tabpanel"
               aria-labelledby="btn-panel-left-explore"
             >
-            <div class="search-wrap">
-              <label id="search-wings-label" class="search-label" for="search-wings">Filter wings and rooms</label>
+            <section class="explore-section explore-section--find" aria-labelledby="find-section-title">
+              <h3 id="find-section-title" class="explore-section__title">Find</h3>
+              <div class="search-wrap">
+              <label id="search-wings-label" class="search-label" for="search-wings">Find structure</label>
               <input
                 type="search"
                 id="search-wings"
                 class="search-input"
-                placeholder="Filter wings &amp; rooms…"
+                placeholder="Wing or room…"
                 autocomplete="off"
                 enterkeyhint="search"
                 aria-describedby="search-mode-hint graph-search-first-hint graph-search-panel"
                 aria-controls="graph-search-panel"
               />
               <div class="semantic-search-block" aria-label="Semantic drawer search via MemPalace MCP">
-                <label class="search-label search-label--secondary" for="semantic-search">Search drawers (semantic)</label>
+                <label class="search-label search-label--secondary" for="semantic-search">Search memories</label>
                 <input
                   type="search"
                   id="semantic-search"
                   class="search-input search-input--semantic"
-                  placeholder="Keywords or question — official mempalace_search…"
+                  placeholder="Keywords or question…"
                   autocomplete="off"
                   enterkeyhint="search"
                   aria-describedby="semantic-search-hint"
                 />
-                <p id="semantic-search-hint" class="hint-row semantic-search-hint">
-                  Uses <code>mempalace_search</code> on your palace. Relevance scores rank drawers — they are not tunnel edges
-                  and not the same signal as Discovery overlays.
-                </p>
+                <p id="semantic-search-hint" class="hint-row semantic-search-hint">Semantic drawer search. Results are not tunnel edges.</p>
                 <div id="semantic-search-status" class="semantic-search-status" role="status" aria-live="polite"></div>
                 <ul id="semantic-search-results" class="semantic-search-results" aria-label="Semantic search results"></ul>
               </div>
-              <p id="graph-search-first-hint" class="graph-search-first-hint" hidden>
-                In Graph view, matches list below — <kbd>Enter</kbd> to frame, <kbd>Alt+N</kbd> /
-                <kbd>Alt+P</kbd> to step.
-              </p>
-              <p id="search-mode-hint" class="search-mode-hint">Wings/Rooms view: filters the explorer and dims non-matching nodes.</p>
+              <p id="graph-search-first-hint" class="graph-search-first-hint" hidden>Graph matches appear below. Enter frames the current match.</p>
+              <p id="search-mode-hint" class="search-mode-hint">Filters structure and dims non-matches.</p>
               <div id="graph-search-panel" class="graph-search-panel" role="region" aria-label="Graph search matches" hidden>
                 <div class="graph-search-panel__meta">
                   <span id="graph-search-meta" class="graph-search-meta" aria-live="polite"></span>
@@ -160,17 +156,21 @@
                 <ul id="graph-search-list" class="graph-search-list"></ul>
               </div>
             </div>
+            </section>
+            <section class="explore-section explore-section--browse" aria-labelledby="browse-section-title">
+              <h3 id="browse-section-title" class="explore-section__title">Browse</h3>
             <div id="view-buttons" class="view-seg" role="tablist" aria-label="Visualization view"></div>
             <p id="view-helper-text" class="hint-row" style="margin-top: 10px" role="status" aria-live="polite"></p>
+            </section>
 
+            <details class="advanced-disclosure" id="explore-advanced">
+              <summary class="advanced-disclosure__summary">Advanced</summary>
+              <div class="advanced-disclosure__body">
             <div id="graph-view-extras" class="graph-view-extras" hidden>
               <section class="graph-mode-intro" aria-label="What graph view shows">
-                <p class="graph-mode-intro__title">Relationships first — structure when you need it</p>
+                <p class="graph-mode-intro__title">Graph help</p>
                 <p class="graph-mode-intro__body">
-                  <strong>Wings / Rooms</strong> = where drawers live (folder layout). <strong>Graph</strong> = how rooms
-                  connect (MCP tunnel edges only). <strong>Start:</strong> click a node — inspector locks, neighbors
-                  spotlight. Then use <kbd>[</kbd>/<kbd>]</kbd> to walk links, <strong>Rooms tree</strong> for taxonomy,
-                  <kbd>U</kbd>/<strong>Back</strong> to step out. Drag to orbit.
+                  Wings/Rooms are taxonomy. Graph shows explicit MCP tunnel edges only.
                 </p>
               </section>
               <div id="graph-status-pill" class="graph-status-pill" role="status" aria-live="polite"></div>
@@ -188,7 +188,7 @@
             <div class="legend-block">
               <div class="legend-title">Wings &amp; scale</div>
               <p class="hint-row legend-screen-hint" style="margin-bottom: 6px">
-                Sphere size reflects drawer count within a view.
+                Sphere size reflects drawer count.
               </p>
               <div id="legend-host"></div>
             </div>
@@ -223,6 +223,8 @@
                 Reset camera
               </button>
             </div>
+              </div>
+            </details>
             </div>
 
             <div
@@ -380,7 +382,7 @@
             <div class="canvas-command-dock__context">
               <span id="canvas-location-eyebrow" class="canvas-command-dock__eyebrow">Overview</span>
               <strong id="canvas-location-title" class="canvas-command-dock__title">All wings</strong>
-              <span id="canvas-location-hint" class="canvas-command-dock__hint">Start with domains, then drill into rooms or switch to the neural graph.</span>
+              <span id="canvas-location-hint" class="canvas-command-dock__hint">Start with Find, Browse, or Graph hubs.</span>
             </div>
             <div class="canvas-command-dock__views" role="tablist" aria-label="Switch visualization view">
               <button type="button" class="canvas-view-btn" data-canvas-view="wings" role="tab" aria-selected="true">Wings</button>
@@ -389,13 +391,10 @@
             </div>
             <div class="canvas-command-dock__actions" aria-label="Scene actions">
               <button type="button" class="canvas-action-btn" data-canvas-action="primary">Find</button>
-              <button type="button" class="canvas-action-btn" data-canvas-action="semantic">Semantic</button>
               <button type="button" class="canvas-action-btn" data-canvas-action="reset">Reset</button>
-              <button type="button" class="canvas-action-btn" data-canvas-action="labels">Labels</button>
               <button type="button" class="canvas-action-btn canvas-action-btn--primary" data-canvas-action="focus">Focus canvas</button>
-              <button type="button" class="canvas-action-btn" data-canvas-action="inspector">Inspector</button>
             </div>
-            <p id="canvas-density-pill" class="canvas-density-pill" data-tone="calm">Calm graph · Explore directly by clicking wings, rooms, and tunnel links.</p>
+            <p id="canvas-density-pill" class="canvas-density-pill" data-tone="calm" hidden></p>
           </section>
           <div id="loading-overlay" class="overlay-state">
             <div class="spinner" aria-hidden="true"></div>
@@ -459,11 +458,10 @@
             <div id="breadcrumb" class="breadcrumb"></div>
             <div id="inspect-body" role="region" aria-label="Inspector details" tabindex="-1"></div>
             <details class="memory-lens" id="memory-lens">
-              <summary class="memory-lens__summary">Memory &amp; knowledge (official MCP)</summary>
+              <summary class="memory-lens__summary">MCP tools</summary>
               <div class="memory-lens__body">
                 <p class="inspect-muted inspect-muted--tight memory-lens__lead">
-                  Read-only MCP tools: KG query/timeline, diary, AAAK, duplicate check. These are separate from palace tunnel
-                  topology on the canvas and from Discovery (derived tunnel analysis) in Explore.
+                  KG, diary, AAAK, and duplicate checks. Separate from tunnel graph truth.
                 </p>
                 <section class="memory-lens__section" aria-label="Knowledge graph query">
                   <h4 class="memory-lens__h">Knowledge graph</h4>
@@ -526,9 +524,7 @@
             <span class="metric"><span class="metric__k">Drawers</span> <span id="metric-drawers" class="metric__v">—</span></span>
             <span class="metric"><span class="metric__k">Wings</span> <span id="metric-wings" class="metric__v">—</span></span>
             <span class="metric"><span class="metric__k">Rooms</span> <span id="metric-rooms" class="metric__v">—</span></span>
-            <span class="metric"><span class="metric__k">Resolved edges</span> <span id="metric-tunnels" class="metric__v">—</span></span>
-            <span class="metric"><span class="metric__k">Cross-wing</span> <span id="metric-cross" class="metric__v">—</span></span>
-            <span class="metric"><span class="metric__k">Last refresh</span> <span id="metric-refreshed" class="metric__v">—</span></span>
+            <span class="metric"><span class="metric__k">Edges</span> <span id="metric-tunnels" class="metric__v">—</span></span>
             <span class="metric metric--context metric--context--idle" id="metric-context-wrap">
               <span class="metric__k">Focus</span> <span id="metric-context" class="metric__v">—</span>
             </span>
@@ -539,11 +535,7 @@
           <button type="button" id="btn-help" class="btn btn--ghost btn--sm" aria-haspopup="dialog" title="Keyboard shortcuts">
             Shortcuts
           </button>
-          <span class="hint-row footer-shortcuts-hint" style="margin: 0">
-            <kbd>1</kbd>–<kbd>3</kbd> view · <kbd>R</kbd> camera · <kbd>/</kbd> structure · <kbd>⌘/Ctrl K</kbd> semantic ·
-            <kbd>L</kbd> labels · <kbd>Esc</kbd> back / clear · graph: <kbd>[</kbd> <kbd>]</kbd> <kbd>U</kbd> · find:
-            <kbd>Alt+N</kbd> <kbd>Alt+P</kbd>
-          </span>
+
         </div>
       </footer>
     </div>
