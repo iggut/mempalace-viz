@@ -27,6 +27,10 @@ import {
   maxRadiusFromFocus,
   pointerMoveThresholdPx,
   normalizeLayoutParams,
+  neuralSignalOpacity,
+  neuralSignalScale,
+  neuralSignalSpeedForDensity,
+  neuralSignalStagger,
   separateGraphNodes,
   splitGraphFocusIds,
 } from '../graph-scene-helpers.js';
@@ -66,6 +70,17 @@ test('normalizeLayoutParams scales with tier', () => {
   const b = normalizeLayoutParams(computeDensityMetrics(120, 400, 15));
   assert.ok(b.repelStrength >= a.repelStrength);
   assert.ok(b.iterations >= a.iterations);
+});
+
+test('neural signal helpers keep dense graphs legible and organic', () => {
+  const sparse = computeDensityMetrics(28, 24, 4);
+  const huge = computeDensityMetrics(720, 1800, 72);
+  assert.ok(neuralSignalSpeedForDensity(sparse) > neuralSignalSpeedForDensity(huge));
+  assert.ok(neuralSignalScale(12, sparse) > neuralSignalScale(12, huge));
+  assert.ok(neuralSignalOpacity(0) <= 0.02);
+  assert.ok(neuralSignalOpacity(0.5) > 0.7);
+  assert.ok(neuralSignalOpacity(1) <= 0.02);
+  assert.notEqual(neuralSignalStagger('room:a:x', 'room:b:y'), neuralSignalStagger('room:a:x', 'room:c:z'));
 });
 
 test('computeVisibleLabelIds prioritizes selection and hover', () => {

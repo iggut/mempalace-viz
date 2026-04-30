@@ -26,6 +26,10 @@ import {
   labelSpriteScaleMultiplier,
   maxRadiusFromFocus,
   neighborIdsForFocus,
+  neuralSignalOpacity,
+  neuralSignalScale,
+  neuralSignalSpeedForDensity,
+  neuralSignalStagger,
   normalizeCameraDistanceForLabels,
   pointerMoveThresholdPx,
   runGraphForceLayout,
@@ -180,6 +184,9 @@ export function createPalaceScene(container, options = {}) {
 
   /** @type {Array<{ sprite: THREE.Sprite, from: THREE.Vector3, to: THREE.Vector3, mid: THREE.Vector3, offset: number, color: THREE.Color }>} */
   let routePulses = [];
+  /** @type {Array<{ sprite: THREE.Sprite, curvePts: THREE.Vector3[], offset: number, speed: number, baseOpacity: number, fromId?: string, toId?: string, link?: object }>} */
+  let neuralSignals = [];
+  let nodeHaloTexture = null;
   /** @type {THREE.Mesh|null} additive-blended ring halo around the selected node */
   let selectionRing = null;
   let hoveredMesh = null;
@@ -314,6 +321,14 @@ export function createPalaceScene(container, options = {}) {
       p.sprite.material.dispose();
     });
     routePulses = [];
+    neuralSignals.forEach((p) => {
+      scene.remove(p.sprite);
+      p.sprite.material.map?.dispose();
+      p.sprite.material.dispose();
+    });
+    neuralSignals = [];
+    nodeHaloTexture?.dispose();
+    nodeHaloTexture = null;
     if (selectionRing) {
       scene.remove(selectionRing);
       selectionRing.material?.dispose();
@@ -759,8 +774,9 @@ export function createPalaceScene(container, options = {}) {
         color,
         transparent: true,
         opacity: 0.045,
-        side: THREE.BackSide,
+        side: THREE.DoubleSide,
         depthWrite: false,
+        depthTest: false,
         blending: THREE.AdditiveBlending,
       }),
     );
@@ -783,15 +799,55 @@ export function createPalaceScene(container, options = {}) {
     const material = new THREE.MeshStandardMaterial({
       color: c,
       emissive: c,
-      emissiveIntensity: 0.18,
-      metalness: 0.12,
-      roughness: 0.5,
+      emissiveIntensity: 0.34,
+      metalness: 0.08,
+      roughness: 0.42,
       transparent: true,
-      opacity: 0.88,
+      opacity: 0.96,
     });
 
     const mesh = new THREE.Mesh(geometry, material);
     mesh.position.set(x, y, z);
+    const glowInner = new THREE.Mesh(
+      new THREE.SphereGeometry(size * 1.95, 18, 18),
+      new THREE.MeshBasicMaterial({
+        color: c.clone().lerp(new THREE.Color(0xbff8ff), 0.34),
+        transparent: true,
+        opacity: 0.24,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+        depthTest: false,
+        blending: THREE.AdditiveBlending,
+      }),
+    );
+    const glowOuter = new THREE.Mesh(
+      new THREE.SphereGeometry(size * 3.2, 18, 18),
+      new THREE.MeshBasicMaterial({
+        color: c.clone().lerp(new THREE.Color(0x5bd7ff), 0.48),
+        transparent: true,
+        opacity: 0.105,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+        depthTest: false,
+        blending: THREE.AdditiveBlending,
+      }),
+    );
+    mesh.add(glowInner);
+    mesh.add(glowOuter);
+    const haloSprite = new THREE.Sprite(
+      new THREE.SpriteMaterial({
+        map: getNodeHaloTexture(),
+        transparent: true,
+        opacity: 0.62,
+        depthWrite: false,
+        depthTest: false,
+        blending: THREE.AdditiveBlending,
+        color: c.clone().lerp(new THREE.Color(0xaef7ff), 0.42),
+      }),
+    );
+    haloSprite.scale.setScalar(size * 6.2);
+    haloSprite.renderOrder = 5;
+    mesh.add(haloSprite);
     const row = (roomsData[wing] || []).find((r) => r.name === roomName);
     const roomId = row?.roomId || makeRoomId(wing, roomName);
     mesh.userData = {
@@ -893,6 +949,119 @@ export function createPalaceScene(container, options = {}) {
     tex.magFilter = THREE.LinearFilter;
     tex.generateMipmaps = false;
     return tex;
+  }
+
+  function getNodeHaloTexture() {
+    if (nodeHaloTexture) return nodeHaloTexture;
+    const size = 160;
+    const c = document.createElement('canvas');
+    c.width = size;
+    c.height = size;
+    const ctx = c.getContext('2d');
+    const cx = size / 2;
+    const cy = size / 2;
+    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, size / 2);
+    g.addColorStop(0, 'rgba(255,255,255,0.55)');
+    g.addColorStop(0.18, 'rgba(170,245,255,0.42)');
+    g.addColorStop(0.46, 'rgba(68,184,255,0.18)');
+    g.addColorStop(1, 'rgba(40,90,255,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, size, size);
+    ctx.strokeStyle = 'rgba(205,248,255,0.42)';
+    ctx.lineWidth = 2.25;
+    ctx.beginPath();
+    ctx.arc(cx, cy, size * 0.23, 0, Math.PI * 2);
+    ctx.stroke();
+    nodeHaloTexture = new THREE.CanvasTexture(c);
+    nodeHaloTexture.minFilter = THREE.LinearFilter;
+    nodeHaloTexture.magFilter = THREE.LinearFilter;
+    nodeHaloTexture.generateMipmaps = false;
+    return nodeHaloTexture;
+  }
+
+  function makeNeuralSignalTexture() {
+    const size = 96;
+    const c = document.createElement('canvas');
+    c.width = size;
+    c.height = size;
+    const ctx = c.getContext('2d');
+    const cx = size / 2;
+    const cy = size / 2;
+    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, size / 2);
+    g.addColorStop(0, 'rgba(255,255,255,1)');
+    g.addColorStop(0.22, 'rgba(170,245,255,0.95)');
+    g.addColorStop(0.58, 'rgba(70,170,255,0.38)');
+    g.addColorStop(1, 'rgba(40,120,255,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, size, size);
+    ctx.strokeStyle = 'rgba(210,250,255,0.35)';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.arc(cx, cy, size * 0.19, 0, Math.PI * 2);
+    ctx.stroke();
+    const tex = new THREE.CanvasTexture(c);
+    tex.minFilter = THREE.LinearFilter;
+    tex.magFilter = THREE.LinearFilter;
+    tex.generateMipmaps = false;
+    return tex;
+  }
+
+  function disposeNeuralSignals() {
+    neuralSignals.forEach((p) => {
+      scene.remove(p.sprite);
+      p.sprite.material.map?.dispose();
+      p.sprite.material.dispose();
+    });
+    neuralSignals = [];
+  }
+
+  function rebuildNeuralSignals() {
+    disposeNeuralSignals();
+    if (currentView !== 'graph' || prefersReducedMotion) return;
+    const rels = linkObjects.filter((lo) => lo.isGraphRelationship && lo.curvePts?.length >= 2);
+    if (!rels.length) return;
+    const tier = graphSceneMetrics?.tier ?? 0;
+    const maxSignals = tier >= 4 ? 52 : tier >= 3 ? 72 : tier >= 2 ? 96 : 128;
+    const ordered = rels
+      .map((lo) => ({
+        lo,
+        priority:
+          (lo.relationshipType === 'tunnel' ? 2 : 1) +
+          (graphRoomIncidentFull.get(lo.fromId) || 0) * 0.025 +
+          (graphRoomIncidentFull.get(lo.toId) || 0) * 0.025 +
+          neuralSignalStagger(lo.fromId, lo.toId) * 0.01,
+      }))
+      .sort((a, b) => b.priority - a.priority)
+      .slice(0, maxSignals);
+
+    ordered.forEach(({ lo }) => {
+      const pts = lo.curvePts;
+      const dist = pts[0].distanceTo(pts[pts.length - 1]);
+      const tex = makeNeuralSignalTexture();
+      const baseColor = new THREE.Color(lo.styleColorHex ?? 0x7aa3ff).lerp(new THREE.Color(0x9ff6ff), 0.42);
+      const mat = new THREE.SpriteMaterial({
+        map: tex,
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        color: baseColor,
+        opacity: 0,
+      });
+      const sprite = new THREE.Sprite(mat);
+      sprite.scale.setScalar(neuralSignalScale(dist, graphSceneMetrics || computeDensityMetrics(1, 0, 1)));
+      sprite.renderOrder = 7;
+      scene.add(sprite);
+      neuralSignals.push({
+        sprite,
+        curvePts: pts,
+        offset: neuralSignalStagger(lo.fromId, lo.toId),
+        speed: neuralSignalSpeedForDensity(graphSceneMetrics || computeDensityMetrics(1, 0, 1)),
+        baseOpacity: lo.relationshipType === 'tunnel' ? 1 : 0.72,
+        fromId: lo.fromId,
+        toId: lo.toId,
+        link: lo,
+      });
+    });
   }
 
   function rebuildRoutePulses() {
@@ -1155,11 +1324,11 @@ export function createPalaceScene(container, options = {}) {
           toId &&
           graphHighlightIds.has(fromId) &&
           graphHighlightIds.has(toId);
-        let glowOp = 0;
-        if (touchesSid) glowOp = 0.46;
-        else if (touchesHid) glowOp = 0.28;
-        else if (bothInHighlight) glowOp = 0.36;
-        else if (neighborEdge) glowOp = 0.11;
+        let glowOp = (relationshipType || 'tunnel') === 'tunnel' ? 0.18 : 0.09;
+        if (touchesSid) glowOp = 0.7;
+        else if (touchesHid) glowOp = 0.48;
+        else if (bothInHighlight) glowOp = 0.52;
+        else if (neighborEdge) glowOp = 0.24;
         if (routeActive && fromId && toId) {
           const pk = undirectedPairKey(fromId, toId);
           if (routePairKeys.has(pk)) {
@@ -1612,6 +1781,7 @@ export function createPalaceScene(container, options = {}) {
         });
       }
     });
+    rebuildNeuralSignals();
 
     const box = new THREE.Box3();
     nodeList.forEach((n) => box.expandByPoint(new THREE.Vector3(n.x, n.y, n.z)));
@@ -1809,6 +1979,31 @@ export function createPalaceScene(container, options = {}) {
           }
         }
       });
+
+      // Ambient neural impulses — cyan-white action potentials moving along
+      // selected high-value tunnels/edges. They are capped by density tier and
+      // staggered deterministically so the palace reads as a living brain.
+      if (neuralSignals.length) {
+        neuralSignals.forEach((p) => {
+          const pts = p.curvePts;
+          if (!pts?.length) return;
+          if (p.link?.line && !p.link.line.visible) {
+            p.sprite.material.opacity = 0;
+            return;
+          }
+          const t = (lt * p.speed + p.offset) % 1;
+          const scaled = t * (pts.length - 1);
+          const i0 = Math.floor(scaled);
+          const i1 = Math.min(pts.length - 1, i0 + 1);
+          const frac = scaled - i0;
+          p.sprite.position.copy(pts[i0]).lerp(pts[i1], frac);
+          const touchesFocus =
+            (presentation.selectedId && (p.fromId === presentation.selectedId || p.toId === presentation.selectedId)) ||
+            (presentation.hoveredId && (p.fromId === presentation.hoveredId || p.toId === presentation.hoveredId));
+          const focusBoost = touchesFocus ? 1.65 : 1;
+          p.sprite.material.opacity = Math.min(1, p.baseOpacity * focusBoost * neuralSignalOpacity(t));
+        });
+      }
 
       // Route pulses — small additive motes travel from start toward end.
       if (routePulses.length) {

@@ -73,6 +73,34 @@ export function normalizeLayoutParams(m) {
 }
 
 /**
+ * Neural-signal animation helpers. Dense palaces need slower, smaller motes so
+ * the graph reads like a brain/network rather than visual noise.
+ * @param {GraphDensityMetrics} metrics
+ */
+export function neuralSignalSpeedForDensity(metrics) {
+  const tier = Math.max(0, metrics?.tier ?? 0);
+  return Math.max(0.16, 0.44 - tier * 0.055);
+}
+
+/** @param {number} edgeDistance @param {GraphDensityMetrics} metrics */
+export function neuralSignalScale(edgeDistance, metrics) {
+  const tier = Math.max(0, metrics?.tier ?? 0);
+  const base = Math.max(1.05, Math.min(3.1, edgeDistance * 0.074));
+  return Math.max(0.82, base * (1 - tier * 0.045));
+}
+
+/** Traveling impulse envelope: dark at synapses, bright mid-link. */
+export function neuralSignalOpacity(progress) {
+  const t = Math.max(0, Math.min(1, Number(progress) || 0));
+  return Math.pow(Math.sin(t * Math.PI), 1.18);
+}
+
+/** Deterministic per-edge phase so signals do not march in lockstep. */
+export function neuralSignalStagger(fromId, toId) {
+  return hash01(`${fromId || ''}\u0000${toId || ''}\u0000neural-signal`);
+}
+
+/**
  * Deterministic hash for stable jitter per key.
  * @param {string} s
  * @returns {number} in [0, 1)
