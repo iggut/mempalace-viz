@@ -18,23 +18,24 @@ export function computeDensityMetrics(nodeCount, edgeCount, wingCount) {
   const edgeDensity = e / n;
 
   let tier = 0;
-  if (n > 90 || edgeDensity > 2.8) tier = 3;
+  if (n > 420 || edgeDensity > 4.2 || w > 55) tier = 4;
+  else if (n > 90 || edgeDensity > 2.8) tier = 3;
   else if (n > 48 || edgeDensity > 1.75) tier = 2;
   else if (n > 24 || edgeDensity > 1.05) tier = 1;
 
-  const labelBudget = tier >= 3 ? 68 : tier >= 2 ? 108 : tier >= 1 ? 158 : 220;
-  const fogDensity = 0.0017 + tier * 0.0005;
-  const adjacencyOpacityMult = tier >= 2 ? 0.62 : tier >= 1 ? 0.78 : 0.92;
-  const globalEdgeOpacityMult = tier >= 3 ? 0.62 : tier >= 2 ? 0.79 : tier >= 1 ? 0.92 : 1;
-  const tunnelEmphasisMult = tier >= 2 ? 1.12 : 1.04;
+  const labelBudget = tier >= 4 ? 42 : tier >= 3 ? 68 : tier >= 2 ? 108 : tier >= 1 ? 158 : 220;
+  const fogDensity = 0.0017 + tier * 0.00046;
+  const adjacencyOpacityMult = tier >= 4 ? 0.48 : tier >= 2 ? 0.62 : tier >= 1 ? 0.78 : 0.92;
+  const globalEdgeOpacityMult = tier >= 4 ? 0.42 : tier >= 3 ? 0.62 : tier >= 2 ? 0.79 : tier >= 1 ? 0.92 : 1;
+  const tunnelEmphasisMult = tier >= 4 ? 1.2 : tier >= 2 ? 1.12 : 1.04;
 
-  const repelScale = 1 + tier * 0.22;
-  const attractScale = 1 - tier * 0.04;
-  const centerScale = 1 + tier * 0.12;
-  const wingCohesion = 0.004 + tier * 0.0025;
-  const depthJitter = 4 + tier * 5;
-  const collisionMinDist = 2.1 + tier * 0.55;
-  const forceIterations = 48 + tier * 14;
+  const repelScale = 1 + tier * 0.25;
+  const attractScale = Math.max(0.72, 1 - tier * 0.05);
+  const centerScale = 1 + tier * 0.08;
+  const wingCohesion = 0.004 + tier * 0.002;
+  const depthJitter = 4 + tier * 6.5;
+  const collisionMinDist = 2.1 + tier * 0.7;
+  const forceIterations = 48 + tier * 18;
 
   return {
     tier,
@@ -103,10 +104,11 @@ export function seedWingClusteredLayout(nodeList, wingNamesSorted, metrics) {
   const wingCenter = new Map();
   wingNamesSorted.forEach((wing, wi) => {
     const angle = (wi / nW) * Math.PI * 2;
-    const ringR = baseRing * (1 + (wi % 5) * 0.04);
+    const tierSpread = 1 + metrics.tier * 0.13;
+    const ringR = baseRing * tierSpread * (1 + (wi % 5) * 0.04);
     const x = Math.cos(angle) * ringR;
     const z = Math.sin(angle) * ringR;
-    const y = ((wi + 0.5) / nW - 0.5) * verticalSpread * 2.2;
+    const y = ((wi + 0.5) / nW - 0.5) * verticalSpread * (2.2 + metrics.tier * 0.26);
     wingCenter.set(wing, { x, y, z });
   });
 
@@ -250,7 +252,16 @@ export function separateGraphNodes(nodeList, minDist, passes = 10) {
         let dx = a.x - b.x;
         let dy = a.y - b.y;
         let dz = a.z - b.z;
-        const dist = Math.sqrt(dx * dx + dy * dy + dz * dz) + 1e-8;
+        let dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        if (dist < 1e-7) {
+          const key = `${a.id || a.name || i}|${b.id || b.name || j}|${p}`;
+          const theta = hash01(`${key}|theta`) * Math.PI * 2;
+          const phi = Math.acos(2 * hash01(`${key}|phi`) - 1);
+          dx = Math.cos(theta) * Math.sin(phi);
+          dy = Math.cos(phi);
+          dz = Math.sin(theta) * Math.sin(phi);
+          dist = 1;
+        }
         const threshold = effectiveMinDist(a, b);
         if (dist < threshold) {
           const push = (threshold - dist) * 0.52;
@@ -290,7 +301,7 @@ export function normalizeCameraDistanceForLabels(cameraDist, graphExtent) {
  */
 export function effectiveLabelBudgetForCamera(baseBudget, cameraDistanceNorm, densityTier) {
   const b = Math.max(8, Math.floor(baseBudget));
-  const tier = Math.max(0, Math.min(3, densityTier));
+  const tier = Math.max(0, Math.min(4, densityTier));
   const zoomIn = Math.max(0, Math.min(1, cameraDistanceNorm));
   // Zoomed out: stronger reduction on dense tiers
   const minFrac = 0.24 + tier * 0.05;
@@ -512,7 +523,7 @@ export function graphEdgeHighlightMult(fromId, toId, highlightIds, densityTier) 
   if (!fromId || !toId) return 1;
   const a = highlightIds.has(fromId);
   const b = highlightIds.has(toId);
-  const t = Math.max(0, Math.min(3, densityTier));
+  const t = Math.max(0, Math.min(4, densityTier));
   if (a && b) return 1;
   if (a || b) return t >= 2 ? 0.38 : 0.48;
   return t >= 3 ? 0.05 : t >= 2 ? 0.07 : t >= 1 ? 0.1 : 0.14;
@@ -596,7 +607,7 @@ export function computeVisibleLabelIds(entries, opts) {
 
   const eff = effectiveLabelBudgetForCamera(budget, cameraDistanceNorm, densityTier);
   const cap = Math.max(8, Math.floor(eff));
-  const tier = Math.max(0, Math.min(3, densityTier));
+  const tier = Math.max(0, Math.min(4, densityTier));
 
   const neighborBoost = 3500 + tier * 220;
   const wingBoost = 1200 + tier * 80;
@@ -626,6 +637,27 @@ export function baseLabelScoreForGraphNode(node) {
 }
 
 /**
+ * Usability-first node radius for dense graph view. Dense palaces render quieter
+ * rooms smaller to reduce sphere overlap and pick clutter, while hub rooms and
+ * wings remain visually discoverable.
+ * @param {{ type: string, drawers?: number, incidentFull?: number }} node
+ * @param {{ tier?: number }} metrics
+ */
+export function graphNodeVisualSize(node, metrics = {}) {
+  const tier = Math.max(0, Math.min(4, metrics.tier || 0));
+  if (node.type === 'wing') {
+    const d = Math.min(1, Math.log1p(node.drawers || 1) / Math.log(260));
+    return 3.15 + d * 1.35 - Math.max(0, tier - 2) * 0.12;
+  }
+  const hub = Math.min(1, (node.incidentFull || 0) / 24);
+  const drawer = Math.min(1, Math.log1p(node.drawers || 1) / Math.log(90));
+  const base = tier >= 4 ? 0.58 : tier >= 3 ? 0.7 : tier >= 2 ? 0.82 : 0.96;
+  const detail = hub * 0.48 + drawer * 0.18;
+  const max = tier >= 4 ? 1.35 : tier >= 3 ? 1.42 : 1.55;
+  return Math.max(0.52, Math.min(max, base + detail));
+}
+
+/**
  * Edge opacity multiplier for selection / hover emphasis (deterministic).
  * @param {object} p
  * @param {string|null|undefined} p.selectedId
@@ -646,7 +678,7 @@ export function edgeEmphasisOpacityMult(p) {
   const incidentSecondary =
     secondaryHoverId && (fromId === secondaryHoverId || toId === secondaryHoverId);
   const tunnel = relationshipType === 'tunnel';
-  const tier = Math.max(0, Math.min(3, densityTier));
+  const tier = Math.max(0, Math.min(4, densityTier));
 
   if (primaryId) {
     if (incidentPrimary) return tunnel ? 1.3 : 1.08;
@@ -674,7 +706,7 @@ export function edgeEmphasisOpacityMult(p) {
 export function focusNodeDistanceDimMult(distanceFromFocus, tier, ctx = {}) {
   const { isNeighbor = false, focusActive = false } = ctx;
   if (!focusActive) return 1;
-  const tierClamped = Math.max(0, Math.min(3, tier));
+  const tierClamped = Math.max(0, Math.min(4, tier));
   const start = 32 + tierClamped * 16;
   const span = 128 + tierClamped * 30;
   let m = 1.02 - (distanceFromFocus - start) / span;
@@ -691,7 +723,7 @@ export function focusNodeDistanceDimMult(distanceFromFocus, tier, ctx = {}) {
  */
 export function framingTargetOffset(extent, tier, repeatIndex = 0) {
   const e = Math.max(8, extent);
-  const t = Math.max(0, Math.min(3, tier));
+  const t = Math.max(0, Math.min(4, tier));
   const h = hash01(`frame|${repeatIndex}`);
   const up = e * (0.028 + t * 0.006);
   const side = e * (0.045 + t * 0.008) * (h - 0.5) * 2;

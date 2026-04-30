@@ -9,6 +9,7 @@ import {
   classifyPointerRelease,
   computeDensityMetrics,
   computeGraphFocusCameraDistance,
+  graphNodeVisualSize,
   computeVisibleLabelIds,
   countGraphIncidentsByRoomNodeId,
   edgeEmphasisOpacityMult,
@@ -37,6 +38,27 @@ test('computeDensityMetrics tiers and monotonicity', () => {
   assert.ok(sparse.labelBudget >= dense.labelBudget);
   assert.ok(sparse.fogDensity <= dense.fogDensity);
   assert.ok(dense.globalEdgeOpacityMult <= 1);
+});
+
+test('computeDensityMetrics adds an ultra-dense production tier for huge palaces', () => {
+  const dense = computeDensityMetrics(180, 420, 24);
+  const huge = computeDensityMetrics(720, 1800, 72);
+  assert.equal(huge.tier, 4);
+  assert.ok(huge.labelBudget < dense.labelBudget);
+  assert.ok(huge.collisionMinDist > dense.collisionMinDist);
+  assert.ok(huge.forceIterations > dense.forceIterations);
+  assert.ok(huge.globalEdgeOpacityMult < dense.globalEdgeOpacityMult);
+});
+
+test('graphNodeVisualSize shrinks dense room glyphs while preserving hubs', () => {
+  const sparse = computeDensityMetrics(40, 30, 4);
+  const huge = computeDensityMetrics(720, 1800, 72);
+  const quietRoom = graphNodeVisualSize({ type: 'room', drawers: 2, incidentFull: 0 }, huge);
+  const hubRoom = graphNodeVisualSize({ type: 'room', drawers: 120, incidentFull: 28 }, huge);
+  const sparseRoom = graphNodeVisualSize({ type: 'room', drawers: 2, incidentFull: 0 }, sparse);
+  assert.ok(quietRoom < sparseRoom);
+  assert.ok(hubRoom > quietRoom);
+  assert.ok(hubRoom <= 1.35);
 });
 
 test('normalizeLayoutParams scales with tier', () => {
@@ -191,6 +213,28 @@ test('separateGraphNodes pushes overlaps', () => {
   const dx = nodes[0].x - nodes[1].x;
   const dist = Math.sqrt(dx * dx);
   assert.ok(dist >= 2.9);
+});
+
+test('separateGraphNodes breaks perfectly coincident dense nodes deterministically', () => {
+  const nodes = Array.from({ length: 8 }, (_, i) => ({
+    id: `n${i}`,
+    x: 0,
+    y: 0,
+    z: 0,
+    type: 'room',
+    size: 0.72,
+  }));
+  separateGraphNodes(nodes, 4.4, 24);
+  let minDist = Infinity;
+  for (let i = 0; i < nodes.length; i += 1) {
+    for (let j = i + 1; j < nodes.length; j += 1) {
+      const dx = nodes[i].x - nodes[j].x;
+      const dy = nodes[i].y - nodes[j].y;
+      const dz = nodes[i].z - nodes[j].z;
+      minDist = Math.min(minDist, Math.sqrt(dx * dx + dy * dy + dz * dz));
+    }
+  }
+  assert.ok(minDist > 2.9);
 });
 
 test('countGraphIncidentsByRoomNodeId', () => {

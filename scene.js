@@ -19,6 +19,7 @@ import {
   graphEdgeHighlightMult,
   focusWingIdFromSceneSelection,
   framingTargetOffset,
+  graphNodeVisualSize,
   graphSceneNodeIdForLayoutNode,
   hash01,
   labelOpacityDistanceFactor,
@@ -1538,12 +1539,14 @@ export function createPalaceScene(container, options = {}) {
 
     // Set node sizes before force layout so repulsion accounts for visual radius.
     nodeList.forEach((n) => {
-      if (n.type === 'wing') {
-        const drawerCount = (wingsData && wingsData[n.name]) || 1;
-        n.size = THREE.MathUtils.mapLinear(drawerCount, 1, 200, CONFIG.nodeSizes.wingMin, CONFIG.nodeSizes.wingMax);
-      } else {
-        n.size = THREE.MathUtils.mapLinear(n.drawers || 1, 1, 80, CONFIG.nodeSizes.roomMin, CONFIG.nodeSizes.roomMax);
-      }
+      const id = n.type === 'wing' ? `wing:${n.name}` : `room:${n.wing}:${n.name}`;
+      const incidentFull = graphRoomIncidentFull.get(id) || 0;
+      const drawerCount = n.type === 'wing' ? (wingsData && wingsData[n.name]) || 1 : n.drawers || 1;
+      n.incidentFull = incidentFull;
+      n.size = graphNodeVisualSize(
+        { type: n.type, drawers: drawerCount, incidentFull },
+        graphSceneMetrics,
+      );
     });
 
     runGraphForceLayout(nodeList, graphEdges, graphSceneMetrics, findRoomNodeForEdge);
@@ -1578,7 +1581,7 @@ export function createPalaceScene(container, options = {}) {
 
     nodeList.forEach((nodeData) => {
       const isWing = nodeData.type === 'wing';
-      const size = isWing ? CONFIG.nodeSizes.wingMin + 0.4 : CONFIG.nodeSizes.roomMin + 0.2;
+      const size = nodeData.size || (isWing ? CONFIG.nodeSizes.wingMin + 0.4 : CONFIG.nodeSizes.roomMin + 0.2);
       if (isWing) {
         createWingNode(nodeData.name, nodeData.x, nodeData.y, nodeData.z, size);
         addLabelForNode(`wing:${nodeData.name}`, nodeData.name, nodeData.x, nodeData.y, nodeData.z, '#cbd5e1', size);
