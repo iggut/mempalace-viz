@@ -143,7 +143,26 @@ The bridge is intentionally thin:
 
 ---
 
+## 📁 Repository layout
+
+| Path | Purpose |
+| --- | --- |
+| `server.js` | HTTP bridge (default port **8767**) and static hosting for the viewer |
+| `vite.config.ts` | Dev server on **3001** with `/api` → `8767` proxy |
+| `index.html`, `styles.css` | Main viewer shell |
+| `tests/*.mjs` | Node `--test` suite (`npm test`) |
+| `docs/` | API contract, graph semantics, QA checklist, changelog ([index](docs/README.md)) |
+| `*.sh` | Optional shell helpers (`dev-server.sh`, `restart-viz.sh`, `watch-server.sh`, …) |
+| `mempalace.yaml` | Example wing/room metadata for organizing this repo inside MemPalace |
+| `constellation.html` | Legacy redirect to `index.html` |
+
+Agent-oriented conventions live in [`AGENTS.md`](AGENTS.md). Planned fixes and improvements are tracked in [`TODO.md`](TODO.md).
+
+---
+
 ## 🚀 Quick start
+
+You need **Node.js** (recent LTS recommended) and a working MemPalace install with `python -m mempalace.mcp_server` available via `VENV_PYTHON` or the default relative layout.
 
 ### 1. Install dependencies
 
@@ -155,6 +174,12 @@ npm install
 
 ```bash
 node server.js
+```
+
+Portable helper (uses the script’s directory and optional `HOST` / `PORT`):
+
+```bash
+./dev-server.sh
 ```
 
 By default, `server.js` expects a workspace layout similar to:
@@ -189,6 +214,8 @@ npm run dev
 ```
 
 The Vite dev server proxies API calls to the Node bridge.
+
+`npm run start` runs `node server.js` in the background and then `vite`; useful for a single command, but two terminals are easier for reading logs.
 
 ### 4. Open the viewer
 
@@ -230,7 +257,7 @@ npm run preview
 npm test
 ```
 
-Tests use Node’s built-in test runner and cover key frontend/helper behavior.
+Tests use Node’s built-in test runner (`node --test tests/*.mjs`) and cover graph normalization, navigation helpers, API shaping, Memories Chat pieces, and related UI logic.
 
 ---
 
@@ -306,9 +333,11 @@ Full route and payload details live in [`docs/API_CONTRACT.md`](docs/API_CONTRAC
 | --- | --- |
 | `server.js` | Node HTTP bridge and static server. |
 | `index.html` | Main shipped viewer. |
+| `api.js` | Frontend fetch helpers and response normalization. |
 | `ui.js` | UI orchestration and view state. |
 | `scene.js` | Three.js scene, rendering, layout, and lighting. |
 | `canonical.js` | Canonical IDs, taxonomy normalization, and graph enrichment. |
+| `insights.js` | Analytics and summary panels fed from palace/graph payloads. |
 | `graph-guidance.js` | Shared UI copy for graph truth and route status. |
 | `graph-navigation.js` | View/focus navigation helpers. |
 | `graph-relationships.js` | Graph relationship utilities. |
@@ -410,6 +439,8 @@ See [`docs/QA_CHECKLIST.md`](docs/QA_CHECKLIST.md) for the full manual pass.
 ## 🗺️ Project status
 
 MemPalace Viz is an active local-first visualization layer for MemPalace. It is optimized for development, inspection, and personal memory-system workflows rather than hosted multi-user deployment.
+
+See [`TODO.md`](TODO.md) for a living backlog (CI, tooling, doc drift, and portability fixes).
 
 ---
 
