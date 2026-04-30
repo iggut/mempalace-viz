@@ -417,14 +417,29 @@ const server = createServer(async (req, res) => {
     try {
       // Serve node_modules for importmap resolution
       if (pathname.startsWith('/node_modules/')) {
-        const nmPath = pathname.replace('/node_modules/', '');
-        const allowedModules = ['three/']; // whitelist
-        if (allowedModules.some(m => nmPath.startsWith(m))) {
-          const filePath = join(__dirname, 'node_modules', nmPath);
-          const content = await fs.readFile(filePath);
-          res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8' });
-          res.end(content);
+        let nmPath;
+        try {
+          nmPath = decodeURIComponent(pathname.replace('/node_modules/', ''));
+        } catch {
+          res.writeHead(400);
+          res.end(JSON.stringify({ error: 'Invalid URL encoding' }));
           return;
+        }
+
+        const safeRoot = join(__dirname, 'node_modules');
+        const filePath = resolve(safeRoot, nmPath);
+
+        // Ensure it stays within node_modules/ and matches the whitelist
+        if (filePath.startsWith(safeRoot + sep)) {
+          // Normalize backslashes to forward slashes for cross-platform whitelist check
+          const relativePath = filePath.slice(safeRoot.length + 1).replace(/\\/g, '/');
+          const allowedModules = ['three/']; // whitelist
+          if (allowedModules.some(m => relativePath.startsWith(m))) {
+            const content = await fs.readFile(filePath);
+            res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8' });
+            res.end(content);
+            return;
+          }
         }
       }
       const served = await serveStatic(req, res, pathname);
