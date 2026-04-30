@@ -376,6 +376,27 @@
             <span class="panel-restore__icon" aria-hidden="true">‹</span>
             <span class="panel-restore__label">Inspector</span>
           </button>
+          <section id="canvas-command-dock" class="canvas-command-dock" aria-label="Primary scene navigation">
+            <div class="canvas-command-dock__context">
+              <span id="canvas-location-eyebrow" class="canvas-command-dock__eyebrow">Overview</span>
+              <strong id="canvas-location-title" class="canvas-command-dock__title">All wings</strong>
+              <span id="canvas-location-hint" class="canvas-command-dock__hint">Start with domains, then drill into rooms or switch to the neural graph.</span>
+            </div>
+            <div class="canvas-command-dock__views" role="tablist" aria-label="Switch visualization view">
+              <button type="button" class="canvas-view-btn" data-canvas-view="wings" role="tab" aria-selected="true">Wings</button>
+              <button type="button" class="canvas-view-btn" data-canvas-view="rooms" role="tab" aria-selected="false">Rooms</button>
+              <button type="button" class="canvas-view-btn" data-canvas-view="graph" role="tab" aria-selected="false">Graph</button>
+            </div>
+            <div class="canvas-command-dock__actions" aria-label="Scene actions">
+              <button type="button" class="canvas-action-btn" data-canvas-action="primary">Find</button>
+              <button type="button" class="canvas-action-btn" data-canvas-action="semantic">Semantic</button>
+              <button type="button" class="canvas-action-btn" data-canvas-action="reset">Reset</button>
+              <button type="button" class="canvas-action-btn" data-canvas-action="labels">Labels</button>
+              <button type="button" class="canvas-action-btn canvas-action-btn--primary" data-canvas-action="focus">Focus canvas</button>
+              <button type="button" class="canvas-action-btn" data-canvas-action="inspector">Inspector</button>
+            </div>
+            <p id="canvas-density-pill" class="canvas-density-pill" data-tone="calm">Calm graph · Explore directly by clicking wings, rooms, and tunnel links.</p>
+          </section>
           <div id="loading-overlay" class="overlay-state">
             <div class="spinner" aria-hidden="true"></div>
             <p style="color: #94a3b8; font-size: 0.85rem">Loading palace data…</p>

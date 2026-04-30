@@ -16,6 +16,7 @@ import {
   computeVisibleLabelIds,
   countGraphIncidentsByRoomNodeId,
   edgeEmphasisOpacityMult,
+  graphDefaultCameraDistance,
   graphEdgeHighlightMult,
   focusWingIdFromSceneSelection,
   framingTargetOffset,
@@ -32,6 +33,7 @@ import {
   neuralSignalStagger,
   normalizeCameraDistanceForLabels,
   pointerMoveThresholdPx,
+  roomNodeHaloPolicy,
   runGraphForceLayout,
   seedWingClusteredLayout,
   separateGraphNodes,
@@ -735,15 +737,15 @@ export function createPalaceScene(container, options = {}) {
     const color = new THREE.Color(colorStr);
     const id = `wing:${wingName}`;
 
-    const geometry = new THREE.SphereGeometry(size, 28, 28);
+    const geometry = new THREE.SphereGeometry(size, 24, 24);
     const material = new THREE.MeshStandardMaterial({
-      color,
+      color: color.clone().lerp(new THREE.Color(0xcbd5e1), currentView === 'wings' ? 0.18 : 0.04),
       emissive: color,
-      emissiveIntensity: 0.22,
-      metalness: 0.15,
-      roughness: 0.45,
+      emissiveIntensity: currentView === 'wings' ? 0.12 : 0.18,
+      metalness: 0.05,
+      roughness: 0.72,
       transparent: true,
-      opacity: 0.92,
+      opacity: currentView === 'wings' ? 0.84 : 0.9,
     });
 
     const mesh = new THREE.Mesh(geometry, material);
@@ -759,21 +761,21 @@ export function createPalaceScene(container, options = {}) {
     };
 
     const glowInner = new THREE.Mesh(
-      new THREE.SphereGeometry(size * 1.22, 24, 24),
+      new THREE.SphereGeometry(size * (currentView === 'wings' ? 1.08 : 1.18), 20, 20),
       new THREE.MeshBasicMaterial({
-        color,
+        color: color.clone().lerp(new THREE.Color(0x94a3b8), currentView === 'wings' ? 0.24 : 0),
         transparent: true,
-        opacity: 0.11,
+        opacity: currentView === 'wings' ? 0.035 : 0.08,
         side: THREE.BackSide,
         depthWrite: false,
       }),
     );
     const glowOuter = new THREE.Mesh(
-      new THREE.SphereGeometry(size * 1.7, 20, 20),
+      new THREE.SphereGeometry(size * (currentView === 'wings' ? 1.24 : 1.55), 18, 18),
       new THREE.MeshBasicMaterial({
-        color,
+        color: color.clone().lerp(new THREE.Color(0x64748b), currentView === 'wings' ? 0.32 : 0),
         transparent: true,
-        opacity: 0.045,
+        opacity: currentView === 'wings' ? 0.012 : 0.032,
         side: THREE.DoubleSide,
         depthWrite: false,
         depthTest: false,
@@ -790,64 +792,71 @@ export function createPalaceScene(container, options = {}) {
   }
 
   function createRoomNode(roomName, wing, x, y, z, size) {
+    const safeSize = THREE.MathUtils.clamp(Number(size) || CONFIG.nodeSizes.roomMin, CONFIG.nodeSizes.roomMin * 0.72, currentView === 'graph' ? 1.7 : CONFIG.nodeSizes.roomMax);
+    size = safeSize;
     const colorStr = wingColorFor(wing);
     const c = new THREE.Color(colorStr);
     c.offsetHSL(0, -0.05, -0.06);
     const id = `room:${wing}:${roomName}`;
 
     const geometry = new THREE.SphereGeometry(size, 20, 20);
+    const structuralView = currentView !== 'graph';
     const material = new THREE.MeshStandardMaterial({
-      color: c,
+      color: structuralView ? c.clone().lerp(new THREE.Color(0xdbeafe), 0.16) : c,
       emissive: c,
-      emissiveIntensity: 0.34,
-      metalness: 0.08,
-      roughness: 0.42,
+      emissiveIntensity: structuralView ? 0.11 : 0.34,
+      metalness: 0.06,
+      roughness: structuralView ? 0.76 : 0.42,
       transparent: true,
-      opacity: 0.96,
+      opacity: structuralView ? 0.82 : 0.96,
     });
 
     const mesh = new THREE.Mesh(geometry, material);
     mesh.position.set(x, y, z);
+    const roomCount = Object.values(roomsData || {}).reduce((sum, rows) => sum + (Array.isArray(rows) ? rows.length : 0), 0);
+    const halo = roomNodeHaloPolicy(currentView, roomCount);
     const glowInner = new THREE.Mesh(
-      new THREE.SphereGeometry(size * 1.95, 18, 18),
+      new THREE.SphereGeometry(size * halo.innerScale, 18, 18),
       new THREE.MeshBasicMaterial({
-        color: c.clone().lerp(new THREE.Color(0xbff8ff), 0.34),
+        color: c.clone().lerp(new THREE.Color(0xbff8ff), structuralView ? 0.2 : 0.34),
         transparent: true,
-        opacity: 0.24,
+        opacity: halo.innerOpacity,
         side: THREE.DoubleSide,
         depthWrite: false,
-        depthTest: false,
+        depthTest: structuralView,
         blending: THREE.AdditiveBlending,
       }),
     );
     const glowOuter = new THREE.Mesh(
-      new THREE.SphereGeometry(size * 3.2, 18, 18),
+      new THREE.SphereGeometry(size * halo.outerScale, 18, 18),
       new THREE.MeshBasicMaterial({
-        color: c.clone().lerp(new THREE.Color(0x5bd7ff), 0.48),
+        color: c.clone().lerp(new THREE.Color(0x5bd7ff), structuralView ? 0.22 : 0.48),
         transparent: true,
-        opacity: 0.105,
+        opacity: halo.outerOpacity,
         side: THREE.DoubleSide,
         depthWrite: false,
-        depthTest: false,
+        depthTest: structuralView,
         blending: THREE.AdditiveBlending,
       }),
     );
     mesh.add(glowInner);
     mesh.add(glowOuter);
-    const haloSprite = new THREE.Sprite(
-      new THREE.SpriteMaterial({
-        map: getNodeHaloTexture(),
-        transparent: true,
-        opacity: 0.62,
-        depthWrite: false,
-        depthTest: false,
-        blending: THREE.AdditiveBlending,
-        color: c.clone().lerp(new THREE.Color(0xaef7ff), 0.42),
-      }),
-    );
-    haloSprite.scale.setScalar(size * 6.2);
-    haloSprite.renderOrder = 5;
-    mesh.add(haloSprite);
+    if (halo.billboard) {
+      const haloSprite = new THREE.Sprite(
+        new THREE.SpriteMaterial({
+          map: getNodeHaloTexture(),
+          transparent: true,
+          opacity: halo.billboardOpacity,
+          depthWrite: false,
+          depthTest: false,
+          blending: THREE.AdditiveBlending,
+          color: c.clone().lerp(new THREE.Color(0xaef7ff), 0.42),
+        }),
+      );
+      haloSprite.scale.setScalar(size * halo.billboardScale);
+      haloSprite.renderOrder = 5;
+      mesh.add(haloSprite);
+    }
     const row = (roomsData[wing] || []).find((r) => r.name === roomName);
     const roomId = row?.roomId || makeRoomId(wing, roomName);
     mesh.userData = {
@@ -1506,7 +1515,7 @@ export function createPalaceScene(container, options = {}) {
     if (!wingNames.length) return;
 
     const angleStep = (Math.PI * 2) / wingNames.length;
-    const radius = CONFIG.spacing.wingSeparation / 2;
+    const radius = Math.max(CONFIG.spacing.wingSeparation * 0.68, wingNames.length * 3.2);
     const drift = CONFIG.spacing.verticalDrift;
 
     wingNames.forEach((wing, i) => {
@@ -1516,7 +1525,9 @@ export function createPalaceScene(container, options = {}) {
       const z = Math.sin(angle) * radius * jitter;
       const y = stableNoise(wing, 11) * drift;
       const drawerCount = wingsData[wing] || 1;
-      const size = THREE.MathUtils.mapLinear(drawerCount, 1, 200, CONFIG.nodeSizes.wingMin, CONFIG.nodeSizes.wingMax);
+      const maxDrawers = Math.max(1, ...Object.values(wingsData).map((v) => Number(v) || 0));
+      const normalized = Math.sqrt(Math.max(0, drawerCount) / maxDrawers);
+      const size = THREE.MathUtils.lerp(CONFIG.nodeSizes.wingMin + 0.25, CONFIG.nodeSizes.wingMax - 0.45, normalized);
       createWingNode(wing, x, y, z, size);
       addLabelForNode(`wing:${wing}`, wing, x, y, z, '#e8edf0', size);
     });
@@ -1578,7 +1589,7 @@ export function createPalaceScene(container, options = {}) {
     if (!wingNames.length) return;
 
     const wingAngleStep = (Math.PI * 2) / wingNames.length;
-    const wingRadius = CONFIG.spacing.wingSeparation / 2;
+    const wingRadius = Math.max(CONFIG.spacing.wingSeparation * 0.72, wingNames.length * 3.6);
     const drift = CONFIG.spacing.verticalDrift;
 
     wingNames.forEach((wing, wingIdx) => {
@@ -1588,12 +1599,12 @@ export function createPalaceScene(container, options = {}) {
       const wingZ = Math.sin(wingAngle) * wingRadius * wJ;
       const wingY = stableNoise(wing, 11) * drift;
 
-      createWingNode(wing, wingX, wingY, wingZ, CONFIG.nodeSizes.wingMin);
-      addLabelForNode(`wing:${wing}`, wing, wingX, wingY, wingZ, '#d6dde6', CONFIG.nodeSizes.wingMin);
+      createWingNode(wing, wingX, wingY, wingZ, CONFIG.nodeSizes.wingMin * 0.62);
+      addLabelForNode(`wing:${wing}`, wing, wingX, wingY, wingZ, '#d6dde6', CONFIG.nodeSizes.wingMin * 0.62);
 
       const rooms = roomsData[wing] || [];
       const roomAngleStep = (Math.PI * 2) / Math.max(rooms.length, 1);
-      const roomRadius = CONFIG.spacing.roomRadius;
+      const roomRadius = Math.max(CONFIG.spacing.roomRadius * 0.92, Math.sqrt(Math.max(rooms.length, 1)) * 3.4);
 
       rooms.forEach((room, roomIdx) => {
         const key = `${wing}:${room.name}`;
@@ -1609,7 +1620,11 @@ export function createPalaceScene(container, options = {}) {
           toId: `room:${wing}:${room.name}`,
           baseOpacity: 0.16,
         });
-        addLabelForNode(`room:${wing}:${room.name}`, room.name, roomX, roomY, roomZ, '#aab4c3', size);
+        const totalRoomCount = Object.values(roomsData || {}).reduce((sum, rows) => sum + (Array.isArray(rows) ? rows.length : 0), 0);
+        const shouldShowRoomLabel = totalRoomCount <= 42 || room.drawers >= 250 || roomIdx % Math.max(2, Math.ceil(rooms.length / 4)) === 0;
+        if (shouldShowRoomLabel) {
+          addLabelForNode(`room:${wing}:${room.name}`, room.name, roomX, roomY, roomZ, '#aab4c3', size);
+        }
       });
     });
 
@@ -1629,7 +1644,7 @@ export function createPalaceScene(container, options = {}) {
       });
     }
 
-    tweenCamera(new THREE.Vector3(0, 50, 108), new THREE.Vector3(0, 0, 0));
+    tweenCamera(new THREE.Vector3(0, 54, 132), new THREE.Vector3(0, 0, 0));
   }
 
   function renderRoomsView() {
@@ -1791,7 +1806,7 @@ export function createPalaceScene(container, options = {}) {
     box.getSize(size);
     const extent = Math.max(size.x, size.y, size.z, 12);
     graphSpatialExtent = extent;
-    const dist = computeGraphFocusCameraDistance(extent * 0.48, camera.fov, graphSceneMetrics.tier);
+    const dist = graphDefaultCameraDistance(extent, camera.fov, graphSceneMetrics.tier);
     const dir = new THREE.Vector3(0.35, 0.42, 1).normalize();
     const camPos = center.clone().add(dir.multiplyScalar(dist));
     graphDefaultCamera = { position: camPos.clone(), target: center.clone() };

@@ -75,6 +75,7 @@ const STATIC_FILES = {
   '/debug.js': 'debug.js',
   '/three-runtime.js': 'three-runtime.js',
   '/ui-hover-policy.js': 'ui-hover-policy.js',
+  '/ui-production-helpers.js': 'ui-production-helpers.js',
   '/content-inspector.js': 'content-inspector.js',
   '/memories-chat-ui.js': 'memories-chat-ui.js',
   '/memories-chat-config.js': 'memories-chat-config.js',

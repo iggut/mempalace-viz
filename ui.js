@@ -20,6 +20,12 @@ import {
   fetchCheckDuplicate,
 } from './api.js';
 import { hoverTargetKey, shouldUpdateInspectorOnHover } from './ui-hover-policy.js';
+import {
+  buildCanvasActionModel,
+  describeNavigationMode,
+  nextFocusPanelState,
+  summarizeGraphDensity,
+} from './ui-production-helpers.js';
 import { makeRoomId, parseRoomId } from './canonical.js';
 import {
   buildPalaceMiningModel,
@@ -2699,6 +2705,7 @@ function updateMetrics() {
   if (refreshedEl) refreshedEl.textContent = formatRelativeRefreshTime(dataBundle?.fetchedAt || lastGoodFetchedAt) || '—';
 
   updateFooterContextLine(footerFocusSubjectForMetrics(), ctx);
+  updateCanvasCommandDock();
 }
 
 function filterLegendSearch(text, query) {
@@ -3413,6 +3420,101 @@ function fillHoverCard(data) {
   card.innerHTML = `<div class="hc-title">${escapeHtml(title)}</div><div class="hc-sub">${sub}</div>`;
 }
 
+function updateCanvasCommandDock() {
+  const dock = $('canvas-command-dock');
+  if (!dock) return;
+  const main = $('app-main-grid');
+  const panelsCollapsed = {
+    left: main?.classList.contains('has-left-collapsed') ?? false,
+    right: main?.classList.contains('has-right-collapsed') ?? false,
+  };
+  const nav = describeNavigationMode({
+    view: appState.view,
+    currentWing: appState.currentWing,
+    currentRoom: appState.currentRoom,
+    selected: appState.selected,
+  });
+  const actions = buildCanvasActionModel({ view: appState.view, selected: appState.selected, panelsCollapsed });
+  const density = summarizeGraphDensity({
+    roomCount: countTotalRooms(dataBundle?.roomsData || {}),
+    edgeCount: dataBundle?.graph?.edgesResolved?.length ?? dataBundle?.graphEdges?.length ?? 0,
+  });
+
+  const eyebrow = $('canvas-location-eyebrow');
+  const title = $('canvas-location-title');
+  const hint = $('canvas-location-hint');
+  if (eyebrow) eyebrow.textContent = nav.eyebrow;
+  if (title) title.textContent = nav.title;
+  if (hint) hint.textContent = nav.hint;
+
+  document.querySelectorAll('[data-canvas-view]').forEach((btn) => {
+    const active = btn.getAttribute('data-canvas-view') === appState.view;
+    btn.classList.toggle('is-active', active);
+    btn.setAttribute('aria-selected', active ? 'true' : 'false');
+  });
+
+  const primary = document.querySelector('[data-canvas-action="primary"]');
+  if (primary) primary.textContent = actions.primaryAction.label;
+  const focus = document.querySelector('[data-canvas-action="focus"]');
+  if (focus) focus.textContent = actions.focusAction.label;
+  const labels = document.querySelector('[data-canvas-action="labels"]');
+  if (labels) labels.textContent = $('toggle-labels')?.checked === false ? 'Show labels' : 'Hide labels';
+  const densityEl = $('canvas-density-pill');
+  if (densityEl) {
+    densityEl.dataset.tone = density.tone;
+    densityEl.textContent = `${density.label} · ${density.detail}`;
+  }
+  dock.classList.toggle('canvas-command-dock--graph', appState.view === 'graph');
+}
+
+function toggleCanvasFocusMode() {
+  const main = $('app-main-grid');
+  const next = nextFocusPanelState({
+    left: main?.classList.contains('has-left-collapsed') ?? false,
+    right: main?.classList.contains('has-right-collapsed') ?? false,
+  });
+  setPanelCollapsed('left', next.left);
+  setPanelCollapsed('right', next.right);
+  updateCanvasCommandDock();
+}
+
+function wireCanvasCommandDock() {
+  $('canvas-command-dock')?.addEventListener('click', (e) => {
+    const viewBtn = e.target.closest('[data-canvas-view]');
+    if (viewBtn) {
+      const v = viewBtn.getAttribute('data-canvas-view');
+      if (v) applyView(v);
+      return;
+    }
+    const actionBtn = e.target.closest('[data-canvas-action]');
+    if (!actionBtn) return;
+    const action = actionBtn.getAttribute('data-canvas-action');
+    if (action === 'primary') {
+      const main = $('app-main-grid');
+      if (main?.classList.contains('has-right-collapsed')) setPanelCollapsed('right', false);
+      focusGraphSearchInput();
+    } else if (action === 'semantic') {
+      const main = $('app-main-grid');
+      if (main?.classList.contains('has-left-collapsed')) setPanelCollapsed('left', false);
+      $('semantic-search')?.focus();
+    } else if (action === 'reset') {
+      sceneApi?.resetCamera();
+    } else if (action === 'labels') {
+      const cb = $('toggle-labels');
+      if (cb) {
+        cb.checked = !cb.checked;
+        cb.dispatchEvent(new Event('change'));
+        updateCanvasCommandDock();
+      }
+    } else if (action === 'focus') {
+      toggleCanvasFocusMode();
+    } else if (action === 'inspector') {
+      setPanelCollapsed('right', false);
+      $('inspect-body')?.focus?.({ preventScroll: true });
+    }
+  });
+}
+
 function setActiveViewButtons() {
   document.querySelectorAll('[data-view]').forEach((btn) => {
     const active = btn.getAttribute('data-view') === appState.view;
@@ -3420,6 +3522,7 @@ function setActiveViewButtons() {
     btn.setAttribute('aria-selected', active ? 'true' : 'false');
     btn.tabIndex = active ? 0 : -1;
   });
+  updateCanvasCommandDock();
 }
 
 function closeHelpDialog() {
@@ -3706,6 +3809,7 @@ function setPanelCollapsed(side, collapsed) {
     const focusTarget = side === 'left' ? $('btn-collapse-left') : $('btn-collapse-right');
     focusTarget?.focus?.({ preventScroll: true });
   }
+  updateCanvasCommandDock();
 }
 
 function applyPanelLayoutFromStorage() {
@@ -3968,6 +4072,8 @@ function wireControls() {
 
   wireHelpFocusTrap();
   applyPanelLayoutFromStorage();
+  wireCanvasCommandDock();
+  updateCanvasCommandDock();
   wirePanelCollapse();
   wirePanelResize();
   wireSemanticSearch();

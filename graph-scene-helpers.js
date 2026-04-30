@@ -100,6 +100,38 @@ export function neuralSignalStagger(fromId, toId) {
   return hash01(`${fromId || ''}\u0000${toId || ''}\u0000neural-signal`);
 }
 
+export function roomNodeHaloPolicy(view, roomCount = 0) {
+  if (view === 'graph') {
+    return {
+      innerScale: 1.95,
+      outerScale: 3.2,
+      innerOpacity: 0.24,
+      outerOpacity: 0.105,
+      billboard: true,
+      billboardOpacity: 0.62,
+      billboardScale: 6.2,
+    };
+  }
+  const dense = Math.max(0, Number(roomCount) || 0) > 42;
+  return {
+    innerScale: dense ? 1.18 : 1.32,
+    outerScale: dense ? 1.42 : 1.7,
+    innerOpacity: dense ? 0.045 : 0.075,
+    outerOpacity: dense ? 0.012 : 0.026,
+    billboard: false,
+    billboardOpacity: 0,
+    billboardScale: 0,
+  };
+}
+
+export function graphDefaultCameraDistance(extent, fovDeg, tier = 0) {
+  const safeExtent = Math.max(12, Number(extent) || 12);
+  const fov = Math.max(35, Math.min(80, Number(fovDeg) || 58)) * Math.PI / 180;
+  const fit = (safeExtent * 0.36) / Math.tan(fov / 2);
+  const tierPad = 1.04 + Math.max(0, Math.min(4, tier)) * 0.035;
+  return Math.max(38, Math.min(165, fit * tierPad));
+}
+
 /**
  * Deterministic hash for stable jitter per key.
  * @param {string} s
@@ -679,10 +711,10 @@ export function graphNodeVisualSize(node, metrics = {}) {
   }
   const hub = Math.min(1, (node.incidentFull || 0) / 24);
   const drawer = Math.min(1, Math.log1p(node.drawers || 1) / Math.log(90));
-  const base = tier >= 4 ? 0.58 : tier >= 3 ? 0.7 : tier >= 2 ? 0.82 : 0.96;
-  const detail = hub * 0.48 + drawer * 0.18;
-  const max = tier >= 4 ? 1.35 : tier >= 3 ? 1.42 : 1.55;
-  return Math.max(0.52, Math.min(max, base + detail));
+  const base = tier >= 4 ? 0.66 : tier >= 3 ? 0.78 : tier >= 2 ? 0.9 : 1.02;
+  const detail = hub * 0.56 + drawer * 0.22;
+  const max = tier >= 4 ? 1.5 : tier >= 3 ? 1.56 : 1.68;
+  return Math.max(0.62, Math.min(max, base + detail));
 }
 
 /**

@@ -10,6 +10,8 @@ import {
   computeDensityMetrics,
   computeGraphFocusCameraDistance,
   graphNodeVisualSize,
+  graphDefaultCameraDistance,
+  roomNodeHaloPolicy,
   computeVisibleLabelIds,
   countGraphIncidentsByRoomNodeId,
   edgeEmphasisOpacityMult,
@@ -62,7 +64,24 @@ test('graphNodeVisualSize shrinks dense room glyphs while preserving hubs', () =
   const sparseRoom = graphNodeVisualSize({ type: 'room', drawers: 2, incidentFull: 0 }, sparse);
   assert.ok(quietRoom < sparseRoom);
   assert.ok(hubRoom > quietRoom);
-  assert.ok(hubRoom <= 1.35);
+  assert.ok(hubRoom <= 1.5);
+});
+
+test('roomNodeHaloPolicy keeps structural rooms calm but graph nodes neural', () => {
+  const graph = roomNodeHaloPolicy('graph', 70);
+  const rooms = roomNodeHaloPolicy('rooms', 70);
+  assert.equal(graph.billboard, true);
+  assert.equal(rooms.billboard, false);
+  assert.ok(rooms.innerOpacity < graph.innerOpacity * 0.35);
+  assert.ok(rooms.outerScale < graph.outerScale * 0.75);
+});
+
+test('graphDefaultCameraDistance uses compact default framing', () => {
+  const dense = computeDensityMetrics(84, 20, 14);
+  const compact = graphDefaultCameraDistance(140, 58, dense.tier);
+  const oldFocusDistance = computeGraphFocusCameraDistance(140 * 0.48, 58, dense.tier);
+  assert.ok(compact < oldFocusDistance);
+  assert.ok(compact >= 38);
 });
 
 test('normalizeLayoutParams scales with tier', () => {
