@@ -6,15 +6,7 @@ Tracked improvements and known issues from a repo pass (architecture, docs, tool
 
 ## Portability and scripts
 
-- **`start.sh` uses a hardcoded `VIZ_DIR`.** Prefer `SCRIPT_DIR` resolution like `dev-server.sh` so the repo runs from any clone path.
 - **Document or unify shell helpers.** Several scripts (`restart-viz.sh`, `stop-viz.sh`, `status-viz.sh`, `watch-server.sh`) exist; a one-line mention in the README table is enough once behavior is consistent.
-
----
-
-## Documentation drift
-
-- **`docs/README.md` (index)** — The blurb for `MCP_CONNECTION_CAPABILITIES.md` says writes are “via MCP clients only”; `server.js` already exposes POST routes (`create-tunnel`, drawer mutations, `diary-write`, etc.). Align that sentence with [`docs/API_CONTRACT.md`](docs/API_CONTRACT.md).
-- **`AGENTS.md`** — Endpoint list is shorter than the full HTTP surface; either extend it or point explicitly to “full list in README / API_CONTRACT” to avoid agent confusion.
 
 ---
 
@@ -53,4 +45,12 @@ Tracked improvements and known issues from a repo pass (architecture, docs, tool
 - **Invented graph edges** — Correctly avoided per `GRAPH_SEMANTICS.md`; no change needed.
 - **KG vs tunnel graph** — Separation is documented; keep emphasizing in UI copy.
 
-When you close an item, delete it or move it under a “Done” section with a date so this file stays trustworthy.
+---
+
+## Done
+
+- **2026-04-30** — `start.sh`: use `SCRIPT_DIR`, `HOST`/`PORT` env (like `dev-server.sh`), portable `node` invocation; guard `fuser`/`ss` when missing.
+- **2026-04-30** — `docs/README.md`: MCP capabilities blurb now mentions POST mutation routes and points to `API_CONTRACT.md`.
+- **2026-04-30** — `AGENTS.md`: added pointer to full HTTP inventory (`README`, `API_CONTRACT`, `server.js` header).
+
+When you close an item, delete it or move it under **Done** with a date so this file stays trustworthy.
