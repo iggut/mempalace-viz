@@ -39,6 +39,20 @@ test('stepAdjacentRoom from outside the ring', () => {
   assert.equal(stepAdjacentRoom(nbr, 'room:w:a', 1), 'room:w:b');
 });
 
+test('stepAdjacentRoom large delta bounds', () => {
+  const nbr = ['a', 'b', 'c'];
+  // n=3, 16*n = 48.
+  // ix of 'a' is 0.
+  // 0 + (-50) + 48 = -2. -2 % 3 = -2 in JS.
+  // This should ideally wrap correctly.
+  assert.equal(stepAdjacentRoom(nbr, 'a', 1), 'b');
+  assert.equal(stepAdjacentRoom(nbr, 'a', -1), 'c');
+  assert.equal(stepAdjacentRoom(nbr, 'a', -3), 'a');
+  assert.equal(stepAdjacentRoom(nbr, 'a', -50), 'b'); // (-50 % 3) is -2, wrap to 1 ('b')
+
+  assert.equal(stepRing(nbr, 'a', -50), 'b');
+});
+
 test('shouldPushHistoryOnGraphSearchJump', () => {
   assert.equal(shouldPushHistoryOnGraphSearchJump('room:a:b', 'room:a:c', true), true);
   assert.equal(shouldPushHistoryOnGraphSearchJump('room:a:b', 'room:a:b', true), false);

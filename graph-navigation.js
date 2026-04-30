@@ -40,7 +40,7 @@ export function stepRing(sortedIds, currentId, delta) {
   let ix = sortedIds.indexOf(currentId);
   if (ix === -1) ix = 0;
   const n = sortedIds.length;
-  const next = (ix + delta + n * 16) % n;
+  const next = ((ix + delta) % n + n) % n;
   return sortedIds[next];
 }
 
@@ -60,7 +60,7 @@ export function stepAdjacentRoom(sortedNeighborIds, selectedId, delta) {
   if (ix === -1) {
     return delta >= 0 ? sorted[0] : sorted[n - 1];
   }
-  return sorted[(ix + delta + n * 16) % n];
+  return sorted[((ix + delta) % n + n) % n];
 }
 
 /**
