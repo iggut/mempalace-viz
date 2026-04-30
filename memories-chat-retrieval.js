@@ -124,24 +124,24 @@ export async function retrieveMemoriesForChat({
     });
   }
 
-  let fetchCount = 0;
-  for (const s of sources) {
-    if (!s.drawerId || fetchCount >= maxDrawerFetches) continue;
-    fetchCount += 1;
-    try {
-      const raw = await fetchDrawerById(s.drawerId);
-      const norm = normalizeGetDrawerPayload(raw);
-      if (norm.error || !norm.content) {
+  const toFetch = sources.filter((s) => !!s.drawerId).slice(0, maxDrawerFetches);
+  await Promise.all(
+    toFetch.map(async (s) => {
+      try {
+        const raw = await fetchDrawerById(/** @type {string} */ (s.drawerId));
+        const norm = normalizeGetDrawerPayload(raw);
+        if (norm.error || !norm.content) {
+          s.contentForModel = s.excerpt;
+          return;
+        }
+        const body = norm.content.trim();
+        s.contentForModel =
+          body.length > maxCharsPerDrawer ? `${body.slice(0, maxCharsPerDrawer)}…` : body;
+      } catch {
         s.contentForModel = s.excerpt;
-        continue;
       }
-      const body = norm.content.trim();
-      s.contentForModel =
-        body.length > maxCharsPerDrawer ? `${body.slice(0, maxCharsPerDrawer)}…` : body;
-    } catch {
-      s.contentForModel = s.excerpt;
-    }
-  }
+    }),
+  );
 
   for (const s of sources) {
     if (!s.contentForModel) s.contentForModel = s.excerpt;
