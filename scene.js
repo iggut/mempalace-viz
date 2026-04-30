@@ -89,12 +89,6 @@ const CONFIG = {
   },
 };
 
-export function nodeKeyFor(type, wing, name) {
-  if (type === 'wing') return `wing:${wing || name}`;
-  if (type === 'room') return `room:${wing}:${name}`;
-  return `${type}:${wing}:${name}`;
-}
-
 function hashHue(name) {
   let h = 0;
   const s = String(name || '');
