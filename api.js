@@ -45,7 +45,7 @@ export function createApiUrl(pathname) {
   return new URL(p, origin);
 }
 
-async function fetchJson(url, { timeoutMs = 12000 } = {}) {
+async function fetchJson(url, { timeoutMs = 60000 } = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {

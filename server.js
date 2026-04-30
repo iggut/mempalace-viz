@@ -121,11 +121,11 @@ class LRUCache {
 const wingsCache = new LRUCache(4);
 
 /**
- * Spawn `mempalace.mcp_server` for one JSON-RPC round trip (stdio).
+ * RPC to MCP — each call spawns its own Python process (parallel).
  * @param {string} method e.g. `tools/call`, `tools/list`
  * @param {object} params method params
  */
-function rpcMcp(method, params = {}, timeout = 10000) {
+function rpcMcp(method, params = {}, timeout = 30000) {
   return new Promise((resolve, reject) => {
     const reqBody = JSON.stringify({
       jsonrpc: '2.0',
@@ -137,6 +137,7 @@ function rpcMcp(method, params = {}, timeout = 10000) {
     const proc = spawn(VENV_PYTHON, ['-m', 'mempalace.mcp_server'], {
       cwd: MEMPALACE_ROOT,
       env: { ...process.env, PYTHONPATH: MEMPALACE_ROOT },
+      stdio: ['pipe', 'pipe', 'pipe'],
     });
 
     let stdout = '';
@@ -166,7 +167,7 @@ function rpcMcp(method, params = {}, timeout = 10000) {
         const err = new Error(`MCP server exited with code ${code} for ${method}`);
         err.stdout = stdout;
         err.stderr = stderr;
-        console.error(`[MCP Exit Error] ${method} (code ${code}): ${stderr}`);
+        console.error(`[MCP Exit Error] ${method} (code ${code})`);
         return reject(err);
       }
       try {
@@ -188,7 +189,7 @@ function rpcMcp(method, params = {}, timeout = 10000) {
 /**
  * Spawn `mempalace.mcp_server` for one tool call. Unwraps `content[0].text` JSON.
  */
-async function callMcp(toolName, params = {}, timeout = 10000) {
+async function callMcp(toolName, params = {}, timeout = 30000) {
   const result = await rpcMcp('tools/call', { name: toolName, arguments: params }, timeout);
   if (result && Array.isArray(result.content)) {
     const text = result.content.find((c) => c.type === 'text');
@@ -200,7 +201,7 @@ async function callMcp(toolName, params = {}, timeout = 10000) {
   return result;
 }
 
-async function callStatusMcp(timeout = 10000) {
+async function callStatusMcp(timeout = 30000) {
   try {
     return await callMcp('mempalace_status', { verbose: true }, timeout);
   } catch {
@@ -209,7 +210,7 @@ async function callStatusMcp(timeout = 10000) {
 }
 
 /** Official tool catalog (same as MCP `tools/list`). */
-async function listMcpTools(timeout = 8000) {
+async function listMcpTools(timeout = 30000) {
   return rpcMcp('tools/list', {}, timeout);
 }
 
