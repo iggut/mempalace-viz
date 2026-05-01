@@ -2,6 +2,10 @@
  * Three.js scene — wings / rooms / graph with focus, filter, and selection visuals.
  */
 import { THREE, OrbitControls } from './three-runtime.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { makeRoomId } from './canonical.js';
 import { getEdgeRelationshipType, getStyleForRelationshipType } from './graph-relationships.js';
 import {
@@ -131,6 +135,17 @@ export function createPalaceScene(container, options = {}) {
   let scene;
   let camera;
   let renderer;
+  /** @type {EffectComposer|null} */
+  let bloomComposer = null;
+  /** @type {RenderPass|null} */
+  let bloomRenderPass = null;
+  /** @type {UnrealBloomPass|null} */
+  let bloomUnrealPass = null;
+  /** @type {OutputPass|null} */
+  let bloomOutputPass = null;
+  let bloomPipelineReady = false;
+  /** When true, frame is presented via {@link bloomComposer} (subtle Unreal-style bloom). */
+  let bloomEnabled = false;
   let controls;
   let stars;
   /** @type {THREE.Group|null} volumetric additive motes in graph view only — not graph topology */
@@ -2024,6 +2039,72 @@ export function createPalaceScene(container, options = {}) {
     callbacks.onClick(data);
   }
 
+  function ensureBloomPipeline() {
+    if (bloomPipelineReady || !renderer || !scene || !camera) return false;
+    try {
+      bloomComposer = new EffectComposer(renderer);
+      bloomRenderPass = new RenderPass(scene, camera);
+      bloomComposer.addPass(bloomRenderPass);
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const effW = Math.floor(container.clientWidth * dpr * 0.5);
+      const bloomRes = Math.max(256, Math.min(1024, effW));
+      bloomUnrealPass = new UnrealBloomPass(new THREE.Vector2(bloomRes, bloomRes), 0.3, 0.4, 0.9);
+      bloomComposer.addPass(bloomUnrealPass);
+      bloomOutputPass = new OutputPass();
+      bloomComposer.addPass(bloomOutputPass);
+      bloomComposer.setPixelRatio(dpr);
+      bloomComposer.setSize(container.clientWidth, container.clientHeight);
+      bloomPipelineReady = true;
+      return true;
+    } catch (err) {
+      console.warn('MemPalace viz: bloom pipeline failed to initialize', err);
+      disposeBloomPipeline();
+      return false;
+    }
+  }
+
+  function disposeBloomPipeline() {
+    bloomPipelineReady = false;
+    bloomEnabled = false;
+    if (bloomOutputPass) {
+      try {
+        bloomOutputPass.dispose();
+      } catch {
+        /* ignore */
+      }
+    }
+    bloomOutputPass = null;
+    bloomRenderPass = null;
+    bloomUnrealPass = null;
+    if (bloomComposer) {
+      try {
+        bloomComposer.dispose();
+      } catch {
+        /* ignore */
+      }
+      bloomComposer = null;
+    }
+    if (renderer) renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  }
+
+  /** @param {boolean} want */
+  function configureBloom(want) {
+    if (want && bloomEnabled && bloomPipelineReady) return true;
+    if (!want) {
+      if (bloomEnabled) bloomEnabled = false;
+      if (renderer) renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      return true;
+    }
+    if (!ensureBloomPipeline()) {
+      bloomEnabled = false;
+      if (renderer) renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      return false;
+    }
+    bloomEnabled = true;
+    renderer.toneMapping = THREE.NoToneMapping;
+    return true;
+  }
+
   function animate() {
     animationId = requestAnimationFrame(animate);
     controls.update();
@@ -2144,7 +2225,11 @@ export function createPalaceScene(container, options = {}) {
       m.opacity = prefersReducedMotion ? 0.36 : 0.32 + Math.sin(t * 0.18) * 0.06;
     }
 
-    renderer.render(scene, camera);
+    if (bloomEnabled && bloomPipelineReady && bloomComposer) {
+      bloomComposer.render();
+    } else {
+      renderer.render(scene, camera);
+    }
   }
 
   function init() {
@@ -2221,6 +2306,10 @@ export function createPalaceScene(container, options = {}) {
       resizeObserver.observe(container);
     }
 
+    if (options.initialBloom) {
+      configureBloom(true);
+    }
+
     animate();
   }
 
@@ -2247,6 +2336,10 @@ export function createPalaceScene(container, options = {}) {
     // keeps stale inline width/height and visually overflows the column,
     // which used to look like a large dark-blue dead region on the right.
     renderer.setSize(w, h, true);
+    if (bloomPipelineReady && bloomComposer) {
+      bloomComposer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      bloomComposer.setSize(w, h);
+    }
   }
 
   function setData(payload) {
@@ -2396,6 +2489,7 @@ export function createPalaceScene(container, options = {}) {
       if (controlsEndHandler) controls.removeEventListener('end', controlsEndHandler);
     }
     clearSceneContent();
+    disposeBloomPipeline();
     if (selectionPulseTimer) clearTimeout(selectionPulseTimer);
     selectionPulseTimer = 0;
     if (stars) {
@@ -2430,6 +2524,12 @@ export function createPalaceScene(container, options = {}) {
       labelSprites.forEach(({ sprite }) => {
         sprite.visible = labelsVisible;
       });
+    },
+    setBloomEnabled(v) {
+      return configureBloom(!!v);
+    },
+    getBloomEnabled() {
+      return bloomEnabled;
     },
     resetCamera,
     centerOnHovered,

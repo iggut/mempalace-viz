@@ -38,6 +38,7 @@ import {
   weightsForMiningMode,
 } from './data-mining.js';
 import { createPalaceScene, wingColorFor } from './scene.js';
+import { effectiveBloomEnabled, writeBloomStored } from './viz-bloom.js';
 import {
   buildGraphAnalytics,
   buildOverviewModel,
@@ -3791,6 +3792,7 @@ function setupScene() {
   const container = $('canvas-container');
   try {
     sceneApi = createPalaceScene(container, {
+      initialBloom: effectiveBloomEnabled(),
       onHover: (data, pos) => {
         const px = pos && typeof pos.x === 'number' ? pos.x : 0;
         const py = pos && typeof pos.y === 'number' ? pos.y : 0;
@@ -4196,6 +4198,20 @@ function wireControls() {
     if (o?.classList.contains('is-open')) closeHelpDialog();
     else openHelpDialog();
   });
+
+  const bloomCb = $('toggle-bloom');
+  if (bloomCb instanceof HTMLInputElement) {
+    bloomCb.checked = !!sceneApi?.getBloomEnabled?.();
+    bloomCb.addEventListener('change', () => {
+      const on = bloomCb.checked;
+      writeBloomStored(on);
+      const ok = sceneApi?.setBloomEnabled?.(on);
+      if (ok === false) {
+        bloomCb.checked = false;
+        writeBloomStored(false);
+      }
+    });
+  }
   $('help-close')?.addEventListener('click', () => closeHelpDialog());
   $('help-overlay')?.addEventListener('click', (e) => {
     const o = $('help-overlay');

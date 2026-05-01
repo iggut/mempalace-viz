@@ -532,6 +532,14 @@
           <p class="metric-footnote" id="metric-footnote"></p>
         </div>
         <div class="footer-actions">
+          <label class="footer-bloom" title="Screen-space glow on bright emissives. Off by default on low-memory / low-core devices; preference is saved.">
+            <input
+              type="checkbox"
+              id="toggle-bloom"
+              aria-label="Screen bloom: subtle glow on bright elements (GPU-heavy, preference saved)"
+            />
+            <span>Bloom</span>
+          </label>
           <button type="button" id="btn-help" class="btn btn--ghost btn--sm" aria-haspopup="dialog" title="Keyboard shortcuts">
             Shortcuts
           </button>
@@ -564,6 +572,7 @@
           <li><kbd>R</kbd> — Reset camera</li>
           <li><kbd>/</kbd> — Focus structure search · <kbd>Ctrl</kbd>+<kbd>K</kbd> / <kbd>⌘</kbd>+<kbd>K</kbd> — semantic drawer search</li>
           <li><kbd>L</kbd> — Toggle labels</li>
+          <li><strong>Footer</strong> — <strong>Bloom</strong> toggles subtle HDR-style glow (saved per browser; defaults off on inferred low-tier devices)</li>
           <li>
             <kbd>Esc</kbd> — Close this dialog; then clear search; then <strong>back one navigation level</strong> (Rooms view:
             room → wing → overview; Graph: prior focus when history exists); then unpin; then clear selection

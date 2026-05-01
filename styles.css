@@ -2691,6 +2691,21 @@ input[type="radio"] {
   max-width: min(43vw, 560px);
 }
 
+.footer-bloom {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.76rem;
+  color: var(--text-dim);
+  cursor: pointer;
+  user-select: none;
+}
+
+.footer-bloom input {
+  accent-color: var(--accent);
+  margin: 0;
+}
+
 .hint-row {
   font-size: 0.7rem;
   color: var(--text-dim);
