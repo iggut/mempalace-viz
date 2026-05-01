@@ -24,7 +24,7 @@ export function computeDensityMetrics(nodeCount, edgeCount, wingCount) {
   else if (n > 24 || edgeDensity > 1.05) tier = 1;
 
   const labelBudget = tier >= 4 ? 42 : tier >= 3 ? 68 : tier >= 2 ? 108 : tier >= 1 ? 158 : 220;
-  const fogDensity = 0.0017 + tier * 0.00046;
+  const fogDensity = 0.0019 + tier * 0.00052;
   const adjacencyOpacityMult = tier >= 4 ? 0.48 : tier >= 2 ? 0.62 : tier >= 1 ? 0.78 : 0.92;
   const globalEdgeOpacityMult = tier >= 4 ? 0.42 : tier >= 3 ? 0.62 : tier >= 2 ? 0.79 : tier >= 1 ? 0.92 : 1;
   const tunnelEmphasisMult = tier >= 4 ? 1.2 : tier >= 2 ? 1.12 : 1.04;
@@ -66,7 +66,9 @@ export function normalizeLayoutParams(m) {
   return {
     repelStrength: 88 * m.repelScale,
     attractStrength: 0.0115 * m.attractScale,
-    centerStrength: 0.0052 * m.centerScale,
+    // Slightly stronger inward pull so the force graph reads as one volumetric
+    // mass (neural “globe”) rather than a loose ring after layout settles.
+    centerStrength: 0.0064 * m.centerScale,
     wingCohesion: m.wingCohesion,
     iterations: m.forceIterations,
   };
@@ -103,13 +105,13 @@ export function neuralSignalStagger(fromId, toId) {
 export function roomNodeHaloPolicy(view, roomCount = 0) {
   if (view === 'graph') {
     return {
-      innerScale: 1.95,
-      outerScale: 3.2,
-      innerOpacity: 0.24,
-      outerOpacity: 0.105,
+      innerScale: 2.05,
+      outerScale: 3.35,
+      innerOpacity: 0.28,
+      outerOpacity: 0.118,
       billboard: true,
-      billboardOpacity: 0.62,
-      billboardScale: 6.2,
+      billboardOpacity: 0.68,
+      billboardScale: 6.45,
     };
   }
   const dense = Math.max(0, Number(roomCount) || 0) > 42;
@@ -157,19 +159,35 @@ export function hash01(s) {
  */
 export function seedWingClusteredLayout(nodeList, wingNamesSorted, metrics) {
   const nW = Math.max(1, wingNamesSorted.length);
-  const baseRing = 30 + Math.min(48, nodeList.length * 0.35);
-  const verticalSpread = 7 + metrics.tier * 2.2;
-  const clusterR = 9 + metrics.tier * 1.8;
+  // Radial scale: Fibonacci sphere packing reads as a 3D cognitive mass instead
+  // of a flat horizontal ring; vertical squash keeps a subtle “brain” silhouette.
+  const baseRadius = 26 + Math.min(56, nodeList.length * 0.36);
+  const tierRadius = baseRadius * (1 + metrics.tier * 0.11);
+  const verticalSpread = 9 + metrics.tier * 2.8;
+  const clusterR = 10.5 + metrics.tier * 2.1;
+  const golden = Math.PI * (3 - Math.sqrt(5));
 
   const wingCenter = new Map();
   wingNamesSorted.forEach((wing, wi) => {
-    const angle = (wi / nW) * Math.PI * 2;
-    const tierSpread = 1 + metrics.tier * 0.13;
-    const ringR = baseRing * tierSpread * (1 + (wi % 5) * 0.04);
-    const x = Math.cos(angle) * ringR;
-    const z = Math.sin(angle) * ringR;
-    const y = ((wi + 0.5) / nW - 0.5) * verticalSpread * (2.2 + metrics.tier * 0.26);
-    wingCenter.set(wing, { x, y, z });
+    let x;
+    let y;
+    let z;
+    if (nW === 1) {
+      x = 0;
+      z = 0;
+      y = 0;
+    } else {
+      const t = (wi + 0.5) / nW;
+      const yy = 1 - t * 2;
+      const rS = Math.sqrt(Math.max(0, 1 - yy * yy));
+      const theta = golden * wi * Math.PI * 2;
+      const squashY = 0.62 + metrics.tier * 0.04;
+      x = Math.cos(theta) * rS * tierRadius;
+      z = Math.sin(theta) * rS * tierRadius;
+      y = yy * tierRadius * squashY + (hash01(`wingy|${wing}`) - 0.5) * verticalSpread * 0.28;
+    }
+    const jitter = 1 + (hash01(`wingj|${wing}`) - 0.5) * 0.06;
+    wingCenter.set(wing, { x: x * jitter, y, z: z * jitter });
   });
 
   const roomsByWing = new Map();
@@ -189,11 +207,14 @@ export function seedWingClusteredLayout(nodeList, wingNamesSorted, metrics) {
       const local = (ri / nr) * Math.PI * 2;
       const h = hash01(`${wing}|${room.name}|${ri}`);
       const h2 = hash01(`${room.name}|z`);
-      const rr = clusterR * (0.45 + 0.55 * h);
+      const h3 = hash01(`${room.name}|phi`);
+      const rr = clusterR * (0.42 + 0.58 * h);
       const lift = (h2 - 0.5) * metrics.depthJitter;
-      room.x = wc.x + Math.cos(local) * rr;
-      room.y = wc.y + Math.sin(local * 1.7) * rr * 0.42 + lift;
-      room.z = wc.z + Math.sin(local) * rr;
+      const elev = (h3 - 0.5) * 1.15;
+      const cosEl = Math.cos(elev);
+      room.x = wc.x + Math.cos(local) * rr * cosEl;
+      room.y = wc.y + Math.sin(local * 1.7) * rr * 0.38 + lift;
+      room.z = wc.z + Math.sin(local) * rr * cosEl;
     });
   });
 
@@ -711,7 +732,7 @@ export function graphNodeVisualSize(node, metrics = {}) {
   }
   const hub = Math.min(1, (node.incidentFull || 0) / 24);
   const drawer = Math.min(1, Math.log1p(node.drawers || 1) / Math.log(90));
-  const base = tier >= 4 ? 0.66 : tier >= 3 ? 0.78 : tier >= 2 ? 0.9 : 1.02;
+  const base = tier >= 4 ? 0.64 : tier >= 3 ? 0.76 : tier >= 2 ? 0.88 : 0.98;
   const detail = hub * 0.56 + drawer * 0.22;
   const max = tier >= 4 ? 1.5 : tier >= 3 ? 1.56 : 1.68;
   return Math.max(0.62, Math.min(max, base + detail));

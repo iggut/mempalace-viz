@@ -74,15 +74,15 @@ export function collectRelationshipTypesFromEdges(edges) {
 export function getStyleForRelationshipType(type) {
   const t = type || 'tunnel';
   if (t === 'tunnel') {
-    return { color: 0x5b8cff, opacity: 0.44 };
+    return { color: 0x38c6ff, opacity: 0.38 };
   }
   if (t === 'taxonomy_adjacency') {
-    return { color: 0x3dc9b8, opacity: 0.34 };
+    return { color: 0x5cf0c8, opacity: 0.3 };
   }
   if (t === 'unknown') {
-    return { color: 0x94a3b8, opacity: 0.32 };
+    return { color: 0x8b9cc8, opacity: 0.28 };
   }
-  return { color: 0xa78bfa, opacity: 0.3 };
+  return { color: 0xb794f6, opacity: 0.27 };
 }
 
 /**

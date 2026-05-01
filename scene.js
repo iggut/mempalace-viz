@@ -55,17 +55,15 @@ function findRoomNodeForEdge(nodeList, edge, end) {
 }
 
 /**
- * Visual language: "cognitive landscape".
- * Colors lean warm-cool (thought vs. memory), layout is organic (shells with
- * vertical drift, not flat rings), edges are soft bezier arcs, and lighting
- * uses gentle emissive + multi-layer halo instead of hard specular.
+ * Visual language: premium neural constellation — cool emissive graph mass,
+ * volumetric depth, and restrained warm accents so wings stay legible.
  */
 const CONFIG = {
   wingColors: {
-    projects: '#8fa6ff',
-    shared_grocery_list: '#7ce0b8',
-    openclaw: '#a3b3c4',
-    default: '#f4c878',
+    projects: '#7ec8ff',
+    shared_grocery_list: '#5cf0d4',
+    openclaw: '#9aa8ff',
+    default: '#e8b8ff',
   },
   nodeSizes: {
     wingMin: 3.2,
@@ -79,13 +77,13 @@ const CONFIG = {
     verticalDrift: 6,
   },
   accent: {
-    linkWing: 0x3a4256,
-    linkGraph: 0x7aa3ff,
-    center: 0x334155,
+    linkWing: 0x3d4a6e,
+    linkGraph: 0x42c6ff,
+    center: 0x2a3348,
   },
   bg: {
-    deep: 0x060912,
-    fogDensity: 0.0022,
+    deep: 0x020308,
+    fogDensity: 0.00265,
   },
 };
 
@@ -99,7 +97,7 @@ function hashHue(name) {
 export function wingColorFor(name) {
   if (CONFIG.wingColors[name]) return CONFIG.wingColors[name];
   const hue = hashHue(name);
-  return `hsl(${hue}, 52%, 68%)`;
+  return `hsl(${hue}, 48%, 64%)`;
 }
 
 function disposeMeshTree(mesh) {
@@ -135,6 +133,8 @@ export function createPalaceScene(container, options = {}) {
   let renderer;
   let controls;
   let stars;
+  /** @type {THREE.Group|null} volumetric additive motes in graph view only — not graph topology */
+  let graphAmbience = null;
   let animationId = 0;
   let cameraTween = null;
 
@@ -323,6 +323,14 @@ export function createPalaceScene(container, options = {}) {
       p.sprite.material.dispose();
     });
     neuralSignals = [];
+    if (graphAmbience) {
+      scene.remove(graphAmbience);
+      graphAmbience.traverse((ch) => {
+        if (ch.geometry) ch.geometry.dispose();
+        if (ch.material) ch.material.dispose();
+      });
+      graphAmbience = null;
+    }
     nodeHaloTexture?.dispose();
     nodeHaloTexture = null;
     if (selectionRing) {
@@ -352,8 +360,8 @@ export function createPalaceScene(container, options = {}) {
     if (selectionPulseTimer) clearTimeout(selectionPulseTimer);
     selectionPulseTimer = 0;
     if (scene?.fog?.isFogExp2) scene.fog.density = CONFIG.bg.fogDensity;
-    if (stars?.userData?.innerMat) stars.userData.innerMat.opacity = 0.38;
-    if (stars?.userData?.outerMat) stars.userData.outerMat.opacity = 0.22;
+    if (stars?.userData?.innerMat) stars.userData.innerMat.opacity = 0.44;
+    if (stars?.userData?.outerMat) stars.userData.outerMat.opacity = 0.2;
     nodeRegistry.clear();
     labelByNodeId.clear();
     labelOverlapLastKept = new Set();
@@ -369,22 +377,22 @@ export function createPalaceScene(container, options = {}) {
 
     const inner = new THREE.BufferGeometry();
     const innerPts = [];
-    for (let i = 0; i < 620; i += 1) {
-      const r = 30 + Math.random() * 80;
+    for (let i = 0; i < 920; i += 1) {
+      const r = 28 + Math.random() * 92;
       const theta = Math.random() * Math.PI * 2;
       const phi = Math.acos(2 * Math.random() - 1);
       innerPts.push(
         r * Math.sin(phi) * Math.cos(theta),
-        r * Math.cos(phi) * 0.55,
+        r * Math.cos(phi) * 0.52,
         r * Math.sin(phi) * Math.sin(theta),
       );
     }
     inner.setAttribute('position', new THREE.Float32BufferAttribute(innerPts, 3));
     const innerMat = new THREE.PointsMaterial({
-      color: 0xa8b5ff,
-      size: 0.32,
+      color: 0x7ecfff,
+      size: 0.26,
       transparent: true,
-      opacity: 0.38,
+      opacity: 0.44,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
     });
@@ -393,20 +401,21 @@ export function createPalaceScene(container, options = {}) {
 
     const outer = new THREE.BufferGeometry();
     const outerPts = [];
-    for (let i = 0; i < 1200; i += 1) {
+    for (let i = 0; i < 1500; i += 1) {
       outerPts.push(
-        THREE.MathUtils.randFloatSpread(480),
-        THREE.MathUtils.randFloatSpread(260),
-        THREE.MathUtils.randFloatSpread(480),
+        THREE.MathUtils.randFloatSpread(520),
+        THREE.MathUtils.randFloatSpread(280),
+        THREE.MathUtils.randFloatSpread(520),
       );
     }
     outer.setAttribute('position', new THREE.Float32BufferAttribute(outerPts, 3));
     const outerMat = new THREE.PointsMaterial({
-      color: 0x6f7aa0,
-      size: 0.55,
+      color: 0x5a6aa8,
+      size: 0.42,
       transparent: true,
-      opacity: 0.22,
+      opacity: 0.2,
       depthWrite: false,
+      blending: THREE.AdditiveBlending,
     });
     const outerPoints = new THREE.Points(outer, outerMat);
     group.add(outerPoints);
@@ -414,6 +423,74 @@ export function createPalaceScene(container, options = {}) {
     scene.add(group);
     stars = group;
     stars.userData = { innerMat, outerMat };
+  }
+
+  /**
+   * Decorative field inside the graph bounding volume — suggests neural density
+   * without adding nodes or edges.
+   */
+  function buildGraphAmbience(center, extent) {
+    if (graphAmbience) {
+      scene.remove(graphAmbience);
+      graphAmbience.traverse((ch) => {
+        if (ch.geometry) ch.geometry.dispose();
+        if (ch.material) ch.material.dispose();
+      });
+      graphAmbience = null;
+    }
+    const e = Math.max(14, extent);
+    const count = Math.min(2600, Math.floor(720 + e * 36));
+    const ex = e * 0.58;
+    const ey = e * 0.46;
+    const ez = e * 0.58;
+    const positions = new Float32Array(count * 3);
+    const colors = new Float32Array(count * 3);
+    const cA = new THREE.Color(0x48d4ff);
+    const cB = new THREE.Color(0x9078f8);
+    const cC = new THREE.Color(0x62f0d0);
+    const tmp = new THREE.Color();
+    for (let i = 0; i < count; i += 1) {
+      const u = hash01(`ga|${i}|u`);
+      const v = hash01(`ga|${i}|v`);
+      const w = hash01(`ga|${i}|w`);
+      const theta = u * Math.PI * 2;
+      const z = 2 * v - 1;
+      const phi = Math.acos(THREE.MathUtils.clamp(z, -1, 1));
+      const sinP = Math.sin(phi);
+      const rad = Math.cbrt(w) * 0.92;
+      const dx = Math.cos(theta) * sinP * ex * rad;
+      const dy = Math.cos(phi) * ey * rad;
+      const dz = Math.sin(theta) * sinP * ez * rad;
+      positions[i * 3] = center.x + dx;
+      positions[i * 3 + 1] = center.y + dy;
+      positions[i * 3 + 2] = center.z + dz;
+      const pick = hash01(`ga|${i}|c`);
+      if (pick < 0.52) tmp.copy(cA);
+      else if (pick < 0.82) tmp.copy(cB);
+      else tmp.copy(cC);
+      const dim = 0.32 + hash01(`ga|${i}|d`) * 0.58;
+      colors[i * 3] = tmp.r * dim;
+      colors[i * 3 + 1] = tmp.g * dim;
+      colors[i * 3 + 2] = tmp.b * dim;
+    }
+    const geom = new THREE.BufferGeometry();
+    geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geom.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    const mat = new THREE.PointsMaterial({
+      size: 0.095,
+      transparent: true,
+      opacity: 0.38,
+      depthWrite: false,
+      vertexColors: true,
+      blending: THREE.AdditiveBlending,
+      sizeAttenuation: true,
+    });
+    const pts = new THREE.Points(geom, mat);
+    const grp = new THREE.Group();
+    grp.add(pts);
+    scene.add(grp);
+    graphAmbience = grp;
+    graphAmbience.userData = { mat };
   }
 
   /** World height of label sprites; must match `targetWorldHeight` in makeLabelSprite. */
@@ -679,7 +756,7 @@ export function createPalaceScene(container, options = {}) {
     mid.x += offset * (Math.sign(b.z - a.z) || 1) * 0.2;
 
     const curve = new THREE.QuadraticBezierCurve3(a, mid, b);
-    const segments = dist > 40 ? 24 : dist > 16 ? 16 : 10;
+    const segments = dist > 40 ? 36 : dist > 16 ? 24 : 14;
     const pts = curve.getPoints(segments);
     const geometry = new THREE.BufferGeometry().setFromPoints(pts);
 
@@ -735,7 +812,7 @@ export function createPalaceScene(container, options = {}) {
     const material = new THREE.MeshStandardMaterial({
       color: color.clone().lerp(new THREE.Color(0xcbd5e1), currentView === 'wings' ? 0.18 : 0.04),
       emissive: color,
-      emissiveIntensity: currentView === 'wings' ? 0.12 : 0.18,
+      emissiveIntensity: currentView === 'wings' ? 0.12 : 0.24,
       metalness: 0.05,
       roughness: 0.72,
       transparent: true,
@@ -798,7 +875,7 @@ export function createPalaceScene(container, options = {}) {
     const material = new THREE.MeshStandardMaterial({
       color: structuralView ? c.clone().lerp(new THREE.Color(0xdbeafe), 0.16) : c,
       emissive: c,
-      emissiveIntensity: structuralView ? 0.11 : 0.34,
+      emissiveIntensity: structuralView ? 0.11 : 0.44,
       metalness: 0.06,
       roughness: structuralView ? 0.76 : 0.42,
       transparent: true,
@@ -1293,7 +1370,7 @@ export function createPalaceScene(container, options = {}) {
           op = Math.min(1, op * 1.44);
           baseC.lerp(new THREE.Color(0xffffff), 0.11);
           if (segType === 'tunnel') {
-            baseC.lerp(new THREE.Color(0x5b8cff), 0.06);
+            baseC.lerp(new THREE.Color(0x38c6ff), 0.08);
             op = Math.min(1, op * 1.03);
           } else if (segType === 'taxonomy_adjacency') {
             baseC.lerp(new THREE.Color(0x3dc9b8), 0.05);
@@ -1392,6 +1469,24 @@ export function createPalaceScene(container, options = {}) {
         }
         if (id === primaryId) {
           opacityMult = Math.max(opacityMult, pin && id === sid ? 0.94 : 0.88);
+        }
+      }
+
+      if (
+        currentView === 'graph' &&
+        hid &&
+        !sid &&
+        !nhActive &&
+        !routeActive &&
+        data.type === 'room'
+      ) {
+        const isHover = id === hid;
+        const isNeighbor = nbrFocus?.has(id);
+        if (!isHover && !isNeighbor) {
+          opacityMult *= 0.78;
+          emissiveMult *= 0.82;
+        } else if (isHover) {
+          emissiveMult *= 1.12;
         }
       }
 
@@ -1735,10 +1830,10 @@ export function createPalaceScene(container, options = {}) {
       scene.fog.density = graphSceneMetrics.fogDensity;
     }
     if (stars?.userData?.innerMat) {
-      stars.userData.innerMat.opacity = Math.max(0.18, 0.38 - graphSceneMetrics.tier * 0.05);
+      stars.userData.innerMat.opacity = Math.max(0.2, 0.44 - graphSceneMetrics.tier * 0.055);
     }
     if (stars?.userData?.outerMat) {
-      stars.userData.outerMat.opacity = Math.max(0.1, 0.22 - graphSceneMetrics.tier * 0.04);
+      stars.userData.outerMat.opacity = Math.max(0.1, 0.2 - graphSceneMetrics.tier * 0.038);
     }
 
     graphLabelEntries = nodeList.map((n) => {
@@ -1804,6 +1899,7 @@ export function createPalaceScene(container, options = {}) {
     const dir = new THREE.Vector3(0.35, 0.42, 1).normalize();
     const camPos = center.clone().add(dir.multiplyScalar(dist));
     graphDefaultCamera = { position: camPos.clone(), target: center.clone() };
+    buildGraphAmbience(center, extent);
     tweenCamera(camPos, center);
   }
 
@@ -1936,8 +2032,8 @@ export function createPalaceScene(container, options = {}) {
     // bob — it was reading as jitter and fought depth cues. Positions are
     // now stable; motion lives in light.
     const t = Date.now() * 0.001;
-    const pulseAmp = prefersReducedMotion ? 0 : 0.045 * motionIntensity;
-    const rot = prefersReducedMotion ? 0 : 0.004 * motionIntensity;
+    const pulseAmp = prefersReducedMotion ? 0 : 0.038 * motionIntensity;
+    const rot = prefersReducedMotion ? 0 : 0.0028 * motionIntensity;
 
     nodes.forEach((node, i) => {
       if (!node.data || node.data.type === 'center') return;
@@ -1974,7 +2070,7 @@ export function createPalaceScene(container, options = {}) {
           const base = lo.line.userData.opacityAnimBase;
           if (base != null) {
             const phase = (String(lo.fromId) + String(lo.toId)).length * 0.07;
-            const wobble = 1 + Math.sin(lt * 0.78 + phase) * 0.028;
+            const wobble = 1 + Math.sin(lt * 0.52 + phase) * 0.022;
             lo.line.material.opacity = Math.min(1, base * wobble);
           }
         }
@@ -1983,7 +2079,7 @@ export function createPalaceScene(container, options = {}) {
           const gbase = lo.glowLine.userData.glowAnimBase ?? 0;
           if (gbase > 0.001) {
             const phase = (String(lo.fromId) + String(lo.toId)).length * 0.09;
-            const pulse = 1 + Math.sin(lt * 1.4 + phase) * 0.2;
+            const pulse = 1 + Math.sin(lt * 0.95 + phase) * 0.14;
             lo.glowLine.material.opacity = Math.min(1, gbase * pulse);
           }
         }
@@ -2043,6 +2139,11 @@ export function createPalaceScene(container, options = {}) {
       }
     }
 
+    if (graphAmbience?.userData?.mat && currentView === 'graph') {
+      const m = graphAmbience.userData.mat;
+      m.opacity = prefersReducedMotion ? 0.36 : 0.32 + Math.sin(t * 0.18) * 0.06;
+    }
+
     renderer.render(scene, camera);
   }
 
@@ -2059,12 +2160,12 @@ export function createPalaceScene(container, options = {}) {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.02;
+    renderer.toneMappingExposure = 1.08;
     container.appendChild(renderer.domElement);
 
     controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
-    controls.dampingFactor = 0.06;
+    controls.dampingFactor = 0.075;
     controls.autoRotate = false;
     controls.autoRotateSpeed = 0.2;
     controls.minDistance = 8;
@@ -2086,17 +2187,19 @@ export function createPalaceScene(container, options = {}) {
     controls.addEventListener('start', controlsStartHandler);
     controls.addEventListener('end', controlsEndHandler);
 
-    // Warm-cool two-tone lighting suggests cognitive depth without pushing
-    // hard blue. Hemi is ambient ground-vs-sky; key is warm (thought side),
-    // fill is cool (memory side).
-    const hemi = new THREE.HemisphereLight(0x6d7b93, 0x0a0f1a, 0.78);
+    // Cool cinematic key + violet fill — reads as neural / instrument UI while
+    // keeping mesh shading legible (still paired with per-node emissive).
+    const hemi = new THREE.HemisphereLight(0x5a6fa8, 0x020308, 0.72);
     scene.add(hemi);
-    const key = new THREE.DirectionalLight(0xf0d9b5, 0.95);
-    key.position.set(24, 42, 26);
+    const key = new THREE.DirectionalLight(0xc8e4ff, 0.72);
+    key.position.set(32, 48, 28);
     scene.add(key);
-    const fill = new THREE.DirectionalLight(0x6aa0ff, 0.42);
-    fill.position.set(-28, 14, -20);
+    const fill = new THREE.DirectionalLight(0x8866ff, 0.38);
+    fill.position.set(-36, 18, -24);
     scene.add(fill);
+    const rim = new THREE.DirectionalLight(0x44ffd0, 0.22);
+    rim.position.set(-8, -20, 40);
+    scene.add(rim);
 
     createStars();
 

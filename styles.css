@@ -5,35 +5,35 @@
 
 :root {
   /* Surfaces — tuned so panels read as layered glass over the scene */
-  --bg-0: #04060c;
-  --bg-1: #070a12;
-  --bg-2: #0b0f18;
-  --surface-0: rgba(11, 15, 23, 0.52);
-  --surface-1: rgba(17, 22, 32, 0.52);
-  --surface-2: rgba(24, 30, 42, 0.5);
-  --surface-solid: #0d111a;
-  --surface-raised: #131826;
+  --bg-0: #020308;
+  --bg-1: #050810;
+  --bg-2: #080d16;
+  --surface-0: rgba(10, 14, 24, 0.58);
+  --surface-1: rgba(16, 22, 34, 0.55);
+  --surface-2: rgba(22, 30, 44, 0.52);
+  --surface-solid: #0a101a;
+  --surface-raised: #121a28;
 
   /* Borders — low alpha so panels never fight the scene */
-  --hairline: rgba(255, 255, 255, 0.042);
-  --border: rgba(255, 255, 255, 0.07);
+  --hairline: rgba(255, 255, 255, 0.045);
+  --border: rgba(255, 255, 255, 0.075);
   --border-strong: rgba(255, 255, 255, 0.14);
 
   /* Text */
-  --text: #eef1f6;
-  --text-muted: #9ba6b6;
-  --text-dim: #6a7484;
-  --text-faint: #4a5366;
+  --text: #eef2f8;
+  --text-muted: #98a6ba;
+  --text-dim: #6a7588;
+  --text-faint: #4a5568;
 
-  /* Accents */
-  --accent: #8fa9ff;
-  --accent-bright: #b7c8ff;
-  --accent-soft: rgba(143, 169, 255, 0.12);
-  --accent-glow: rgba(143, 169, 255, 0.28);
-  --accent-ring: rgba(143, 169, 255, 0.35);
+  /* Accents — cyan / violet instrument palette */
+  --accent: #6ec8ff;
+  --accent-bright: #a8e0ff;
+  --accent-soft: rgba(110, 200, 255, 0.14);
+  --accent-glow: rgba(110, 200, 255, 0.32);
+  --accent-ring: rgba(150, 190, 255, 0.42);
 
-  --teal: #7ce0c0;
-  --teal-soft: rgba(124, 224, 192, 0.14);
+  --teal: #5cf0d4;
+  --teal-soft: rgba(92, 240, 212, 0.14);
 
   --success: #58d3a0;
   --warning: #f0c469;
@@ -55,7 +55,7 @@
   --shadow: var(--shadow-md);
 
   /* Typography */
-  --font: "Inter", "SF Pro Text", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font: "Inter", "IBM Plex Sans", "SF Pro Text", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
 
   /* Layout */
@@ -140,9 +140,10 @@ body::before {
   inset: 0;
   z-index: -2;
   background:
-    radial-gradient(1200px 700px at 18% 10%, rgba(40, 60, 110, 0.18), transparent 60%),
-    radial-gradient(900px 600px at 82% 80%, rgba(30, 50, 90, 0.16), transparent 60%),
-    linear-gradient(180deg, #04060c 0%, #05080f 100%);
+    radial-gradient(1100px 680px at 14% 8%, rgba(35, 90, 140, 0.22), transparent 58%),
+    radial-gradient(880px 560px at 88% 88%, rgba(70, 50, 120, 0.18), transparent 55%),
+    radial-gradient(700px 500px at 50% 50%, rgba(20, 45, 70, 0.12), transparent 70%),
+    linear-gradient(180deg, #020308 0%, #050a12 100%);
   pointer-events: none;
 }
 
@@ -266,7 +267,7 @@ a {
   padding: 10px 22px;
   min-height: var(--header-h);
   background:
-    linear-gradient(180deg, rgba(9, 13, 20, 0.66), rgba(9, 13, 20, 0.22));
+    linear-gradient(180deg, rgba(8, 12, 22, 0.72), rgba(6, 10, 18, 0.28));
   border-bottom: 1px solid var(--hairline);
   backdrop-filter: blur(18px) saturate(120%);
   -webkit-backdrop-filter: blur(18px) saturate(120%);
@@ -281,7 +282,7 @@ a {
   right: 0;
   bottom: -1px;
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(143, 169, 255, 0.16), transparent);
+  background: linear-gradient(90deg, transparent, rgba(110, 200, 255, 0.18), transparent);
   pointer-events: none;
 }
 
@@ -294,9 +295,9 @@ a {
 
 .brand h1 {
   margin: 0;
-  font-size: 0.92rem;
+  font-size: 0.94rem;
   font-weight: 600;
-  letter-spacing: -0.015em;
+  letter-spacing: -0.02em;
   color: var(--text);
 }
 
