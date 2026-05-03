@@ -29,20 +29,6 @@ export function popFocusHistory(stack) {
   return stack.length ? stack.pop() : null;
 }
 
-/**
- * @param {string[]} sortedIds
- * @param {string} currentId
- * @param {number} delta — +1 or -1
- * @returns {string | null}
- */
-export function stepRing(sortedIds, currentId, delta) {
-  if (!sortedIds.length) return null;
-  let ix = sortedIds.indexOf(currentId);
-  if (ix === -1) ix = 0;
-  const n = sortedIds.length;
-  const next = ((ix + delta) % n + n) % n;
-  return sortedIds[next];
-}
 
 /**
  * Pick the next/previous room in an adjacency list while exploring from `selectedId`.

@@ -6,7 +6,6 @@ import {
   pushFocusHistory,
   shouldPushHistoryOnGraphSearchJump,
   stepAdjacentRoom,
-  stepRing,
 } from '../graph-navigation.js';
 
 test('parseRoomSceneId', () => {
@@ -26,12 +25,6 @@ test('pushFocusHistory and popFocusHistory', () => {
   assert.equal(stack.length, 0);
 });
 
-test('stepRing', () => {
-  assert.equal(stepRing(['a', 'b', 'c'], 'b', 1), 'c');
-  assert.equal(stepRing(['a', 'b', 'c'], 'c', 1), 'a');
-  assert.equal(stepRing(['a', 'b'], 'x', -1), 'b');
-});
-
 test('stepAdjacentRoom from outside the ring', () => {
   const nbr = ['room:w:a', 'room:w:b'];
   assert.equal(stepAdjacentRoom(nbr, 'room:w:home', 1), 'room:w:a');
@@ -49,8 +42,6 @@ test('stepAdjacentRoom large delta bounds', () => {
   assert.equal(stepAdjacentRoom(nbr, 'a', -1), 'c');
   assert.equal(stepAdjacentRoom(nbr, 'a', -3), 'a');
   assert.equal(stepAdjacentRoom(nbr, 'a', -50), 'b'); // (-50 % 3) is -2, wrap to 1 ('b')
-
-  assert.equal(stepRing(nbr, 'a', -50), 'b');
 });
 
 test('shouldPushHistoryOnGraphSearchJump', () => {
