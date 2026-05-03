@@ -96,21 +96,6 @@ export function roomExists(roomsData, wing, room) {
 }
 
 /**
- * Look up a room row by canonical roomId across wings.
- * @param {Record<string, Array<{ name: string, roomId?: string, wingId?: string }>>} roomsData
- * @param {string} roomId
- */
-export function findRoomRowByRoomId(roomsData, roomId) {
-  if (!roomId || !roomsData) return null;
-  for (const rooms of Object.values(roomsData)) {
-    if (!Array.isArray(rooms)) continue;
-    const hit = rooms.find((r) => r.roomId === roomId);
-    if (hit) return hit;
-  }
-  return null;
-}
-
-/**
  * Normalize parallel API responses into one stable frontend bundle.
  * Canonical fields live under `graph.*` and `overviewStats`; `graphEdges` stays as the
  * legacy-shaped list used by older call sites (derived from `edgesResolved` when present).
