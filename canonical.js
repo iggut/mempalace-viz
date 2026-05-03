@@ -83,10 +83,6 @@ export function sceneRoomNodeIdFromRoomId(roomId) {
   return sceneRoomNodeId(p.wingId, p.roomName);
 }
 
-/** @param {string} wingId */
-export function sceneWingNodeId(wingId) {
-  return `wing:${canonicalWingId(wingId)}`;
-}
 
 /**
  * All canonical roomIds from enriched taxonomy rows.
