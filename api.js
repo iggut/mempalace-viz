@@ -63,13 +63,6 @@ async function fetchJson(url, { timeoutMs = 60000 } = {}) {
   }
 }
 
-/**
- * Parse taxonomy payload into wing → rooms with canonical `roomId` / `wingId` on each row.
- * @returns {{ taxonomy: object, roomsData: object, rooms: Array, wings: Array }}
- */
-export function parseTaxonomy(taxonomyRaw) {
-  return parseTaxonomyCanonical(taxonomyRaw);
-}
 
 /** Optional: fetch room list for a wing from `/api/rooms?wing=`. */
 export async function fetchRoomsForWing(wing) {
