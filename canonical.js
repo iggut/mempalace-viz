@@ -322,46 +322,6 @@ export function buildCanonicalEdgesFromTunnels(tunnelRows, taxonomy) {
 }
 
 /**
- * Adjacency edges within a wing: consecutive rooms when sorted by name (taxonomy-derived order).
- * Inferred structure — not semantic "same topic" links.
- * @param {Record<string, Array<{ name: string, roomId?: string, wingId?: string }>>} roomsData
- * @returns {CanonicalEdge[]}
- */
-export function buildTaxonomyAdjacencyEdges(roomsData) {
-  /** @type {CanonicalEdge[]} */
-  const out = [];
-  for (const [wingKey, rooms] of Object.entries(roomsData || {})) {
-    const wingId = canonicalWingId(wingKey);
-    if (!Array.isArray(rooms) || rooms.length < 2) continue;
-    const sorted = [...rooms].sort((a, b) => String(a.name).localeCompare(String(b.name)));
-    for (let i = 0; i < sorted.length - 1; i += 1) {
-      const a = sorted[i];
-      const b = sorted[i + 1];
-      const sId = a.roomId || makeRoomId(wingId, a.name);
-      const tId = b.roomId || makeRoomId(wingId, b.name);
-      const stable = sId < tId ? [sId, tId] : [tId, sId];
-      const [lo, hi] = stable;
-      out.push({
-        edgeId: `${lo}__${hi}__taxonomy_adjacency`,
-        sourceRoomId: lo,
-        targetRoomId: hi,
-        sourceWingId: wingId,
-        targetWingId: wingId,
-        crossWing: false,
-        weight: 0.35,
-        relationshipType: 'taxonomy_adjacency',
-        metadata: {
-          origin: 'taxonomy_room_order',
-          inferred: true,
-          note: 'consecutive rooms in per-wing name sort — structural, not topical',
-        },
-      });
-    }
-  }
-  return out;
-}
-
-/**
  * Merge tunnel-derived edges with other sources; dedupe undirected pairs per relationshipType.
  * @param {CanonicalEdge[]} tunnelEdges
  * @param {CanonicalEdge[]} otherEdges
