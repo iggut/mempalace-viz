@@ -4,7 +4,6 @@ import {
   buildCanonicalEdgesFromTunnels,
   buildEnrichedGraphFromTaxonomyAndTunnels,
   buildOverviewSummary,
-  buildTaxonomyAdjacencyEdges,
   collectRoomIdsFromRoomsData,
   LEGACY_MCP_TUNNEL_ROW_CAP,
   makeRoomId,
@@ -117,20 +116,6 @@ test('parseTunnelDiscoveryResult infers possible MCP cap when array length is 50
   assert.equal(p.limit, LEGACY_MCP_TUNNEL_ROW_CAP);
   assert.equal(p.totalMatching, null);
   assert.equal(p.truncationHeuristic, 'legacy_mcp_row_cap');
-});
-
-test('buildTaxonomyAdjacencyEdges chains sorted room names within a wing', () => {
-  const roomsData = {
-    w: [
-      { name: 'z', roomId: 'w/z', wingId: 'w' },
-      { name: 'a', roomId: 'w/a', wingId: 'w' },
-    ],
-  };
-  const edges = buildTaxonomyAdjacencyEdges(roomsData);
-  assert.equal(edges.length, 1);
-  assert.equal(edges[0].relationshipType, 'taxonomy_adjacency');
-  assert.equal(edges[0].crossWing, false);
-  assert.equal(edges[0].metadata?.inferred, true);
 });
 
 test('buildEnrichedGraphFromTaxonomyAndTunnels exposes tunnels only (no inferred adjacency)', () => {
