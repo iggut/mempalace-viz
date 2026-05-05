@@ -84,23 +84,6 @@ export function sceneRoomNodeIdFromRoomId(roomId) {
 }
 
 
-/**
- * All canonical roomIds from enriched taxonomy rows.
- * @param {Record<string, Array<{ name: string, roomId?: string, wingId?: string }>>} roomsData
- * @returns {Set<string>}
- */
-export function collectRoomIdsFromRoomsData(roomsData) {
-  const s = new Set();
-  for (const [w, rooms] of Object.entries(roomsData || {})) {
-    if (!Array.isArray(rooms)) continue;
-    for (const r of rooms) {
-      const id = r.roomId || makeRoomId(r.wingId || w, r.name);
-      s.add(id);
-    }
-  }
-  return s;
-}
-
 /** Same rules as normalizeWingsPayload in api.js — shared for server + client */
 export function normalizeWingsPayload(raw) {
   if (!raw || typeof raw !== 'object') return {};

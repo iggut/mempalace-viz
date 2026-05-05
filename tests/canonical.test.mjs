@@ -4,7 +4,6 @@ import {
   buildCanonicalEdgesFromTunnels,
   buildEnrichedGraphFromTaxonomyAndTunnels,
   buildOverviewSummary,
-  collectRoomIdsFromRoomsData,
   LEGACY_MCP_TUNNEL_ROW_CAP,
   makeRoomId,
   parseRoomId,
@@ -24,12 +23,6 @@ test('makeRoomId and parseRoomId round-trip with slash in room name', () => {
 
 test('sceneRoomNodeIdFromRoomId maps canonical id to scene registry id', () => {
   assert.equal(sceneRoomNodeIdFromRoomId('wing1/roomX'), 'room:wing1:roomX');
-});
-
-test('collectRoomIdsFromRoomsData gathers roomId fields', () => {
-  const roomsData = { a: [{ name: 'r', roomId: 'a/r', wingId: 'a' }] };
-  const s = collectRoomIdsFromRoomsData(roomsData);
-  assert.equal(s.has('a/r'), true);
 });
 
 test('buildCanonicalEdgesFromTunnels emits resolved cross-wing edges', () => {
