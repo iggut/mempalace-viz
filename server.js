@@ -122,12 +122,64 @@ class LRUCache {
 const wingsCache = new LRUCache(4);
 
 /**
- * RPC to MCP — each call spawns its own Python process (parallel).
+ * Concurrency control for MCP subprocesses to prevent DoS.
+ */
+class TaskQueue {
+  constructor(concurrency = 4, maxQueue = 20) {
+    this.concurrency = concurrency;
+    this.maxQueue = maxQueue;
+    this.running = 0;
+    this.queue = [];
+  }
+
+  /**
+   * Run a task, or queue it if at capacity.
+   * @param {() => Promise<any>} taskFn
+   */
+  run(taskFn) {
+    if (this.running < this.concurrency) {
+      return this._execute(taskFn);
+    }
+    if (this.queue.length >= this.maxQueue) {
+      const err = new Error('Server too busy (MCP queue full)');
+      err.statusCode = 503;
+      return Promise.reject(err);
+    }
+    return new Promise((resolve, reject) => {
+      this.queue.push({ taskFn, resolve, reject });
+    });
+  }
+
+  async _execute(taskFn) {
+    this.running++;
+    try {
+      return await taskFn();
+    } finally {
+      this.running--;
+      this._next();
+    }
+  }
+
+  _next() {
+    if (this.queue.length > 0 && this.running < this.concurrency) {
+      const { taskFn, resolve, reject } = this.queue.shift();
+      this._execute(taskFn).then(resolve).catch(reject);
+    }
+  }
+}
+
+const mcpQueue = new TaskQueue(
+  Number(process.env.MAX_CONCURRENT_MCP_TASKS || 4),
+  Number(process.env.MAX_MCP_QUEUE_DEPTH || 20)
+);
+
+/**
+ * RPC to MCP — each call spawns its own Python process (parallel, concurrency-limited).
  * @param {string} method e.g. `tools/call`, `tools/list`
  * @param {object} params method params
  */
 function rpcMcp(method, params = {}, timeout = 30000) {
-  return new Promise((resolve, reject) => {
+  return mcpQueue.run(() => new Promise((resolve, reject) => {
     const reqBody = JSON.stringify({
       jsonrpc: '2.0',
       id: Date.now(),
@@ -184,7 +236,7 @@ function rpcMcp(method, params = {}, timeout = 30000) {
 
     proc.stdin.write(reqBody);
     proc.stdin.end();
-  });
+  }));
 }
 
 /**
@@ -883,7 +935,8 @@ const server = createServer(async (req, res) => {
     res.end(JSON.stringify(result));
   } catch (error) {
     console.error('API Error:', error?.stack || error);
-    res.writeHead(500);
+    const status = error.statusCode || 500;
+    res.writeHead(status);
     res.end(JSON.stringify({ error: error.message }));
   }
 });
