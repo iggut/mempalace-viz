@@ -1,6 +1,46 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createApiUrl, fetchSemanticSearch, normalizePalaceBundle } from '../api.js';
+import {
+  createApiUrl,
+  fetchSemanticSearch,
+  normalizePalaceBundle,
+  getPalaceCanonicalEdgesForView,
+  getPalaceLegacyGraphEdgesForView,
+} from '../api.js';
+
+test('getPalaceCanonicalEdgesForView returns edgesResolved if present', () => {
+  assert.deepEqual(getPalaceCanonicalEdgesForView(null), []);
+  assert.deepEqual(getPalaceCanonicalEdgesForView({}), []);
+  assert.deepEqual(getPalaceCanonicalEdgesForView({ edgesResolved: 'not-an-array' }), []);
+
+  const edges = [{ edgeId: '1', sourceRoomId: 'a', targetRoomId: 'b' }];
+  assert.deepEqual(getPalaceCanonicalEdgesForView({ edgesResolved: edges }), edges);
+});
+
+test('getPalaceLegacyGraphEdgesForView transforms canonical edges', () => {
+  assert.deepEqual(getPalaceLegacyGraphEdgesForView(null), []);
+
+  const graph = {
+    edgesResolved: [
+      {
+        edgeId: 'e1',
+        sourceRoomId: 'w1/r1',
+        targetRoomId: 'w2/r2',
+        sourceWingId: 'w1',
+        targetWingId: 'w2',
+        crossWing: true,
+        relationshipType: 'tunnel',
+      },
+    ],
+  };
+
+  const legacy = getPalaceLegacyGraphEdgesForView(graph);
+  assert.equal(legacy.length, 1);
+  assert.equal(legacy[0].from, 'w1/r1');
+  assert.equal(legacy[0].to, 'w2/r2');
+  assert.equal(legacy[0].wing, 'w1');
+  assert.equal(legacy[0].crossWing, true);
+});
 
 test('createApiUrl builds absolute URLs (no empty-base Invalid URL)', () => {
   const u = createApiUrl('/api/search');
