@@ -159,7 +159,7 @@ export function normalizeGetDrawerPayload(data) {
   };
 }
 
-const META_CHIP_KEYS = ['source_file', 'added_by', 'hall', 'created_at', 'updated_at', 'file_path'];
+const META_CHIP_KEYS = new Set(['source_file', 'added_by', 'hall', 'created_at', 'updated_at', 'file_path']);
 
 /**
  * @param {Record<string, unknown>} meta
@@ -179,7 +179,7 @@ export function metadataChipsHtml(meta, escapeHtml) {
     );
   }
   for (const [k, v] of Object.entries(meta)) {
-    if (META_CHIP_KEYS.includes(k)) continue;
+    if (META_CHIP_KEYS.has(k)) continue;
     if (chips.length >= 8) break;
     if (v == null || typeof v === 'object') continue;
     const vs = String(v);
