@@ -948,16 +948,6 @@ const AUTO_EXIT_MS = Number(process.env.AUTO_EXIT_MS || 0);
 server.listen(PORT, HOST, () => {
   console.log(`MemPalace Viz API running at http://${HOST}:${PORT}`);
   console.log('  Static: /, /viz, /3d, /palace3d  →  index.html');
-  console.log('  API (GET):  /api/status, /api/wings, /api/rooms, /api/taxonomy,');
-  console.log('          /api/palace, /api/graph-stats, /api/overview, /api/kg-stats,');
-  console.log('          /api/mcp-tools, /api/search, /api/traverse, /api/kg-query,');
-  console.log('          /api/kg-timeline, /api/aaak-spec, /api/diary, /api/list-drawers, /api/drawer,');
-  console.log('          /api/find-tunnels, /api/list-tunnels, /api/follow-tunnels,');
-  console.log('          /api/memories-filed-away, /api/reconnect');
-  console.log('  API (POST): /api/check-duplicate, /api/create-tunnel, /api/delete-tunnel,');
-  console.log('          /api/kg-add, /api/kg-invalidate, /api/add-drawer,');
-  console.log('          /api/delete-drawer, /api/update-drawer, /api/diary-write,');
-  console.log('          /api/hook-settings, /api/memories-chat/openai-proxy');
   console.log('  Set HOST=127.0.0.1 to restrict to local-only access.');
   if (AUTO_EXIT_MS > 0) {
     console.log(`  Auto-exit enabled after ${AUTO_EXIT_MS}ms (dev restart mode).`);
