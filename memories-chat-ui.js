@@ -498,7 +498,8 @@ export function initMemoriesChat(hooks) {
   function excerptHeadline(ex) {
     const t = String(ex ?? '').trim();
     if (!t) return 'Snippet';
-    const line = t.split('\n').find((l) => l.trim()) || t;
+    const firstNewline = t.indexOf('\n');
+    const line = firstNewline === -1 ? t : t.slice(0, firstNewline);
     const one = line.trim();
     if (one.length <= 80) return one;
     return `${one.slice(0, 77)}…`;
