@@ -8,7 +8,7 @@
       content="A three-dimensional cognitive map of your MemPalace: wings, rooms, and explicit MCP tunnel edges rendered as an organic landscape."
     />
     <meta name="theme-color" content="#020308" />
-    <title>MemPalace — cognitive map</title>
+    <title>MemPalace: cognitive map</title>
     <link
       rel="icon"
       type="image/svg+xml"
@@ -197,7 +197,7 @@
               <summary class="mining-disclosure__summary">Discovery overlays</summary>
               <div class="mining-disclosure__body">
                 <p class="hint-row mining-disclosure__lead">
-                  Optional emissive tint on room nodes from derived tunnel-graph analysis — not extra edges, not the
+                  Optional emissive tint on room nodes from derived tunnel-graph analysis. Not extra edges, not the
                   knowledge graph, not search or diary output.
                 </p>
                 <div class="mining-mode-row" role="radiogroup" aria-label="Discovery overlay mode">
@@ -281,7 +281,7 @@
           <div class="memchat-card__content" id="memchat-card-content">
             <p class="hint-row memchat-lead">
               Ask questions grounded in your palace drawers. Uses the same semantic search as Explore, then sends evidence to
-              your <strong>local OpenAI-compatible</strong> endpoint — keys stay in this browser.
+              your <strong>local OpenAI-compatible</strong> endpoint. Keys stay in this browser.
             </p>
             <details class="memchat-details" id="memchat-settings-details">
               <summary class="memchat-details__summary">Local model settings</summary>
@@ -316,7 +316,7 @@
                   type="text"
                   autocomplete="off"
                   spellcheck="false"
-                  placeholder="e.g. local-model — omit to let the server default"
+                  placeholder="e.g. local-model (omit to let the server default)"
                 />
                 <div class="memchat-settings-actions">
                   <button type="button" class="btn btn--ghost btn--sm" id="memchat-test">Test connection</button>
@@ -326,7 +326,7 @@
                 <p id="memchat-config-status" class="memchat-config-status" role="status" aria-live="polite"></p>
               </div>
             </details>
-            <div id="memchat-messages" class="memchat-messages" role="log" aria-label="Chat with memories — messages"></div>
+            <div id="memchat-messages" class="memchat-messages" role="log" aria-label="Chat with memories: messages"></div>
             <div class="memchat-compose">
               <label class="search-label" for="memchat-input">Message</label>
               <textarea
@@ -441,7 +441,7 @@
                   type="button"
                   id="btn-pin"
                   class="btn btn--ghost btn--sm"
-                  title="Pin — hide hover preview card (inspector stays on selection)"
+                  title="Pin: hide hover preview card (inspector stays on selection)"
                 >
                   Pin
                 </button>
@@ -449,7 +449,7 @@
                   type="button"
                   id="btn-clear-sel"
                   class="btn btn--ghost btn--sm"
-                  title="Clear selection — unlock inspector (same as Clear in graph focus bar)"
+                  title="Clear selection: unlock inspector (same as Clear in graph focus bar)"
                 >
                   Clear
                 </button>
@@ -501,7 +501,7 @@
                 </section>
                 <section class="memory-lens__section" aria-label="Duplicate check">
                   <h4 class="memory-lens__h">Duplicate check</h4>
-                  <p class="inspect-muted inspect-muted--tight">Optional filing aid — <code>mempalace_check_duplicate</code></p>
+                  <p class="inspect-muted inspect-muted--tight">Optional filing aid: <code>mempalace_check_duplicate</code></p>
                   <textarea id="dup-check-input" class="memory-lens__textarea" rows="3" placeholder="Paste content to check…" aria-label="Content to check for duplicates"></textarea>
                   <button type="button" class="btn btn--ghost btn--sm" id="btn-dup-check">Check</button>
                   <pre id="dup-output" class="memory-lens__pre" aria-live="polite"></pre>
@@ -521,12 +521,12 @@
       <footer class="app-footer" role="contentinfo">
         <div class="footer-metrics-block">
           <div class="metrics metrics--primary" aria-live="polite">
-            <span class="metric"><span class="metric__k">Drawers</span> <span id="metric-drawers" class="metric__v">—</span></span>
-            <span class="metric"><span class="metric__k">Wings</span> <span id="metric-wings" class="metric__v">—</span></span>
-            <span class="metric"><span class="metric__k">Rooms</span> <span id="metric-rooms" class="metric__v">—</span></span>
-            <span class="metric"><span class="metric__k">Edges</span> <span id="metric-tunnels" class="metric__v">—</span></span>
+            <span class="metric"><span class="metric__k">Drawers</span> <span id="metric-drawers" class="metric__v">…</span></span>
+            <span class="metric"><span class="metric__k">Wings</span> <span id="metric-wings" class="metric__v">…</span></span>
+            <span class="metric"><span class="metric__k">Rooms</span> <span id="metric-rooms" class="metric__v">…</span></span>
+            <span class="metric"><span class="metric__k">Edges</span> <span id="metric-tunnels" class="metric__v">…</span></span>
             <span class="metric metric--context metric--context--idle" id="metric-context-wrap">
-              <span class="metric__k">Focus</span> <span id="metric-context" class="metric__v">—</span>
+              <span class="metric__k">Focus</span> <span id="metric-context" class="metric__v">…</span>
             </span>
           </div>
           <p class="metric-footnote" id="metric-footnote"></p>
@@ -568,33 +568,33 @@
           ×
         </button>
         <ul class="help-list" id="help-shortcut-list">
-          <li><kbd>1</kbd> / <kbd>2</kbd> / <kbd>3</kbd> — Switch Wings / Rooms / Graph view</li>
-          <li><kbd>R</kbd> — Reset camera</li>
-          <li><kbd>/</kbd> — Focus structure search · <kbd>Ctrl</kbd>+<kbd>K</kbd> / <kbd>⌘</kbd>+<kbd>K</kbd> — semantic drawer search</li>
-          <li><kbd>L</kbd> — Toggle labels</li>
-          <li><strong>Footer</strong> — <strong>Bloom</strong> toggles subtle HDR-style glow (saved per browser; defaults off on inferred low-tier devices)</li>
+          <li><kbd>1</kbd> / <kbd>2</kbd> / <kbd>3</kbd>: Switch Wings / Rooms / Graph view</li>
+          <li><kbd>R</kbd>: Reset camera</li>
+          <li><kbd>/</kbd>: Focus structure search · <kbd>Ctrl</kbd>+<kbd>K</kbd> / <kbd>⌘</kbd>+<kbd>K</kbd>: semantic drawer search</li>
+          <li><kbd>L</kbd>: Toggle labels</li>
+          <li><strong>Footer</strong>: <strong>Bloom</strong> toggles subtle HDR-style glow (saved per browser; defaults off on inferred low-tier devices)</li>
           <li>
-            <kbd>Esc</kbd> — Close this dialog; then clear search; then <strong>back one navigation level</strong> (Rooms view:
+            <kbd>Esc</kbd>: Close this dialog; then clear search; then <strong>back one navigation level</strong> (Rooms view:
             room → wing → overview; Graph: prior focus when history exists); then unpin; then clear selection
           </li>
-          <li><strong>Search</strong> — type a wing or room fragment; <kbd>Enter</kbd> frames in Graph · <kbd>Alt+N</kbd> / <kbd>Alt+P</kbd> next/prev match</li>
-          <li><strong>Click</strong> wing (Wings) — Enter that wing’s rooms</li>
-          <li><strong>Click</strong> room (Rooms) — Select &amp; center</li>
-          <li><strong>Click</strong> node (Graph) — Focus (inspector lock) &amp; frame</li>
+          <li><strong>Search</strong>: type a wing or room fragment; <kbd>Enter</kbd> frames in Graph · <kbd>Alt+N</kbd> / <kbd>Alt+P</kbd> next/prev match</li>
+          <li><strong>Click</strong> wing (Wings): Enter that wing’s rooms</li>
+          <li><strong>Click</strong> room (Rooms): Select &amp; center</li>
+          <li><strong>Click</strong> node (Graph): Focus (inspector lock) &amp; frame</li>
           <li>
-            <strong>Rooms tree</strong> (Graph focus bar) — Opens the same wing or room in Rooms (taxonomy folder layout).
+            <strong>Rooms tree</strong> (Graph focus bar): Opens the same wing or room in Rooms (taxonomy folder layout).
             Press <kbd>3</kbd> to return to Graph.
           </li>
           <li>
-            <kbd>[</kbd> / <kbd>]</kbd> — With an active route: step hops on the highlighted path; otherwise step along connected
-            rooms (graph) · <kbd>U</kbd> — Prior focus
+            <kbd>[</kbd> / <kbd>]</kbd>: With an active route, step hops on the highlighted path; otherwise step along connected
+            rooms (graph) · <kbd>U</kbd>: Prior focus
           </li>
           <li>
-            <strong>Route</strong> — In Graph, pick a room: set route start, then <strong>Route to here</strong> (or Route from search). The scene highlights a path on <strong>explicit MCP edges only</strong> (same rules as tunnel discovery). Disconnected rooms are valid. Stock MemPalace MCP does not support persisting arbitrary room-to-room graph links — see <code>docs/MCP_CONNECTION_CAPABILITIES.md</code>.
+            <strong>Route</strong>: In Graph, pick a room: set route start, then <strong>Route to here</strong> (or Route from search). The scene highlights a path on <strong>explicit MCP edges only</strong> (same rules as tunnel discovery). Disconnected rooms are valid. Stock MemPalace MCP does not support persisting arbitrary room-to-room graph links; see <code>docs/MCP_CONNECTION_CAPABILITIES.md</code>.
           </li>
-          <li><strong>Click</strong> empty canvas — Clear selection (unless pinned); subtle canvas cue</li>
+          <li><strong>Click</strong> empty canvas: Clear selection (unless pinned); subtle canvas cue</li>
           <li>
-            <strong>Back / location</strong> — Header <strong>← Back</strong> and <strong>Overview</strong> crumbs step out of focus;
+            <strong>Back / location</strong>: Header <strong>← Back</strong> and <strong>Overview</strong> crumbs step out of focus;
             inspector breadcrumb matches. <kbd>Esc</kbd> backs out one level before clearing selection.
           </li>
         </ul>

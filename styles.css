@@ -22,7 +22,7 @@
   /* Text */
   --text: #eef2f8;
   --text-muted: #98a6ba;
-  --text-dim: #6a7588;
+  --text-dim: #8491a3;
   --text-faint: #4a5568;
 
   /* Accents — cyan / violet instrument palette */
@@ -860,8 +860,8 @@ a {
 
 .panel-header__collapse {
   flex-shrink: 0;
-  width: 24px;
-  height: 24px;
+  width: 32px;
+  height: 32px;
   padding: 0;
   border: 1px solid var(--hairline);
   border-radius: 6px;
@@ -2336,8 +2336,9 @@ input[type="radio"] {
 .inspect-content-body--detail {
   margin-top: 4px;
   max-height: min(52vh, 440px);
-  border-left: 3px solid rgba(91, 140, 255, 0.45);
-  padding-left: 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(91, 140, 255, 0.22);
+  background: rgba(91, 140, 255, 0.06);
 }
 
 .content-chips {
@@ -3637,7 +3638,7 @@ kbd {
 }
 
 .memchat-msg__bubble--partial {
-  border-left: 3px solid rgba(255, 200, 120, 0.55);
+  border: 1px solid rgba(255, 200, 120, 0.38);
   background: linear-gradient(180deg, rgba(40, 34, 24, 0.45), rgba(22, 20, 16, 0.45));
 }
 
@@ -4156,14 +4157,14 @@ kbd {
   .panel-restore--left {
     left: 8px;
     border-radius: 999px;
-    border-left: 1px solid var(--hairline);
+    border: 1px solid var(--hairline);
     flex-direction: row;
   }
 
   .panel-restore--right {
     right: 8px;
     border-radius: 999px;
-    border-right: 1px solid var(--hairline);
+    border: 1px solid var(--hairline);
     flex-direction: row;
   }
 
@@ -4283,5 +4284,22 @@ kbd {
   .app-main.has-right-collapsed,
   .app-main.has-left-collapsed.has-right-collapsed {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (pointer: coarse) {
+  .btn--sm {
+    min-height: 40px;
+    padding: 8px 12px;
+  }
+
+  .panel-header__collapse {
+    width: 40px;
+    height: 40px;
+  }
+
+  .footer-actions .btn {
+    min-height: 40px;
+    padding: 8px 12px;
   }
 }

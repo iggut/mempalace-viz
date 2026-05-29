@@ -18,7 +18,7 @@ export function routeFailureMessage(reason, opts = {}) {
       return 'Choose a start room and a target room.';
     case 'no_edges':
       if (graphFilterNarrowed) {
-        return 'No edges match the current relationship filters — enable more types or reset filters. The graph shows only explicit MemPalace structure.';
+        return 'No edges match the current relationship filters. Enable more types or reset filters. The graph shows only explicit MemPalace structure.';
       }
       return 'No graph edges in the current data. Refresh after MemPalace changes; this viewer does not add links.';
     case 'no_path':
@@ -43,10 +43,10 @@ export function routeDisconnectedDetailLines(reason, opts = {}) {
   const graphFilterNarrowed = !!opts.graphFilterNarrowed;
   if (reason === 'no_path') {
     const lines = [
-      'This graph only shows explicit MemPalace tunnel structure from MCP — it does not invent missing links.',
+      'This graph only shows explicit MemPalace tunnel structure from MCP. It does not invent missing links.',
     ];
     if (graphFilterNarrowed) {
-      lines.push('Some edges may be hidden by your relationship filters — try widening them to reveal a path.');
+      lines.push('Some edges may be hidden by your relationship filters. Try widening them to reveal a path.');
     }
     lines.push('To create a tunnel in MemPalace, use the same room name in multiple wings, then refresh data here.');
     return lines;
@@ -67,7 +67,7 @@ export function routeDisconnectedDetailLines(reason, opts = {}) {
 
 /** Toast when stepping to a neighbor fails in graph view */
 export function neighborStepDisconnectedMessage() {
-  return 'No adjacent rooms on the visible edges — the graph may be disconnected here, or filters may hide links.';
+  return 'No adjacent rooms on the visible edges. The graph may be disconnected here, or filters may hide links.';
 }
 
 /** Bullet list for "How connections work" explainer */
@@ -84,7 +84,7 @@ export function howConnectionsWorkBullets() {
 export function actionableWorkflowBullets() {
   return [
     'Want a new tunnel? Create or reuse the same room name in two wings using normal MemPalace workflows.',
-    'Drawers can be added via MCP tools such as mempalace_add_drawer — that adds palace content, not arbitrary graph edges.',
+    'Drawers can be added via MCP tools such as mempalace_add_drawer. That adds palace content, not arbitrary graph edges.',
     'After MemPalace data changes, use Refresh here to update the graph.',
   ];
 }
@@ -112,7 +112,7 @@ export function graphInspectorNoEdgesNoticeLines() {
   return {
     title: 'Graph view',
     body:
-      'No tunnel edges were resolved from mempalace_find_tunnels. Wings and rooms can still appear from taxonomy. Rendered links use tunnel discovery + taxonomy — not mempalace_graph_stats.total_edges.',
+      'No tunnel edges were resolved from mempalace_find_tunnels. Wings and rooms can still appear from taxonomy. Rendered links use tunnel discovery + taxonomy, not mempalace_graph_stats.total_edges.',
   };
 }
 
@@ -123,7 +123,7 @@ export function graphInspectorNoEdgesNoticeLines() {
  * When a room has no tunnel neighbors but the graph loaded — valid disconnected state.
  */
 export function roomWithNoTunnelNeighborsGuidance() {
-  return 'No tunnel neighbors for this room in the current MCP graph — that is expected when there is no shared room name across wings. This viewer does not add links.';
+  return 'No tunnel neighbors for this room in the current MCP graph. That is expected when there is no shared room name across wings. This viewer does not add links.';
 }
 
 /** Route inspector summary — first sentence (pairs with hops/mode lines in ui). */
@@ -133,7 +133,7 @@ export function routeInspectorBasisLine() {
 
 /** Footer metric footnote prefix in Graph view (prepended to contextual line). */
 export function metricFootnoteGraphViewPrefix() {
-  return 'Explicit MemPalace edges only — this viewer does not add or infer links.';
+  return 'Explicit MemPalace edges only. This viewer does not add or infer links.';
 }
 
 /**
@@ -160,7 +160,7 @@ export function knowledgeGraphStatsUnavailableLine() {
  * Connections section when graph/tunnel data missing for the room (not an error — valid empty state).
  */
 export function connectionsSectionNoExplicitEdgesLine() {
-  return 'No explicit edges for this room in the current MCP data — unresolved endpoints or no tunnels yet is a valid state.';
+  return 'No explicit edges for this room in the current MCP data. Unresolved endpoints or no tunnels yet is a valid state.';
 }
 
 export function graphInspectorUnresolvedEndpointsLines(edgeCount, unresolvedCount) {
@@ -171,6 +171,6 @@ export function graphInspectorUnresolvedEndpointsLines(edgeCount, unresolvedCoun
     title: 'Graph view',
     body: `Loaded ${edgeCount} graph edge${plural}, but some endpoints could not be matched to taxonomy rooms${
       u ? ` (${u} edge${uPlural} unresolved)` : ''
-    }. Layout may be sparse — this is a data alignment limitation, not a viewer bug.`,
+    }. Layout may be sparse. This is a data alignment limitation, not a viewer bug.`,
   };
 }
